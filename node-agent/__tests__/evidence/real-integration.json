@@ -135,7 +135,7 @@
         "模式: solo | 数据目录: H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\hub",
         "桌面控制台: http://127.0.0.1:7439",
         "手机端：需设置 TENON_HOST=0.0.0.0 后重启，再用 http://<电脑IP>:7439/m",
-        "操作令牌: tok_1010f3c101233be9cd41",
+        "操作令牌: tok_***（隔离实例临时令牌，已清理）",
         "节点令牌文件: H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\hub\\secrets.json",
         "v2 模块: link, assets, things, enterprise"
       ]
