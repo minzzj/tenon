@@ -1,0 +1,3707 @@
+[
+  {
+    "seq": 1,
+    "at": "2026-07-17T09:28:42.399Z",
+    "type": "node.registered",
+    "actor": "hub",
+    "data": {
+      "nodeId": "hub",
+      "name": "本机中枢",
+      "platform": "windows",
+      "fingerprint": "fp-hub-9c01",
+      "domain": "studio",
+      "capabilities": [
+        {
+          "id": "channel.notify",
+          "name": "发送消息（摘要+链接）",
+          "risk": "irreversible",
+          "manualOnly": false,
+          "version": "1.0.0",
+          "evidence": "通道回执与留痕"
+        },
+        {
+          "id": "llm.summarize",
+          "name": "模型摘要",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "1.0.0",
+          "evidence": "调用记录 + token 用量"
+        }
+      ]
+    },
+    "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+    "hash": "d4b95e1cb9302df921e33eb48e51bd86af05ed3ee824da18cb7dd921153ce8ae"
+  },
+  {
+    "seq": 2,
+    "at": "2026-07-17T09:30:42.399Z",
+    "type": "node.registered",
+    "actor": "node-agent",
+    "data": {
+      "nodeId": "node-local",
+      "name": "工作台",
+      "platform": "win32-x64",
+      "fingerprint": "fp-local-a3f2",
+      "capabilities": [
+        {
+          "id": "image.crop",
+          "name": "图片居中裁剪",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed"
+        },
+        {
+          "id": "file.hash",
+          "name": "文件 SHA-256 校验",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed"
+        },
+        {
+          "id": "file.delete",
+          "name": "删除文件",
+          "risk": "irreversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed"
+        },
+        {
+          "id": "printer.mock",
+          "name": "模拟打印",
+          "risk": "irreversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed"
+        }
+      ]
+    },
+    "prev": "d4b95e1cb9302df921e33eb48e51bd86af05ed3ee824da18cb7dd921153ce8ae",
+    "hash": "4876a8de36492460a23636d85978cddf5259a03529e67e8cabe9c827b4d2b1e0"
+  },
+  {
+    "seq": 3,
+    "at": "2026-07-17T09:32:42.399Z",
+    "type": "node.registered",
+    "actor": "hub",
+    "data": {
+      "nodeId": "dev-printer",
+      "name": "打印服务器",
+      "platform": "printer",
+      "fingerprint": "fp-printer-77e1",
+      "capabilities": [
+        {
+          "id": "printer.mock",
+          "name": "打印",
+          "risk": "irreversible",
+          "manualOnly": false,
+          "version": "2.0.0",
+          "evidence": "confirmed",
+          "authExpiresAt": "2026-10-28T09:28:42.399Z"
+        },
+        {
+          "id": "file.hash",
+          "name": "文件扫描",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "2.0.0",
+          "evidence": "confirmed"
+        }
+      ]
+    },
+    "prev": "4876a8de36492460a23636d85978cddf5259a03529e67e8cabe9c827b4d2b1e0",
+    "hash": "4f5a12062e832e72f7d1b85cc78e9dfb795ef6425bed42a8c7b0644907538f54"
+  },
+  {
+    "seq": 4,
+    "at": "2026-07-17T09:34:42.399Z",
+    "type": "device.imported",
+    "actor": "hub",
+    "data": {
+      "nodeId": "dev-nas",
+      "name": "群晖 NAS",
+      "platform": "nas",
+      "fingerprint": "fp-nas-192d",
+      "domain": "outside",
+      "online": true,
+      "capabilities": [
+        {
+          "id": "nas.sync",
+          "name": "NAS 归档同步",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "7.2",
+          "evidence": "declared",
+          "authExpiresAt": "2026-10-20T09:28:42.399Z"
+        },
+        {
+          "id": "video.transcode",
+          "name": "视频转码（仅手动）",
+          "risk": "reversible",
+          "manualOnly": true,
+          "version": "1.0.0",
+          "evidence": "declared"
+        }
+      ]
+    },
+    "prev": "4f5a12062e832e72f7d1b85cc78e9dfb795ef6425bed42a8c7b0644907538f54",
+    "hash": "cb9a5b72f4b8066ab77a97749ae888b445fdd40850d382a624b96a0495c7bd61"
+  },
+  {
+    "seq": 5,
+    "at": "2026-07-17T09:36:42.399Z",
+    "type": "device.imported",
+    "actor": "hub",
+    "data": {
+      "nodeId": "dev-llm",
+      "name": "本地模型",
+      "platform": "llm",
+      "fingerprint": "fp-llm-2b71",
+      "online": true,
+      "capabilities": [
+        {
+          "id": "llm.summarize",
+          "name": "本地摘要模型",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "2.1",
+          "evidence": "declared"
+        }
+      ]
+    },
+    "prev": "cb9a5b72f4b8066ab77a97749ae888b445fdd40850d382a624b96a0495c7bd61",
+    "hash": "960419f728bd9f7ab04fbbd96e1d2557ce790272f564f92ebb75ed66eb998ca9"
+  },
+  {
+    "seq": 6,
+    "at": "2026-07-17T09:37:42.399Z",
+    "type": "capability.versionMismatch",
+    "actor": "hub",
+    "data": {
+      "nodeId": "dev-llm",
+      "capabilityId": "llm.summarize",
+      "required": "2.3",
+      "current": "2.1"
+    },
+    "prev": "960419f728bd9f7ab04fbbd96e1d2557ce790272f564f92ebb75ed66eb998ca9",
+    "hash": "c946631df28b1c76850b6b33cd1a756378aae2ac24cc7a261cef79923a7f0ffd"
+  },
+  {
+    "seq": 7,
+    "at": "2026-07-22T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_09",
+      "text": "每月 1 号把上月素材归档到 NAS（定时任务）",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "possible",
+      "draft": {
+        "summary": "定时任务：把上月素材归档到 群晖 NAS 的「NAS 归档同步」",
+        "capabilities": [
+          {
+            "id": "nas.sync",
+            "name": "NAS 归档同步",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-nas",
+          "name": "群晖 NAS"
+        },
+        "missing": [
+          "定时计划未启用：已 95 天未触发"
+        ],
+        "risk": {
+          "level": "reversible",
+          "reasons": []
+        },
+        "params": {
+          "cron": "0 3 1 * *",
+          "target": "NAS:/archive/monthly"
+        }
+      }
+    },
+    "prev": "c946631df28b1c76850b6b33cd1a756378aae2ac24cc7a261cef79923a7f0ffd",
+    "hash": "97038a8b56df9b2dbc6da65dec95c34c600385e9ed0c4cad20392f01dde926e6"
+  },
+  {
+    "seq": 8,
+    "at": "2026-07-27T09:28:42.399Z",
+    "type": "node.registered",
+    "actor": "hub",
+    "data": {
+      "nodeId": "node-scanner",
+      "name": "旧扫描仪",
+      "platform": "scanner",
+      "fingerprint": "fp-scanner-51c8",
+      "capabilities": [
+        {
+          "id": "file.hash",
+          "name": "扫描",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "1.2",
+          "evidence": "confirmed"
+        }
+      ]
+    },
+    "prev": "97038a8b56df9b2dbc6da65dec95c34c600385e9ed0c4cad20392f01dde926e6",
+    "hash": "d125d3e244e9314d1c13468a9348d701252e910cf1ed26fbd721d7c325394088"
+  },
+  {
+    "seq": 9,
+    "at": "2026-07-27T09:33:42.399Z",
+    "type": "node.offline",
+    "actor": "hub",
+    "data": {
+      "nodeId": "node-scanner",
+      "since": "2026-07-27T09:33:42.399Z"
+    },
+    "prev": "d125d3e244e9314d1c13468a9348d701252e910cf1ed26fbd721d7c325394088",
+    "hash": "c252596b6e562712e9ce14906acfdefb091ae929b25c6813a961b8f46123ea7c"
+  },
+  {
+    "seq": 10,
+    "at": "2026-09-13T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "text": "把 2025 素材归档到 NAS",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "possible",
+      "draft": {
+        "summary": "把 2025 素材归档到 群晖 NAS 的「NAS 归档同步」",
+        "capabilities": [
+          {
+            "id": "nas.sync",
+            "name": "NAS 归档同步",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-nas",
+          "name": "群晖 NAS"
+        },
+        "missing": [],
+        "risk": {
+          "level": "reversible",
+          "reasons": []
+        },
+        "params": {
+          "srcDir": "示例空间/2025素材",
+          "target": "NAS:/archive/2025"
+        }
+      }
+    },
+    "prev": "c252596b6e562712e9ce14906acfdefb091ae929b25c6813a961b8f46123ea7c",
+    "hash": "9c15eed9a2641367b06cf80ce7fc35f447606ec962b68ab4404650fdf11d01ae"
+  },
+  {
+    "seq": 11,
+    "at": "2026-09-13T09:38:42.399Z",
+    "type": "task.queued",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "nodeId": "dev-nas",
+      "note": "可逆动作免确认，直接派发"
+    },
+    "prev": "9c15eed9a2641367b06cf80ce7fc35f447606ec962b68ab4404650fdf11d01ae",
+    "hash": "32d93d45a08982e1d5df0bf7cbe307be70d83ce6be0fa0453d59d56ef63da558"
+  },
+  {
+    "seq": 12,
+    "at": "2026-09-13T09:48:42.399Z",
+    "type": "task.started",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "nodeId": "dev-nas",
+      "nodeName": "群晖 NAS"
+    },
+    "prev": "32d93d45a08982e1d5df0bf7cbe307be70d83ce6be0fa0453d59d56ef63da558",
+    "hash": "e2bd9a8325d0d1e09ebc7c083f952c7b8f0dc4a1fb14b89e8cab25f825ef157a"
+  },
+  {
+    "seq": 13,
+    "at": "2026-09-13T09:52:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "label": "连接 NAS",
+      "detail": "域外设备 · 只读挂载"
+    },
+    "prev": "e2bd9a8325d0d1e09ebc7c083f952c7b8f0dc4a1fb14b89e8cab25f825ef157a",
+    "hash": "3af09064f6208e227697a971fc8208dd95a84530c30df7b89dca2a3036938eaa"
+  },
+  {
+    "seq": 14,
+    "at": "2026-09-13T09:58:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "label": "校验指纹",
+      "detail": "逐文件计算 sha256（128 个）"
+    },
+    "prev": "3af09064f6208e227697a971fc8208dd95a84530c30df7b89dca2a3036938eaa",
+    "hash": "9f3a491e4e19a025c7568246c634327b78d6ee2ce0b3de478c9919cea6816447"
+  },
+  {
+    "seq": 15,
+    "at": "2026-09-13T10:03:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "label": "归档",
+      "detail": "写入 NAS:/archive/2025"
+    },
+    "prev": "9f3a491e4e19a025c7568246c634327b78d6ee2ce0b3de478c9919cea6816447",
+    "hash": "2b7dace1ae7cbb94009a6873fe7aa13373b8d3f32d7110a23afafae730b29410"
+  },
+  {
+    "seq": 16,
+    "at": "2026-09-13T10:08:42.399Z",
+    "type": "task.succeeded",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "result": {
+        "summary": "已归档 128 个文件到 NAS:/archive/2025（模拟同步）",
+        "items": [
+          {
+            "name": "2025素材",
+            "ok": true,
+            "detail": "128 个文件 / 4.2 GB"
+          }
+        ],
+        "partial": false
+      }
+    },
+    "prev": "2b7dace1ae7cbb94009a6873fe7aa13373b8d3f32d7110a23afafae730b29410",
+    "hash": "2959f80bcceb2c2ddf0c3a650e90c667caca3991eb93617430938396c93f56a3"
+  },
+  {
+    "seq": 17,
+    "at": "2026-09-14T09:28:42.399Z",
+    "type": "checkup.ran",
+    "actor": "hub",
+    "data": {
+      "checkupId": "chk_mvnml51215220995",
+      "scope": "channels",
+      "findings": [],
+      "verdict": "none",
+      "checked": 1,
+      "items": [
+        "通道可用"
+      ],
+      "summary": "未发现问题，已检查 1 项"
+    },
+    "prev": "2959f80bcceb2c2ddf0c3a650e90c667caca3991eb93617430938396c93f56a3",
+    "hash": "0baf0d2d0ce55ba0171f8ac93579d2e8383c4e79ff4caa86fd5bbf0adb98f7c1"
+  },
+  {
+    "seq": 18,
+    "at": "2026-09-15T09:28:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "channel": "wechat-mock",
+      "status": "limited",
+      "reason": "限流"
+    },
+    "prev": "0baf0d2d0ce55ba0171f8ac93579d2e8383c4e79ff4caa86fd5bbf0adb98f7c1",
+    "hash": "2b639e9cd9ed2551f1c2f672ba49b49d493529b926d16192e9f5acd1a82a1408"
+  },
+  {
+    "seq": 19,
+    "at": "2026-09-15T09:29:42.399Z",
+    "type": "channel.retry",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "channel": "wechat-mock",
+      "attempt": 1,
+      "reason": "微信限流，排队重试"
+    },
+    "prev": "2b639e9cd9ed2551f1c2f672ba49b49d493529b926d16192e9f5acd1a82a1408",
+    "hash": "ffa202e41292df8723d55dd31617f7f8497fe8620a497e820737ef2bfa101d3b"
+  },
+  {
+    "seq": 20,
+    "at": "2026-09-15T09:39:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "channel": "wechat-mock",
+      "status": "fallback",
+      "reason": "微信限流，已改邮件，延迟约 10 分钟"
+    },
+    "prev": "ffa202e41292df8723d55dd31617f7f8497fe8620a497e820737ef2bfa101d3b",
+    "hash": "4c6f55737e09bd040af56a4bbea03af8b124ecba3b2ad04e2320395f33bfd965"
+  },
+  {
+    "seq": 21,
+    "at": "2026-09-15T09:40:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "channel": "email-mock",
+      "status": "delivered",
+      "latencyMs": 812
+    },
+    "prev": "4c6f55737e09bd040af56a4bbea03af8b124ecba3b2ad04e2320395f33bfd965",
+    "hash": "485720170e8225f643186088f02f512f15689797744f4c66f3bc1c82358c20da"
+  },
+  {
+    "seq": 22,
+    "at": "2026-09-15T09:40:42.399Z",
+    "type": "message.inbox",
+    "actor": "hub",
+    "data": {
+      "messageId": "msg_seed_01",
+      "taskId": "seed_task_03",
+      "channel": "email-mock",
+      "channelLabel": "邮件（模拟通道）",
+      "title": "任务回执（已降级）",
+      "summary": "已归档 128 个文件到 NAS:/archive/2025（模拟同步）",
+      "link": "/r/seed_task_03",
+      "status": "delivered",
+      "sensitive": true
+    },
+    "prev": "485720170e8225f643186088f02f512f15689797744f4c66f3bc1c82358c20da",
+    "hash": "952de823e8365b161c430e57f782e0d9b72f6012c72c0cf274b173475e874ea2"
+  },
+  {
+    "seq": 23,
+    "at": "2026-09-15T09:40:42.399Z",
+    "type": "task.delivered",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_03",
+      "channel": "email-mock",
+      "messageId": "msg_seed_01",
+      "summary": "已归档 128 个文件到 NAS:/archive/2025（模拟同步）",
+      "link": "/r/seed_task_03",
+      "latencyMs": 812,
+      "status": "degraded",
+      "note": "微信限流，已改邮件，延迟约 10 分钟"
+    },
+    "prev": "952de823e8365b161c430e57f782e0d9b72f6012c72c0cf274b173475e874ea2",
+    "hash": "44b4c57e50e40a83530c1167919e38e24c27195643da52ac451895efb7ab16a7"
+  },
+  {
+    "seq": 24,
+    "at": "2026-10-05T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "phone",
+    "data": {
+      "taskId": "seed_task_01",
+      "text": "把昨天的样品图裁成方图（1024）",
+      "source": "phone",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "把「把昨天的样品图裁成方图（1024）」交给 本机工作台 的「裁方图」",
+        "capabilities": [
+          {
+            "id": "image.crop",
+            "name": "裁方图",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "node-local",
+          "name": "本机工作台"
+        },
+        "missing": [],
+        "risk": {
+          "level": "reversible",
+          "reasons": []
+        },
+        "params": {
+          "size": 1024,
+          "srcDir": "示例空间/样品图",
+          "outDir": "示例空间/输出/方图"
+        }
+      }
+    },
+    "prev": "44b4c57e50e40a83530c1167919e38e24c27195643da52ac451895efb7ab16a7",
+    "hash": "c346e381df3ef3c3f97dd5e5ace732792157b20b1484a782afc23174cace3c06"
+  },
+  {
+    "seq": 25,
+    "at": "2026-10-05T09:29:42.399Z",
+    "type": "ai.called",
+    "actor": "hub",
+    "data": {
+      "place": "draft",
+      "provider": "rule",
+      "model": "rule",
+      "tokensIn": 0,
+      "tokensOut": 0,
+      "cached": false,
+      "fallback": true
+    },
+    "prev": "c346e381df3ef3c3f97dd5e5ace732792157b20b1484a782afc23174cace3c06",
+    "hash": "f2e24069e85f4b0cd0e2d718bef58282177f71de2b9ddf8e3b95ce11ba13757a"
+  },
+  {
+    "seq": 26,
+    "at": "2026-10-05T09:30:42.399Z",
+    "type": "task.queued",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_01",
+      "nodeId": "node-local",
+      "note": "可逆动作免确认，直接派发"
+    },
+    "prev": "f2e24069e85f4b0cd0e2d718bef58282177f71de2b9ddf8e3b95ce11ba13757a",
+    "hash": "6ab8967d99e7bd9955beab8db8212081d8c303fb0c62d9d2d46c9b7ac39922b3"
+  },
+  {
+    "seq": 27,
+    "at": "2026-10-05T09:31:42.399Z",
+    "type": "task.started",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_01",
+      "nodeId": "node-local",
+      "nodeName": "本机工作台"
+    },
+    "prev": "6ab8967d99e7bd9955beab8db8212081d8c303fb0c62d9d2d46c9b7ac39922b3",
+    "hash": "a4bbf0801991cf08d9f09b9623512a600908b38220ab657b3a486ad16733151e"
+  },
+  {
+    "seq": 28,
+    "at": "2026-10-05T09:32:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_01",
+      "label": "扫描源目录",
+      "detail": "发现 10 个 PNG 文件（含 1 个 0 字节）"
+    },
+    "prev": "a4bbf0801991cf08d9f09b9623512a600908b38220ab657b3a486ad16733151e",
+    "hash": "4fe5b7b57a2414ded07ab1d69841efe7ef1113d90caf249657aef10f3e476a2e"
+  },
+  {
+    "seq": 29,
+    "at": "2026-10-05T09:34:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_01",
+      "label": "逐张裁剪",
+      "detail": "居中裁成 1024×1024（不足补边）"
+    },
+    "prev": "4fe5b7b57a2414ded07ab1d69841efe7ef1113d90caf249657aef10f3e476a2e",
+    "hash": "fb6b9d04581157b8d15602f1b2c3b9ebd2b6b86e7b4699e60ad43fb3664fefe3"
+  },
+  {
+    "seq": 30,
+    "at": "2026-10-05T09:38:42.399Z",
+    "type": "task.succeeded",
+    "actor": "node-agent",
+    "data": {
+      "taskId": "seed_task_01",
+      "result": {
+        "summary": "9 张成功，1 张失败：文件损坏",
+        "items": [
+          {
+            "name": "样品01.png",
+            "ok": true,
+            "detail": "640×480 → 1024×1024"
+          },
+          {
+            "name": "样品02.png",
+            "ok": true,
+            "detail": "800×600 → 1024×1024"
+          },
+          {
+            "name": "样品03.png",
+            "ok": true,
+            "detail": "1024×768 → 1024×1024"
+          },
+          {
+            "name": "样品04.png",
+            "ok": true,
+            "detail": "500×500 → 1024×1024"
+          },
+          {
+            "name": "样品05.png",
+            "ok": true,
+            "detail": "1200×900 → 1024×1024"
+          },
+          {
+            "name": "样品06.png",
+            "ok": true,
+            "detail": "320×240 → 1024×1024"
+          },
+          {
+            "name": "样品07.png",
+            "ok": true,
+            "detail": "960×540 → 1024×1024"
+          },
+          {
+            "name": "样品08.png",
+            "ok": true,
+            "detail": "700×500 → 1024×1024"
+          },
+          {
+            "name": "样品09.png",
+            "ok": true,
+            "detail": "2000×1200 → 1024×1024"
+          },
+          {
+            "name": "样品10.png",
+            "ok": false,
+            "detail": "文件损坏"
+          }
+        ],
+        "partial": true
+      }
+    },
+    "prev": "fb6b9d04581157b8d15602f1b2c3b9ebd2b6b86e7b4699e60ad43fb3664fefe3",
+    "hash": "eaee115eabb5ad46ce319147ac01d21779163e5c237eeab4c52ba7fdce16269c"
+  },
+  {
+    "seq": 31,
+    "at": "2026-10-16T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "text": "用本地模型总结本周周报",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "possible",
+      "draft": {
+        "summary": "把「用本地模型总结本周周报」交给 本地模型 的「本地摘要模型」",
+        "capabilities": [
+          {
+            "id": "llm.summarize",
+            "name": "本地摘要模型",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-llm",
+          "name": "本地模型"
+        },
+        "missing": [],
+        "risk": {
+          "level": "reversible",
+          "reasons": []
+        },
+        "params": {
+          "text": "本周周报：完成榫卯 v0.1 的账本、体检与通道模块……"
+        }
+      }
+    },
+    "prev": "eaee115eabb5ad46ce319147ac01d21779163e5c237eeab4c52ba7fdce16269c",
+    "hash": "9d82934ab037ce9c2943277ae58746b58d9e05cfaf4101bd297cdbc34cd90331"
+  },
+  {
+    "seq": 32,
+    "at": "2026-10-16T09:29:42.399Z",
+    "type": "task.queued",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "nodeId": "dev-llm",
+      "note": "可逆动作免确认，直接派发"
+    },
+    "prev": "9d82934ab037ce9c2943277ae58746b58d9e05cfaf4101bd297cdbc34cd90331",
+    "hash": "11077160dae26bd59a34227b654dd566bd3745b4e2424bd085ef645c933261c7"
+  },
+  {
+    "seq": 33,
+    "at": "2026-10-16T09:30:42.399Z",
+    "type": "task.started",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "nodeId": "dev-llm",
+      "nodeName": "本地模型"
+    },
+    "prev": "11077160dae26bd59a34227b654dd566bd3745b4e2424bd085ef645c933261c7",
+    "hash": "f72efc5e07b9359201808a2e35ac8b026dc1b889c2e3395f412a82b5d67534b9"
+  },
+  {
+    "seq": 34,
+    "at": "2026-10-16T09:31:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "label": "加载模型",
+      "detail": "llm.summarize 2.1"
+    },
+    "prev": "f72efc5e07b9359201808a2e35ac8b026dc1b889c2e3395f412a82b5d67534b9",
+    "hash": "2928711dbd9b052e60cddb2fae4dfc90b3d74d93776ceb6700bb3120c10a4228"
+  },
+  {
+    "seq": 35,
+    "at": "2026-10-16T09:33:42.399Z",
+    "type": "task.failed",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "error": "版本不兼容：需要 2.3 以上，当前 2.1"
+    },
+    "prev": "2928711dbd9b052e60cddb2fae4dfc90b3d74d93776ceb6700bb3120c10a4228",
+    "hash": "ae8fce71471e89eacbade1912bbee7cde7a1aea2696cafd4adc0eda001162cae"
+  },
+  {
+    "seq": 36,
+    "at": "2026-10-18T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "text": "打印合同扫描件 3 份",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "把「打印合同扫描件 3 份」交给 打印服务器 的「打印」",
+        "capabilities": [
+          {
+            "id": "printer.mock",
+            "name": "打印",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-printer",
+          "name": "打印服务器"
+        },
+        "missing": [],
+        "risk": {
+          "level": "irreversible",
+          "reasons": [
+            "该能力会向外部发送或删除数据",
+            "文本包含发送/删除/付款/打印等不可逆动作"
+          ]
+        },
+        "params": {
+          "file": "示例空间/样品图/样品01.png",
+          "copies": 3
+        }
+      }
+    },
+    "prev": "ae8fce71471e89eacbade1912bbee7cde7a1aea2696cafd4adc0eda001162cae",
+    "hash": "c6f47d2fdf6abae7952c1e77de517b71416f3a44774db7fe6f961da655523d0c"
+  },
+  {
+    "seq": 37,
+    "at": "2026-10-18T09:29:42.399Z",
+    "type": "task.confirmed",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "confirmedBy": "你",
+      "note": "确认执行不可逆动作"
+    },
+    "prev": "c6f47d2fdf6abae7952c1e77de517b71416f3a44774db7fe6f961da655523d0c",
+    "hash": "389cc8e638103420d1c57c246876d67bd600d820fbe33ef5fae3aca3399ac074"
+  },
+  {
+    "seq": 38,
+    "at": "2026-10-18T09:30:42.399Z",
+    "type": "task.queued",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "nodeId": "dev-printer",
+      "note": "确认后派发"
+    },
+    "prev": "389cc8e638103420d1c57c246876d67bd600d820fbe33ef5fae3aca3399ac074",
+    "hash": "a43e6d2490dbfb11266bf4c3ed470f8ee545e3380d145f1a5926f394cb62734b"
+  },
+  {
+    "seq": 39,
+    "at": "2026-10-18T09:31:42.399Z",
+    "type": "task.started",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "nodeId": "dev-printer",
+      "nodeName": "打印服务器"
+    },
+    "prev": "a43e6d2490dbfb11266bf4c3ed470f8ee545e3380d145f1a5926f394cb62734b",
+    "hash": "6f56b7e3a9ba5e6b6ff76e71c8eb0fae230ce5c2cb8730db42f71d8275d3c64d"
+  },
+  {
+    "seq": 40,
+    "at": "2026-10-18T09:33:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "label": "打印",
+      "detail": "3 份 · 打印服务器"
+    },
+    "prev": "6f56b7e3a9ba5e6b6ff76e71c8eb0fae230ce5c2cb8730db42f71d8275d3c64d",
+    "hash": "8919c3ce959f5814f5ccf0fe64c0b6cdcdbd5acd93f419c977c211109932aec6"
+  },
+  {
+    "seq": 41,
+    "at": "2026-10-18T09:34:42.399Z",
+    "type": "task.succeeded",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "result": {
+        "summary": "已打印 3 份合同扫描件（模拟打印机）",
+        "items": [
+          {
+            "name": "合同扫描件×3",
+            "ok": true,
+            "detail": "已出纸（模拟）"
+          }
+        ],
+        "partial": false
+      }
+    },
+    "prev": "8919c3ce959f5814f5ccf0fe64c0b6cdcdbd5acd93f419c977c211109932aec6",
+    "hash": "887bba9a6dc2edc4dc11886ef503432b25885f4c01f12de494b5dcf5bacc6dd5"
+  },
+  {
+    "seq": 42,
+    "at": "2026-10-18T09:35:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "channel": "wechat-mock",
+      "status": "unavailable",
+      "reason": "账号异常"
+    },
+    "prev": "887bba9a6dc2edc4dc11886ef503432b25885f4c01f12de494b5dcf5bacc6dd5",
+    "hash": "599ea7e52e8191b35ed2d38f4e844947e017a1a0b0e049008d305de3355c841c"
+  },
+  {
+    "seq": 43,
+    "at": "2026-10-18T09:36:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "channel": "email-mock",
+      "status": "unavailable",
+      "reason": "账号异常"
+    },
+    "prev": "599ea7e52e8191b35ed2d38f4e844947e017a1a0b0e049008d305de3355c841c",
+    "hash": "0adcabfdad3ad5722284af63a7ab39d424aff8fb020334051c4734a2839e4edb"
+  },
+  {
+    "seq": 44,
+    "at": "2026-10-18T09:37:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "channel": "station",
+      "status": "failed",
+      "reason": "无可用通道"
+    },
+    "prev": "0adcabfdad3ad5722284af63a7ab39d424aff8fb020334051c4734a2839e4edb",
+    "hash": "e0e8e5fac581b09f8a72bea9331479fadd85a3d6416b8b49c950453d2df24002"
+  },
+  {
+    "seq": 45,
+    "at": "2026-10-18T09:38:42.399Z",
+    "type": "task.undelivered",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_10",
+      "summary": "已打印 3 份合同扫描件（模拟打印机）"
+    },
+    "prev": "e0e8e5fac581b09f8a72bea9331479fadd85a3d6416b8b49c950453d2df24002",
+    "hash": "444b9d3ba42d4980afdbfee2c8946eafee27dbe6482580c1767d0a19bc2f79bc"
+  },
+  {
+    "seq": 46,
+    "at": "2026-10-20T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "phone",
+    "data": {
+      "taskId": "seed_task_11",
+      "text": "打印 2 份彩页样张",
+      "source": "phone",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "把「打印 2 份彩页样张」交给 打印服务器 的「打印」",
+        "capabilities": [
+          {
+            "id": "printer.mock",
+            "name": "打印",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-printer",
+          "name": "打印服务器"
+        },
+        "missing": [],
+        "risk": {
+          "level": "irreversible",
+          "reasons": [
+            "该能力会向外部发送或删除数据"
+          ]
+        },
+        "params": {
+          "file": "示例空间/样品图/样品04.png",
+          "copies": 2
+        }
+      }
+    },
+    "prev": "444b9d3ba42d4980afdbfee2c8946eafee27dbe6482580c1767d0a19bc2f79bc",
+    "hash": "4dea5fa5bce043baa26adea5decfa86cd472fec74576e343e26a656d681a4699"
+  },
+  {
+    "seq": 47,
+    "at": "2026-10-20T09:33:42.399Z",
+    "type": "task.cancelled",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_11",
+      "completedSteps": 0
+    },
+    "prev": "4dea5fa5bce043baa26adea5decfa86cd472fec74576e343e26a656d681a4699",
+    "hash": "2144ba4150f2aa7586852cde1ff5596654b9e13a4f3f57a51e4a5ac9dd064cd3"
+  },
+  {
+    "seq": 48,
+    "at": "2026-10-22T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "phone",
+    "data": {
+      "taskId": "seed_task_05",
+      "text": "把交付链接发到工作群",
+      "source": "phone",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "把「把交付链接发到工作群」交给 本机中枢 的「回传通道」",
+        "capabilities": [
+          {
+            "id": "channel.notify",
+            "name": "回传通道",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "hub",
+          "name": "本机中枢"
+        },
+        "missing": [],
+        "risk": {
+          "level": "irreversible",
+          "reasons": [
+            "该能力会向外部发送或删除数据",
+            "文本包含发送/删除/付款/打印等不可逆动作"
+          ]
+        },
+        "params": {
+          "channel": "wechat-mock",
+          "group": "工作群"
+        }
+      }
+    },
+    "prev": "2144ba4150f2aa7586852cde1ff5596654b9e13a4f3f57a51e4a5ac9dd064cd3",
+    "hash": "b6fde3f7b3f16345abb5d5574237c9a41fb896450b56ddd266219ca2d875ebfa"
+  },
+  {
+    "seq": 49,
+    "at": "2026-10-22T09:29:42.399Z",
+    "type": "task.confirmed",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "confirmedBy": "你",
+      "note": "确认执行不可逆动作"
+    },
+    "prev": "b6fde3f7b3f16345abb5d5574237c9a41fb896450b56ddd266219ca2d875ebfa",
+    "hash": "52948de327550053dcb4dc88f9bad6934bd51664e5971eaab7a2da2584b9781e"
+  },
+  {
+    "seq": 50,
+    "at": "2026-10-22T09:30:42.399Z",
+    "type": "task.queued",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "nodeId": "hub",
+      "note": "确认后派发"
+    },
+    "prev": "52948de327550053dcb4dc88f9bad6934bd51664e5971eaab7a2da2584b9781e",
+    "hash": "8dafe4cc16590d0b21b5a1cd63e0646f44489cdcfe007239227ca6dab9b39372"
+  },
+  {
+    "seq": 51,
+    "at": "2026-10-22T09:31:42.399Z",
+    "type": "task.started",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "nodeId": "hub",
+      "nodeName": "本机中枢"
+    },
+    "prev": "8dafe4cc16590d0b21b5a1cd63e0646f44489cdcfe007239227ca6dab9b39372",
+    "hash": "475f27e7e9480d8c5dcc019c1b66d4b9e9f64f2ab2e906646b786e20be13b1ec"
+  },
+  {
+    "seq": 52,
+    "at": "2026-10-22T09:32:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "label": "摘要脱敏",
+      "detail": "将向 3 个群发送，只发摘要与链接"
+    },
+    "prev": "475f27e7e9480d8c5dcc019c1b66d4b9e9f64f2ab2e906646b786e20be13b1ec",
+    "hash": "ace18acbfb683561ac8b911da0e3f5698c33a78b1af98de3b88ed91d28b7ceb1"
+  },
+  {
+    "seq": 53,
+    "at": "2026-10-22T09:33:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "label": "发送",
+      "detail": "工作群 · 模拟通道"
+    },
+    "prev": "ace18acbfb683561ac8b911da0e3f5698c33a78b1af98de3b88ed91d28b7ceb1",
+    "hash": "94f0a76a4b44076f630bd974ec66883c75caad1316688310395a52d0bea08ec7"
+  },
+  {
+    "seq": 54,
+    "at": "2026-10-22T09:34:42.399Z",
+    "type": "task.succeeded",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "result": {
+        "summary": "已向 3 个群发送摘要与链接（模拟通道）",
+        "items": [
+          {
+            "name": "工作群-1",
+            "ok": true,
+            "detail": "已送达"
+          },
+          {
+            "name": "工作群-2",
+            "ok": true,
+            "detail": "已送达"
+          },
+          {
+            "name": "工作群-3",
+            "ok": true,
+            "detail": "已送达"
+          }
+        ],
+        "partial": false
+      }
+    },
+    "prev": "94f0a76a4b44076f630bd974ec66883c75caad1316688310395a52d0bea08ec7",
+    "hash": "4eee944193021b87be9671831bb690249041665ee8e7ce4ad5e5303b674bd4d0"
+  },
+  {
+    "seq": 55,
+    "at": "2026-10-22T09:35:42.399Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "channel": "wechat-mock",
+      "status": "delivered",
+      "latencyMs": 96
+    },
+    "prev": "4eee944193021b87be9671831bb690249041665ee8e7ce4ad5e5303b674bd4d0",
+    "hash": "3eb99979c7bfbc5d6777bf1004a498b6b12d530dde3ce81ac8b8624c5ce11830"
+  },
+  {
+    "seq": 56,
+    "at": "2026-10-22T09:35:42.399Z",
+    "type": "message.inbox",
+    "actor": "hub",
+    "data": {
+      "messageId": "msg_seed_02",
+      "taskId": "seed_task_05",
+      "channel": "wechat-mock",
+      "channelLabel": "微信（模拟通道）",
+      "title": "群消息 · 工作群",
+      "summary": "把交付链接发到工作群",
+      "link": "/r/seed_task_05",
+      "status": "delivered",
+      "sensitive": true
+    },
+    "prev": "3eb99979c7bfbc5d6777bf1004a498b6b12d530dde3ce81ac8b8624c5ce11830",
+    "hash": "55b548eeb149e29eb3925e9f11b1d4cd683f617eb137a33d6ba0f71c98b6d721"
+  },
+  {
+    "seq": 57,
+    "at": "2026-10-22T09:35:42.399Z",
+    "type": "task.delivered",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_05",
+      "channel": "wechat-mock",
+      "messageId": "msg_seed_02",
+      "summary": "把交付链接发到工作群",
+      "link": "/r/seed_task_05",
+      "latencyMs": 96,
+      "status": "delivered",
+      "note": ""
+    },
+    "prev": "55b548eeb149e29eb3925e9f11b1d4cd683f617eb137a33d6ba0f71c98b6d721",
+    "hash": "851f0276293d577d9600709458ccb6f6719c3f182473539bf1ed605d9100b179"
+  },
+  {
+    "seq": 58,
+    "at": "2026-10-23T09:18:42.399Z",
+    "type": "node.heartbeat",
+    "actor": "hub",
+    "data": {
+      "nodeId": "dev-printer"
+    },
+    "prev": "851f0276293d577d9600709458ccb6f6719c3f182473539bf1ed605d9100b179",
+    "hash": "db1efcdef6e844920b078084e797bad06d3a90564a9341a96c36d00649cdfa1a"
+  },
+  {
+    "seq": 59,
+    "at": "2026-10-23T09:28:42.399Z",
+    "type": "node.offline",
+    "actor": "hub",
+    "data": {
+      "nodeId": "dev-printer",
+      "since": "2026-10-23T09:28:42.399Z"
+    },
+    "prev": "db1efcdef6e844920b078084e797bad06d3a90564a9341a96c36d00649cdfa1a",
+    "hash": "45f95ab6156d9c7a4f83dbe3d8dca09bbb76d1b66e8a59f7c828aabe5b0c57df"
+  },
+  {
+    "seq": 60,
+    "at": "2026-10-24T09:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_06",
+      "text": "把演示视频转码成 1080p",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "possible",
+      "draft": {
+        "summary": "把「把演示视频转码成 1080p」交给 群晖 NAS 的「视频转码（仅手动）」",
+        "capabilities": [
+          {
+            "id": "video.transcode",
+            "name": "视频转码（仅手动）",
+            "manualOnly": true
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-nas",
+          "name": "群晖 NAS"
+        },
+        "missing": [],
+        "risk": {
+          "level": "reversible",
+          "reasons": []
+        },
+        "params": {
+          "src": "示例空间/视频/演示.mp4",
+          "target": "1080p"
+        }
+      }
+    },
+    "prev": "45f95ab6156d9c7a4f83dbe3d8dca09bbb76d1b66e8a59f7c828aabe5b0c57df",
+    "hash": "6cab7ee89c0412203b4e5ef7f906f332e2cfa13fbbcab3d4ea16dc97e9fc950e"
+  },
+  {
+    "seq": 61,
+    "at": "2026-10-24T09:29:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_06",
+      "label": "仅手动",
+      "detail": "卡片标「仅手动，需要你操作」"
+    },
+    "prev": "6cab7ee89c0412203b4e5ef7f906f332e2cfa13fbbcab3d4ea16dc97e9fc950e",
+    "hash": "e6451cb868f85d1910f856b6e20cf0f4af367caed330f0b42db6809ea2b5ba3e"
+  },
+  {
+    "seq": 62,
+    "at": "2026-10-25T03:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "phone",
+    "data": {
+      "taskId": "seed_task_02",
+      "text": "打印 3 份合同",
+      "source": "phone",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "把「打印 3 份合同」交给 打印服务器 的「打印」",
+        "capabilities": [
+          {
+            "id": "printer.mock",
+            "name": "打印",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-printer",
+          "name": "打印服务器"
+        },
+        "missing": [],
+        "risk": {
+          "level": "irreversible",
+          "reasons": [
+            "该能力会向外部发送或删除数据",
+            "文本包含发送/删除/付款/打印等不可逆动作"
+          ]
+        },
+        "params": {
+          "file": "示例空间/样品图/样品01.png",
+          "copies": 3
+        }
+      }
+    },
+    "prev": "e6451cb868f85d1910f856b6e20cf0f4af367caed330f0b42db6809ea2b5ba3e",
+    "hash": "1baf73dd68025437461b579e5273dcac8bcb557a30d3ce8db38b2070e9b7eb4c"
+  },
+  {
+    "seq": 63,
+    "at": "2026-10-25T04:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_07",
+      "text": "把 NAS 上的素材直接打印到打印服务器",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "跨数据域：群晖 NAS（域外） → 打印服务器 的「打印」",
+        "capabilities": [
+          {
+            "id": "printer.mock",
+            "name": "打印",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-printer",
+          "name": "打印服务器"
+        },
+        "missing": [],
+        "risk": {
+          "level": "irreversible",
+          "reasons": [
+            "跨数据域，需审批",
+            "该能力会向外部发送或删除数据"
+          ]
+        },
+        "params": {
+          "sourceDeviceId": "dev-nas",
+          "file": "NAS:/archive/2025/素材索引.zip",
+          "copies": 1
+        }
+      }
+    },
+    "prev": "1baf73dd68025437461b579e5273dcac8bcb557a30d3ce8db38b2070e9b7eb4c",
+    "hash": "8afee767088f618220a7eec98c55a8d62d90d225ee17e90be16a4db7d8567d92"
+  },
+  {
+    "seq": 64,
+    "at": "2026-10-25T04:29:42.399Z",
+    "type": "task.step",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_07",
+      "label": "等待审批",
+      "detail": "跨数据域，需审批"
+    },
+    "prev": "8afee767088f618220a7eec98c55a8d62d90d225ee17e90be16a4db7d8567d92",
+    "hash": "420dade590b7eae991ebf9b9e55b2d62d73d2c10a377472909f883b7d36fe14b"
+  },
+  {
+    "seq": 65,
+    "at": "2026-10-25T05:28:42.399Z",
+    "type": "task.drafted",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_08",
+      "text": "检查打印服务器固件，必要时升级",
+      "source": "desktop",
+      "requester": "你",
+      "evidenceLevel": "certain",
+      "draft": {
+        "summary": "把「检查打印服务器固件」交给 打印服务器 的「文件扫描」",
+        "capabilities": [
+          {
+            "id": "file.hash",
+            "name": "文件扫描",
+            "manualOnly": false
+          }
+        ],
+        "targetDevice": {
+          "id": "dev-printer",
+          "name": "打印服务器"
+        },
+        "missing": [],
+        "risk": {
+          "level": "irreversible",
+          "reasons": [
+            "固件检查后可能触发升级，不可自动回滚"
+          ]
+        },
+        "params": {
+          "path": "printer://firmware",
+          "mode": "check-and-maybe-upgrade"
+        }
+      }
+    },
+    "prev": "420dade590b7eae991ebf9b9e55b2d62d73d2c10a377472909f883b7d36fe14b",
+    "hash": "50c455b72c698dc67b0ae67c563bfdee6271b26c8f3fc4d336a775cc3dc5e3ab"
+  },
+  {
+    "seq": 66,
+    "at": "2026-10-25T07:58:42.399Z",
+    "type": "node.heartbeat",
+    "actor": "hub",
+    "data": {
+      "nodeId": "hub"
+    },
+    "prev": "50c455b72c698dc67b0ae67c563bfdee6271b26c8f3fc4d336a775cc3dc5e3ab",
+    "hash": "65545ba536101ed9515d6989f3739f3e1f01320f0a5a86eb1972770fc624c8c6"
+  },
+  {
+    "seq": 67,
+    "at": "2026-10-25T08:08:42.399Z",
+    "type": "node.heartbeat",
+    "actor": "hub",
+    "data": {
+      "nodeId": "node-local"
+    },
+    "prev": "65545ba536101ed9515d6989f3739f3e1f01320f0a5a86eb1972770fc624c8c6",
+    "hash": "6fe285cfacad717555de123fb5b3c931cb7a65186e1c33fdd8843878056b5e58"
+  },
+  {
+    "seq": 68,
+    "at": "2026-10-25T08:38:42.399Z",
+    "type": "checkup.ran",
+    "actor": "hub",
+    "data": {
+      "checkupId": "chk_mvnml5201f6f0dcd",
+      "scope": "all",
+      "findings": [
+        {
+          "level": "warning",
+          "title": "设备离线：打印服务器",
+          "detail": "保留上次状态，任务排队，不解绑",
+          "evidence": "lastSeen=2026-10-23T09:18:42.399Z"
+        },
+        {
+          "level": "notice",
+          "title": "授权将在 3 天后到期",
+          "detail": "打印服务器 / 打印",
+          "evidence": "authExpiresAt=2026-10-28T09:28:42.399Z"
+        },
+        {
+          "level": "warning",
+          "title": "授权已过期：群晖 NAS / NAS 归档同步",
+          "detail": "授权已于 4 天前到期，任务已暂停",
+          "evidence": "authExpiresAt=2026-10-20T09:28:42.399Z"
+        },
+        {
+          "level": "warning",
+          "title": "版本不兼容：本地模型 / 本地摘要模型",
+          "detail": "需要 2.3 以上，当前 2.1",
+          "evidence": "capability=llm.summarize"
+        },
+        {
+          "level": "warning",
+          "title": "设备离线：旧扫描仪",
+          "detail": "保留上次状态，任务排队，不解绑",
+          "evidence": "lastSeen=2026-07-27T09:28:42.399Z"
+        },
+        {
+          "level": "notice",
+          "title": "微信通道因限流被降级到邮件",
+          "detail": "最近 1 次限流记录",
+          "evidence": "task.deliveryAttempt"
+        },
+        {
+          "level": "warning",
+          "title": "通道不可用：账号异常",
+          "detail": "最近 2 次失败记录",
+          "evidence": "task.deliveryAttempt"
+        },
+        {
+          "level": "notice",
+          "title": "任务完成但未回传",
+          "detail": "把昨天的样品图裁成方图（1024）",
+          "evidence": "task=seed_task_01"
+        },
+        {
+          "level": "notice",
+          "title": "未配置 AI API key",
+          "detail": "草案走规则引擎；界面显示「未知」而不是猜测",
+          "evidence": "env DEEPSEEK_API_KEY"
+        }
+      ],
+      "verdict": "findings",
+      "checked": 7,
+      "items": [
+        "设备与模型",
+        "权限与角色",
+        "通道可用",
+        "账本完整性",
+        "任务健康",
+        "AI 与外部依赖",
+        "数据与审计"
+      ],
+      "summary": "发现 9 项，按影响排序如下"
+    },
+    "prev": "6fe285cfacad717555de123fb5b3c931cb7a65186e1c33fdd8843878056b5e58",
+    "hash": "7cbdeec5f59a9ba68545d26aacb106084eb9b2676b88b384da7fd48a1be08d8a"
+  },
+  {
+    "seq": 69,
+    "at": "2026-10-25T08:58:42.399Z",
+    "type": "audit.exported",
+    "actor": "hub",
+    "data": {
+      "format": "csv",
+      "count": 128,
+      "by": "你"
+    },
+    "prev": "7cbdeec5f59a9ba68545d26aacb106084eb9b2676b88b384da7fd48a1be08d8a",
+    "hash": "8cd0c950c185ced3198c0e2872346431ea8debeddc976f6e146af43c0b89317d"
+  },
+  {
+    "seq": 70,
+    "at": "2026-10-25T09:08:42.399Z",
+    "type": "audit.exported",
+    "actor": "hub",
+    "data": {
+      "format": "json",
+      "count": 130,
+      "by": "你"
+    },
+    "prev": "8cd0c950c185ced3198c0e2872346431ea8debeddc976f6e146af43c0b89317d",
+    "hash": "100016ac0174b793f2c636bc24d8c439d09e29235d90b56614cd5ef69bbc11ca"
+  },
+  {
+    "seq": 71,
+    "at": "2026-10-25T09:18:42.399Z",
+    "type": "node.heartbeat",
+    "actor": "hub",
+    "data": {
+      "nodeId": "hub"
+    },
+    "prev": "100016ac0174b793f2c636bc24d8c439d09e29235d90b56614cd5ef69bbc11ca",
+    "hash": "6114a20644bf1448ee96fa452bfb41601ded7bd36470fba02e4127a85307e1ad"
+  },
+  {
+    "seq": 72,
+    "at": "2026-10-25T09:28:49.785Z",
+    "type": "system.boot",
+    "actor": "hub",
+    "data": {
+      "pid": 37364,
+      "mode": "solo",
+      "recovered": false,
+      "version": "0.1.0"
+    },
+    "prev": "6114a20644bf1448ee96fa452bfb41601ded7bd36470fba02e4127a85307e1ad",
+    "hash": "58c7d3304c761897845cc2d7bb3dc4a313b0d342dd8552600ca3e81f4521105c"
+  },
+  {
+    "seq": 73,
+    "at": "2026-10-25T09:28:49.890Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_01",
+      "channel": "wechat-mock",
+      "status": "delivered",
+      "latencyMs": 0
+    },
+    "prev": "58c7d3304c761897845cc2d7bb3dc4a313b0d342dd8552600ca3e81f4521105c",
+    "hash": "55c2439cb86275ab1524bc53ccf49fab4cf91ea7f075f0e76114812a07853003"
+  },
+  {
+    "seq": 74,
+    "at": "2026-10-25T09:28:49.891Z",
+    "type": "message.inbox",
+    "actor": "hub",
+    "data": {
+      "messageId": "msg_mvnmlasi63f3f507",
+      "taskId": "seed_task_01",
+      "channel": "wechat-mock",
+      "channelLabel": "微信（模拟通道）",
+      "title": "任务回执",
+      "summary": "9 张成功，1 张失败：文件损坏",
+      "link": "/r/seed_task_01",
+      "status": "delivered",
+      "sensitive": true
+    },
+    "prev": "55c2439cb86275ab1524bc53ccf49fab4cf91ea7f075f0e76114812a07853003",
+    "hash": "6d23ebbd5f40b76c6bb2448888e5b0f12fd1018a63b4ee2325773dae81803f59"
+  },
+  {
+    "seq": 75,
+    "at": "2026-10-25T09:28:49.892Z",
+    "type": "task.delivered",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_01",
+      "channel": "wechat-mock",
+      "messageId": "msg_mvnmlasi63f3f507",
+      "summary": "9 张成功，1 张失败：文件损坏",
+      "link": "/r/seed_task_01",
+      "latencyMs": 0,
+      "status": "delivered",
+      "note": ""
+    },
+    "prev": "6d23ebbd5f40b76c6bb2448888e5b0f12fd1018a63b4ee2325773dae81803f59",
+    "hash": "82d2a12489d1f79f00efe650aea86fb7f764b2719ccaa2a7a7651a624ec01982"
+  },
+  {
+    "seq": 76,
+    "at": "2026-10-25T09:28:49.893Z",
+    "type": "task.deliveryAttempt",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "channel": "wechat-mock",
+      "status": "delivered",
+      "latencyMs": 0
+    },
+    "prev": "82d2a12489d1f79f00efe650aea86fb7f764b2719ccaa2a7a7651a624ec01982",
+    "hash": "4602dfcf168484b1acf6bd6ef8f07cc47a7a35e3b4d9b97d5841ba797e096659"
+  },
+  {
+    "seq": 77,
+    "at": "2026-10-25T09:28:49.894Z",
+    "type": "message.inbox",
+    "actor": "hub",
+    "data": {
+      "messageId": "msg_mvnmlasl3a6e4a7e",
+      "taskId": "seed_task_04",
+      "channel": "wechat-mock",
+      "channelLabel": "微信（模拟通道）",
+      "title": "任务回执",
+      "summary": "版本不兼容：需要 2.3 以上，当前 2.1",
+      "link": "/r/seed_task_04",
+      "status": "delivered",
+      "sensitive": true
+    },
+    "prev": "4602dfcf168484b1acf6bd6ef8f07cc47a7a35e3b4d9b97d5841ba797e096659",
+    "hash": "81094598c67ebc3b7ce2caf7aa63c29c6c4aba7031b086e518cfc831af21fb79"
+  },
+  {
+    "seq": 78,
+    "at": "2026-10-25T09:28:49.895Z",
+    "type": "task.delivered",
+    "actor": "hub",
+    "data": {
+      "taskId": "seed_task_04",
+      "channel": "wechat-mock",
+      "messageId": "msg_mvnmlasl3a6e4a7e",
+      "summary": "版本不兼容：需要 2.3 以上，当前 2.1",
+      "link": "/r/seed_task_04",
+      "latencyMs": 0,
+      "status": "delivered",
+      "note": ""
+    },
+    "prev": "81094598c67ebc3b7ce2caf7aa63c29c6c4aba7031b086e518cfc831af21fb79",
+    "hash": "676e268ee831685f3b51c66a9d34692f363d210830da49525ecfde6187b4d741"
+  },
+  {
+    "seq": 79,
+    "at": "2026-10-25T09:28:51.343Z",
+    "type": "node.registered",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "name": "工作台",
+      "platform": "win32-x64",
+      "fingerprint": "f52832e95553563b",
+      "capabilities": [
+        {
+          "id": "image.crop",
+          "name": "图片居中裁剪",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed",
+          "inputs": [
+            "srcDir（源目录，相对仓库根）",
+            "outDir（输出目录，相对仓库根）",
+            "size（输出边长 px）"
+          ],
+          "outputs": [
+            "outDir 下同名 size×size PNG 文件"
+          ]
+        },
+        {
+          "id": "file.hash",
+          "name": "文件 SHA-256 校验",
+          "risk": "reversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed",
+          "inputs": [
+            "path（文件路径，相对仓库根）"
+          ],
+          "outputs": [
+            "sha256 摘要"
+          ]
+        },
+        {
+          "id": "file.delete",
+          "name": "删除文件",
+          "risk": "irreversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed",
+          "inputs": [
+            "target（要删除的文件，相对仓库根）"
+          ],
+          "outputs": [
+            "文件被永久删除（不可恢复）"
+          ]
+        },
+        {
+          "id": "printer.mock",
+          "name": "模拟打印",
+          "risk": "irreversible",
+          "manualOnly": false,
+          "version": "0.1.0",
+          "evidence": "confirmed",
+          "inputs": [
+            "file（打印文件标识）",
+            "copies（份数，1-99）"
+          ],
+          "outputs": [
+            "data/outbox/打印-<时间>.txt"
+          ]
+        }
+      ],
+      "domain": "studio"
+    },
+    "prev": "676e268ee831685f3b51c66a9d34692f363d210830da49525ecfde6187b4d741",
+    "hash": "154ffd0c00b88fc94aa48c2bbc6dbf8c7d6c92b0b7b5226d31091486def88d34"
+  },
+  {
+    "seq": 80,
+    "at": "2026-10-25T09:28:51.350Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:28:51.349Z"
+    },
+    "prev": "154ffd0c00b88fc94aa48c2bbc6dbf8c7d6c92b0b7b5226d31091486def88d34",
+    "hash": "0803c09281931a39c2d41566aee7f47c71841d51e725ac251c32fa26432eca20"
+  },
+  {
+    "seq": 81,
+    "at": "2026-10-25T09:28:53.357Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:28:53.356Z"
+    },
+    "prev": "0803c09281931a39c2d41566aee7f47c71841d51e725ac251c32fa26432eca20",
+    "hash": "563956a15a8e3790363e96a30ee748c869e308703f7af2b1af02d58de5d7e1d0"
+  },
+  {
+    "seq": 82,
+    "at": "2026-10-25T09:28:55.366Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:28:55.365Z"
+    },
+    "prev": "563956a15a8e3790363e96a30ee748c869e308703f7af2b1af02d58de5d7e1d0",
+    "hash": "879f9b9dd4da65a52439f6c81060865a44edcf49ab9f08b9bb9be3ecacb6734a"
+  },
+  {
+    "seq": 83,
+    "at": "2026-10-25T09:28:57.377Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:28:57.376Z"
+    },
+    "prev": "879f9b9dd4da65a52439f6c81060865a44edcf49ab9f08b9bb9be3ecacb6734a",
+    "hash": "683dbb7088d91fe5fbd7e39157c6fbc7687d45b7afffe7f5cb62dfb9add4ef21"
+  },
+  {
+    "seq": 84,
+    "at": "2026-10-25T09:28:59.386Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:28:59.385Z"
+    },
+    "prev": "683dbb7088d91fe5fbd7e39157c6fbc7687d45b7afffe7f5cb62dfb9add4ef21",
+    "hash": "58204a8cc178dd6f486e966ba499bb1eb9f54206956608c0993614dd371e1b8c"
+  },
+  {
+    "seq": 85,
+    "at": "2026-10-25T09:29:01.394Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:01.392Z"
+    },
+    "prev": "58204a8cc178dd6f486e966ba499bb1eb9f54206956608c0993614dd371e1b8c",
+    "hash": "e0e3850dd1d48cbd40a21f8fe8b70a2d57f1f14899894288a63a550206cc2cb4"
+  },
+  {
+    "seq": 86,
+    "at": "2026-10-25T09:29:03.400Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:03.399Z"
+    },
+    "prev": "e0e3850dd1d48cbd40a21f8fe8b70a2d57f1f14899894288a63a550206cc2cb4",
+    "hash": "59256935f43fedc2e5282559f9b49158316dc250ded53cabadadaf23ca03cea9"
+  },
+  {
+    "seq": 87,
+    "at": "2026-10-25T09:29:05.413Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:05.412Z"
+    },
+    "prev": "59256935f43fedc2e5282559f9b49158316dc250ded53cabadadaf23ca03cea9",
+    "hash": "9139231d2a1db3b7f1668bd2a2b69e8c25c2f5755ee3ae70a2ced5ad0e86ab27"
+  },
+  {
+    "seq": 88,
+    "at": "2026-10-25T09:29:07.430Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:07.429Z"
+    },
+    "prev": "9139231d2a1db3b7f1668bd2a2b69e8c25c2f5755ee3ae70a2ced5ad0e86ab27",
+    "hash": "46c342f8665723759be9b995d3f0bf617f60a3731ea00e203ec60d9a0fcde249"
+  },
+  {
+    "seq": 89,
+    "at": "2026-10-25T09:29:09.442Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:09.441Z"
+    },
+    "prev": "46c342f8665723759be9b995d3f0bf617f60a3731ea00e203ec60d9a0fcde249",
+    "hash": "6a02c48279b83f95dd313b63dc8b095f7bed6c025607f423da4717a3b4471788"
+  },
+  {
+    "seq": 90,
+    "at": "2026-10-25T09:29:11.448Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:11.446Z"
+    },
+    "prev": "6a02c48279b83f95dd313b63dc8b095f7bed6c025607f423da4717a3b4471788",
+    "hash": "127f5f2208d34db5e31d44c2f3500584ab5010a55e4bad117b57240e0b453cfc"
+  },
+  {
+    "seq": 91,
+    "at": "2026-10-25T09:29:13.455Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:13.453Z"
+    },
+    "prev": "127f5f2208d34db5e31d44c2f3500584ab5010a55e4bad117b57240e0b453cfc",
+    "hash": "dc47c4ad8a035332bf0374e2225b519b8dfe4b276d49d11778c00022e0cc5dbc"
+  },
+  {
+    "seq": 92,
+    "at": "2026-10-25T09:29:15.463Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:15.462Z"
+    },
+    "prev": "dc47c4ad8a035332bf0374e2225b519b8dfe4b276d49d11778c00022e0cc5dbc",
+    "hash": "168602ce642dc298eb42ad04d8328c490bb4bca254b4388259692c6923fe7885"
+  },
+  {
+    "seq": 93,
+    "at": "2026-10-25T09:29:17.474Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:17.473Z"
+    },
+    "prev": "168602ce642dc298eb42ad04d8328c490bb4bca254b4388259692c6923fe7885",
+    "hash": "30b26ae01ee767c569d5599d0db03a011b587b05bce2621f80ee2f7d16d6daf5"
+  },
+  {
+    "seq": 94,
+    "at": "2026-10-25T09:29:19.491Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:19.490Z"
+    },
+    "prev": "30b26ae01ee767c569d5599d0db03a011b587b05bce2621f80ee2f7d16d6daf5",
+    "hash": "d5d945a566d55d81871829d63350a7ab212a6ef7a762285bf22495778eef3b54"
+  },
+  {
+    "seq": 95,
+    "at": "2026-10-25T09:29:21.505Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:21.504Z"
+    },
+    "prev": "d5d945a566d55d81871829d63350a7ab212a6ef7a762285bf22495778eef3b54",
+    "hash": "6ce4ff48adf04ab0d517dfd1d480e85d0d03fbb3ebea33236da362ecab392faa"
+  },
+  {
+    "seq": 96,
+    "at": "2026-10-25T09:29:23.511Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:23.510Z"
+    },
+    "prev": "6ce4ff48adf04ab0d517dfd1d480e85d0d03fbb3ebea33236da362ecab392faa",
+    "hash": "6e5a330d4077b458bd7c9fb83f5ecb41b58f3e808676404d7681e65f0940613f"
+  },
+  {
+    "seq": 97,
+    "at": "2026-10-25T09:29:25.524Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:25.523Z"
+    },
+    "prev": "6e5a330d4077b458bd7c9fb83f5ecb41b58f3e808676404d7681e65f0940613f",
+    "hash": "1a37f67e1035c065b27a283895e88bba6dbda43ec71cbcf2cb6a3e4721328e13"
+  },
+  {
+    "seq": 98,
+    "at": "2026-10-25T09:29:27.539Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:27.538Z"
+    },
+    "prev": "1a37f67e1035c065b27a283895e88bba6dbda43ec71cbcf2cb6a3e4721328e13",
+    "hash": "2bd81dc6c1ec5e59d460b90a4d4e9bb060fcaadbd5135a2b1a4dbe22bade6284"
+  },
+  {
+    "seq": 99,
+    "at": "2026-10-25T09:29:29.554Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:29.553Z"
+    },
+    "prev": "2bd81dc6c1ec5e59d460b90a4d4e9bb060fcaadbd5135a2b1a4dbe22bade6284",
+    "hash": "5cf59a2f7fafebed4c69df1da4878653db580d72d0d373c690d772aa20cae783"
+  },
+  {
+    "seq": 100,
+    "at": "2026-10-25T09:29:31.568Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:31.567Z"
+    },
+    "prev": "5cf59a2f7fafebed4c69df1da4878653db580d72d0d373c690d772aa20cae783",
+    "hash": "0e0f599e1336efc2ba99acd9d0de1d26f71d35a80fb6c05f0fa081e435cdac0e"
+  },
+  {
+    "seq": 101,
+    "at": "2026-10-25T09:29:33.580Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:33.579Z"
+    },
+    "prev": "0e0f599e1336efc2ba99acd9d0de1d26f71d35a80fb6c05f0fa081e435cdac0e",
+    "hash": "280488b232a1fd3bc19e679c04e2a4d368f34a9786397873ef629f9bf579c05e"
+  },
+  {
+    "seq": 102,
+    "at": "2026-10-25T09:29:35.591Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:35.590Z"
+    },
+    "prev": "280488b232a1fd3bc19e679c04e2a4d368f34a9786397873ef629f9bf579c05e",
+    "hash": "9cdf6b762d968c86e778b2bc94b62603c78aa6e8677064e9145e035b6644ca89"
+  },
+  {
+    "seq": 103,
+    "at": "2026-10-25T09:29:37.596Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:37.595Z"
+    },
+    "prev": "9cdf6b762d968c86e778b2bc94b62603c78aa6e8677064e9145e035b6644ca89",
+    "hash": "4b0236d1f35c235836b1d62d37292e7d31946d935f0f8b1f176b1bd2d4563cec"
+  },
+  {
+    "seq": 104,
+    "at": "2026-10-25T09:29:39.603Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:39.602Z"
+    },
+    "prev": "4b0236d1f35c235836b1d62d37292e7d31946d935f0f8b1f176b1bd2d4563cec",
+    "hash": "2861ce17f6c7c18b6376d668eee70d2e62af1eecf367b69b301092cd61f78691"
+  },
+  {
+    "seq": 105,
+    "at": "2026-10-25T09:29:41.618Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:41.617Z"
+    },
+    "prev": "2861ce17f6c7c18b6376d668eee70d2e62af1eecf367b69b301092cd61f78691",
+    "hash": "9037c63114f5586e3ad8784aa0e5eee927253411b63901912c252a55480284d0"
+  },
+  {
+    "seq": 106,
+    "at": "2026-10-25T09:29:43.636Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:43.635Z"
+    },
+    "prev": "9037c63114f5586e3ad8784aa0e5eee927253411b63901912c252a55480284d0",
+    "hash": "f400d11f3a3682723ae8ba5de61efa7dfb503cb89df100f0ffe46af655c9175a"
+  },
+  {
+    "seq": 107,
+    "at": "2026-10-25T09:29:45.645Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:45.644Z"
+    },
+    "prev": "f400d11f3a3682723ae8ba5de61efa7dfb503cb89df100f0ffe46af655c9175a",
+    "hash": "c55482088af4acafe89426acc17aed484cb9779edb44002fa8e8f4df89aae78a"
+  },
+  {
+    "seq": 108,
+    "at": "2026-10-25T09:29:47.652Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:47.651Z"
+    },
+    "prev": "c55482088af4acafe89426acc17aed484cb9779edb44002fa8e8f4df89aae78a",
+    "hash": "a646ea4de6778ade8b4770a5d8699e936290dba361d4590b6e45ae75c4b2b9fc"
+  },
+  {
+    "seq": 109,
+    "at": "2026-10-25T09:29:49.668Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:49.667Z"
+    },
+    "prev": "a646ea4de6778ade8b4770a5d8699e936290dba361d4590b6e45ae75c4b2b9fc",
+    "hash": "0a313f52820f4c5b2aca12e596de165b58fd2a5aba01625d86f40c1da0845264"
+  },
+  {
+    "seq": 110,
+    "at": "2026-10-25T09:29:51.681Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:51.680Z"
+    },
+    "prev": "0a313f52820f4c5b2aca12e596de165b58fd2a5aba01625d86f40c1da0845264",
+    "hash": "558aa1898b692a2886eb745e8c0a4a9e56701eeb199f2e977ae8586b312f1837"
+  },
+  {
+    "seq": 111,
+    "at": "2026-10-25T09:29:53.693Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:53.693Z"
+    },
+    "prev": "558aa1898b692a2886eb745e8c0a4a9e56701eeb199f2e977ae8586b312f1837",
+    "hash": "b1b9ea2e52b0a8e80ed3f082c334f564effd3be846a09151e1a1cf5e3ad73f7e"
+  },
+  {
+    "seq": 112,
+    "at": "2026-10-25T09:29:55.707Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:55.707Z"
+    },
+    "prev": "b1b9ea2e52b0a8e80ed3f082c334f564effd3be846a09151e1a1cf5e3ad73f7e",
+    "hash": "b0cb79aab88d021c60b462031181048df4837b1f07ba8684697102657f420490"
+  },
+  {
+    "seq": 113,
+    "at": "2026-10-25T09:29:57.710Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:57.710Z"
+    },
+    "prev": "b0cb79aab88d021c60b462031181048df4837b1f07ba8684697102657f420490",
+    "hash": "0923cffd43aff5ab77128bb485a9897e1849d3f4e3f7fec9cc90f7f054c721fc"
+  },
+  {
+    "seq": 114,
+    "at": "2026-10-25T09:29:59.723Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:29:59.722Z"
+    },
+    "prev": "0923cffd43aff5ab77128bb485a9897e1849d3f4e3f7fec9cc90f7f054c721fc",
+    "hash": "cfe75fd714074362eef9a21dcff8256600bbba1ea4861e71511f14c980fd1e4d"
+  },
+  {
+    "seq": 115,
+    "at": "2026-10-25T09:30:01.731Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:01.730Z"
+    },
+    "prev": "cfe75fd714074362eef9a21dcff8256600bbba1ea4861e71511f14c980fd1e4d",
+    "hash": "f0fd204c2681966ea67d19ec13ad0feb147ed037570f5a8ec3f91d9aa9eda148"
+  },
+  {
+    "seq": 116,
+    "at": "2026-10-25T09:30:03.749Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:03.748Z"
+    },
+    "prev": "f0fd204c2681966ea67d19ec13ad0feb147ed037570f5a8ec3f91d9aa9eda148",
+    "hash": "a122880913347f14adb8a77cd4fc872103155e7dc55c7ab0082cf34604e46fee"
+  },
+  {
+    "seq": 117,
+    "at": "2026-10-25T09:30:05.754Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:05.753Z"
+    },
+    "prev": "a122880913347f14adb8a77cd4fc872103155e7dc55c7ab0082cf34604e46fee",
+    "hash": "ae63bd57bb2a9d62062957d3d48ba983744aed2715082617e54ecc1bd093c481"
+  },
+  {
+    "seq": 118,
+    "at": "2026-10-25T09:30:07.771Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:07.771Z"
+    },
+    "prev": "ae63bd57bb2a9d62062957d3d48ba983744aed2715082617e54ecc1bd093c481",
+    "hash": "f85b59a0005d8ceaffa3b72fceb1f26943e2b0f4c223123f49cd7c989009fa8a"
+  },
+  {
+    "seq": 119,
+    "at": "2026-10-25T09:30:09.775Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:09.775Z"
+    },
+    "prev": "f85b59a0005d8ceaffa3b72fceb1f26943e2b0f4c223123f49cd7c989009fa8a",
+    "hash": "27d96d3d0d9d00fcdac282120de6f60f910d52db19c770042bb1aa1347487a2b"
+  },
+  {
+    "seq": 120,
+    "at": "2026-10-25T09:30:11.787Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:11.786Z"
+    },
+    "prev": "27d96d3d0d9d00fcdac282120de6f60f910d52db19c770042bb1aa1347487a2b",
+    "hash": "acc5d2591c5c8ad690c8008d45031e9714f335107432b1addf92101183b824fc"
+  },
+  {
+    "seq": 121,
+    "at": "2026-10-25T09:30:13.797Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:13.795Z"
+    },
+    "prev": "acc5d2591c5c8ad690c8008d45031e9714f335107432b1addf92101183b824fc",
+    "hash": "1240fa84634f62f5b90ec962c143d19777cfc52da9593c2fc6cfc5f3a9069e57"
+  },
+  {
+    "seq": 122,
+    "at": "2026-10-25T09:30:15.830Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:15.828Z"
+    },
+    "prev": "1240fa84634f62f5b90ec962c143d19777cfc52da9593c2fc6cfc5f3a9069e57",
+    "hash": "9c5e50db0c91a7ac54e3c2f3f5ad8de006d077f5849d436ea2d6d9034c5ea560"
+  },
+  {
+    "seq": 123,
+    "at": "2026-10-25T09:30:17.843Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:17.843Z"
+    },
+    "prev": "9c5e50db0c91a7ac54e3c2f3f5ad8de006d077f5849d436ea2d6d9034c5ea560",
+    "hash": "ba2cb1fabd71e12524e118a00116c02d60ec6c3c8b6eda820b91bafed16b64f6"
+  },
+  {
+    "seq": 124,
+    "at": "2026-10-25T09:30:19.861Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:19.860Z"
+    },
+    "prev": "ba2cb1fabd71e12524e118a00116c02d60ec6c3c8b6eda820b91bafed16b64f6",
+    "hash": "9cbd5dfecc7bea658b2d91a4cb49b03948e4f43f8351f1217abab9c7000f652b"
+  },
+  {
+    "seq": 125,
+    "at": "2026-10-25T09:30:21.874Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:21.874Z"
+    },
+    "prev": "9cbd5dfecc7bea658b2d91a4cb49b03948e4f43f8351f1217abab9c7000f652b",
+    "hash": "0a7a96f453c97b505c85fd453b166d154bd7e6bffb2ead3fd504abac416a15c2"
+  },
+  {
+    "seq": 126,
+    "at": "2026-10-25T09:30:23.880Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:23.879Z"
+    },
+    "prev": "0a7a96f453c97b505c85fd453b166d154bd7e6bffb2ead3fd504abac416a15c2",
+    "hash": "5ee302ac2fc8c081ab10a593c5969dee0dfaa08f1fd7d72ed94f7e8d15b1e653"
+  },
+  {
+    "seq": 127,
+    "at": "2026-10-25T09:30:25.885Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:25.884Z"
+    },
+    "prev": "5ee302ac2fc8c081ab10a593c5969dee0dfaa08f1fd7d72ed94f7e8d15b1e653",
+    "hash": "f2c5c1eac6aca32f58a25a232badd76b3897b7be46a52e832fe7c7c68699fb69"
+  },
+  {
+    "seq": 128,
+    "at": "2026-10-25T09:30:27.900Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:27.900Z"
+    },
+    "prev": "f2c5c1eac6aca32f58a25a232badd76b3897b7be46a52e832fe7c7c68699fb69",
+    "hash": "fe3b875eae287ae03a71ce7374b6e635059cacd7d5f58cd028fc68fbbfbaf887"
+  },
+  {
+    "seq": 129,
+    "at": "2026-10-25T09:30:29.906Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:29.905Z"
+    },
+    "prev": "fe3b875eae287ae03a71ce7374b6e635059cacd7d5f58cd028fc68fbbfbaf887",
+    "hash": "5b2ac6c2320e3772b64b7d7a52408f6e1d1d8fbd16ec002879435913cded5482"
+  },
+  {
+    "seq": 130,
+    "at": "2026-10-25T09:30:31.916Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:31.915Z"
+    },
+    "prev": "5b2ac6c2320e3772b64b7d7a52408f6e1d1d8fbd16ec002879435913cded5482",
+    "hash": "e2bde2c253d909deb569b3990af0541786b823a62185052b52d18edd0ef7622b"
+  },
+  {
+    "seq": 131,
+    "at": "2026-10-25T09:30:33.934Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:33.934Z"
+    },
+    "prev": "e2bde2c253d909deb569b3990af0541786b823a62185052b52d18edd0ef7622b",
+    "hash": "d42dc129c0207163053e4eded027a1c48495f1497362e723d39a3a691aa0ed2a"
+  },
+  {
+    "seq": 132,
+    "at": "2026-10-25T09:30:35.946Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:35.946Z"
+    },
+    "prev": "d42dc129c0207163053e4eded027a1c48495f1497362e723d39a3a691aa0ed2a",
+    "hash": "7c1daafd16ae75d86ff3e1125b834696de394c6fb69d14ecc8b709f9ebc690a3"
+  },
+  {
+    "seq": 133,
+    "at": "2026-10-25T09:30:37.952Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:37.951Z"
+    },
+    "prev": "7c1daafd16ae75d86ff3e1125b834696de394c6fb69d14ecc8b709f9ebc690a3",
+    "hash": "0de49ca8573b283e378b649544a5c91336e6a42bb5dc1493c5d38e74d341f21e"
+  },
+  {
+    "seq": 134,
+    "at": "2026-10-25T09:30:39.955Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:39.955Z"
+    },
+    "prev": "0de49ca8573b283e378b649544a5c91336e6a42bb5dc1493c5d38e74d341f21e",
+    "hash": "88266fc2186e57d91be934f002dd212e5ec9ef4a2de251c5ccb20b5b76818ae8"
+  },
+  {
+    "seq": 135,
+    "at": "2026-10-25T09:30:41.972Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:41.971Z"
+    },
+    "prev": "88266fc2186e57d91be934f002dd212e5ec9ef4a2de251c5ccb20b5b76818ae8",
+    "hash": "ff499c2495d42b5ad2e1e2cd8b42c041d4f6b4b6f6def4f48541f121b561a1bf"
+  },
+  {
+    "seq": 136,
+    "at": "2026-10-25T09:30:43.985Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:43.984Z"
+    },
+    "prev": "ff499c2495d42b5ad2e1e2cd8b42c041d4f6b4b6f6def4f48541f121b561a1bf",
+    "hash": "78338d735618a743faaef9ead8bdce9ebba99c5a0cd31a1f6b3752c1a1705564"
+  },
+  {
+    "seq": 137,
+    "at": "2026-10-25T09:30:46.004Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:46.003Z"
+    },
+    "prev": "78338d735618a743faaef9ead8bdce9ebba99c5a0cd31a1f6b3752c1a1705564",
+    "hash": "7b18f5b9f309037a0a75b3d17577a322264f8c68b0f5d3fa7c0d6ea4c8a9ffc9"
+  },
+  {
+    "seq": 138,
+    "at": "2026-10-25T09:30:48.021Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:48.020Z"
+    },
+    "prev": "7b18f5b9f309037a0a75b3d17577a322264f8c68b0f5d3fa7c0d6ea4c8a9ffc9",
+    "hash": "a3c3faa47505fe677f944b81fa1d5dec210465590dfd9530f9f991bb8e165c8e"
+  },
+  {
+    "seq": 139,
+    "at": "2026-10-25T09:30:50.027Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:50.026Z"
+    },
+    "prev": "a3c3faa47505fe677f944b81fa1d5dec210465590dfd9530f9f991bb8e165c8e",
+    "hash": "69312ff5bb253de516cb5de8e541842f280f12b0bbd73a31635cedf2f19c570e"
+  },
+  {
+    "seq": 140,
+    "at": "2026-10-25T09:30:52.035Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:52.033Z"
+    },
+    "prev": "69312ff5bb253de516cb5de8e541842f280f12b0bbd73a31635cedf2f19c570e",
+    "hash": "a0def0f0702cf4980e751dca96fcbc3fa217ee859064bc7208eabae39e1f5d7d"
+  },
+  {
+    "seq": 141,
+    "at": "2026-10-25T09:30:54.041Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:54.040Z"
+    },
+    "prev": "a0def0f0702cf4980e751dca96fcbc3fa217ee859064bc7208eabae39e1f5d7d",
+    "hash": "cc57ee20e3b6129d0bae3591b4525f45a0003525aad16273256fa14d505e823f"
+  },
+  {
+    "seq": 142,
+    "at": "2026-10-25T09:30:56.050Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:56.049Z"
+    },
+    "prev": "cc57ee20e3b6129d0bae3591b4525f45a0003525aad16273256fa14d505e823f",
+    "hash": "692d9b0322ab8da443abb327b352c9f9d9adb39340f508b16aef7c5b012eb980"
+  },
+  {
+    "seq": 143,
+    "at": "2026-10-25T09:30:58.060Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:30:58.059Z"
+    },
+    "prev": "692d9b0322ab8da443abb327b352c9f9d9adb39340f508b16aef7c5b012eb980",
+    "hash": "97bd3313fc3af32d756c3d3bd8aebaf450dba1d93caf4a81d5b4751cb513ab61"
+  },
+  {
+    "seq": 144,
+    "at": "2026-10-25T09:31:00.077Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:00.075Z"
+    },
+    "prev": "97bd3313fc3af32d756c3d3bd8aebaf450dba1d93caf4a81d5b4751cb513ab61",
+    "hash": "16070c0d374c2d2c21322fd712a5970ad22b36f9efa6611a94371412564016dc"
+  },
+  {
+    "seq": 145,
+    "at": "2026-10-25T09:31:02.086Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:02.085Z"
+    },
+    "prev": "16070c0d374c2d2c21322fd712a5970ad22b36f9efa6611a94371412564016dc",
+    "hash": "f11b1de5b3dbabb012c429e520abce1a20c13de5cd8f20f70247826e26c669f4"
+  },
+  {
+    "seq": 146,
+    "at": "2026-10-25T09:31:04.092Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:04.091Z"
+    },
+    "prev": "f11b1de5b3dbabb012c429e520abce1a20c13de5cd8f20f70247826e26c669f4",
+    "hash": "0555fc4965d519e28e3424565efe8c6a772c71635180c2543d469a5129ffaffc"
+  },
+  {
+    "seq": 147,
+    "at": "2026-10-25T09:31:06.111Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:06.110Z"
+    },
+    "prev": "0555fc4965d519e28e3424565efe8c6a772c71635180c2543d469a5129ffaffc",
+    "hash": "154e984c752e3c79c5f2321f0894e53966d4c67b3f234e5ff326ea5b744d55ef"
+  },
+  {
+    "seq": 148,
+    "at": "2026-10-25T09:31:08.120Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:08.118Z"
+    },
+    "prev": "154e984c752e3c79c5f2321f0894e53966d4c67b3f234e5ff326ea5b744d55ef",
+    "hash": "24842e0fc1075783d5c3ddcfe51022993cbdf7c1ee955a98b40593a402f2ef26"
+  },
+  {
+    "seq": 149,
+    "at": "2026-10-25T09:31:10.124Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:10.123Z"
+    },
+    "prev": "24842e0fc1075783d5c3ddcfe51022993cbdf7c1ee955a98b40593a402f2ef26",
+    "hash": "744d7f65338fd543fed1c45bb8e9b1ca2c76b88661f4f2894fcfde02da842926"
+  },
+  {
+    "seq": 150,
+    "at": "2026-10-25T09:31:12.130Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:12.128Z"
+    },
+    "prev": "744d7f65338fd543fed1c45bb8e9b1ca2c76b88661f4f2894fcfde02da842926",
+    "hash": "d7504de7e0b04c238ad9ac3a41203e08788da91b332f99fdeac35165ff6b5403"
+  },
+  {
+    "seq": 151,
+    "at": "2026-10-25T09:31:14.143Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:14.142Z"
+    },
+    "prev": "d7504de7e0b04c238ad9ac3a41203e08788da91b332f99fdeac35165ff6b5403",
+    "hash": "9f06d4944e4a2ef2001a44f701e307ffb6fcca552a9feafc8eb8e4d6f9238218"
+  },
+  {
+    "seq": 152,
+    "at": "2026-10-25T09:31:16.157Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:16.155Z"
+    },
+    "prev": "9f06d4944e4a2ef2001a44f701e307ffb6fcca552a9feafc8eb8e4d6f9238218",
+    "hash": "7fa266599fe37b942c2c9c35e92ae2cee6d57ad3e291d28ad877115bd2c02178"
+  },
+  {
+    "seq": 153,
+    "at": "2026-10-25T09:31:18.175Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:18.173Z"
+    },
+    "prev": "7fa266599fe37b942c2c9c35e92ae2cee6d57ad3e291d28ad877115bd2c02178",
+    "hash": "d0673098dc9ecd9a232b1031a465e97759de864d78017dc4e0aa757b4d032a88"
+  },
+  {
+    "seq": 154,
+    "at": "2026-10-25T09:31:20.189Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:20.188Z"
+    },
+    "prev": "d0673098dc9ecd9a232b1031a465e97759de864d78017dc4e0aa757b4d032a88",
+    "hash": "fe5406d9cd0f99f45fc6f3058ebfc885108e9b6a2b5e62d66ae62e5a157cffea"
+  },
+  {
+    "seq": 155,
+    "at": "2026-10-25T09:31:22.196Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:22.195Z"
+    },
+    "prev": "fe5406d9cd0f99f45fc6f3058ebfc885108e9b6a2b5e62d66ae62e5a157cffea",
+    "hash": "403a5b8511cc00520882675c871915c6af27358c4f33f401a8cdbc06a3d90334"
+  },
+  {
+    "seq": 156,
+    "at": "2026-10-25T09:31:24.212Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:24.211Z"
+    },
+    "prev": "403a5b8511cc00520882675c871915c6af27358c4f33f401a8cdbc06a3d90334",
+    "hash": "2adffaa0f89843b57467aa5a26856b68d8b71e898d38264bb73431e8d29eede6"
+  },
+  {
+    "seq": 157,
+    "at": "2026-10-25T09:31:26.227Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:26.226Z"
+    },
+    "prev": "2adffaa0f89843b57467aa5a26856b68d8b71e898d38264bb73431e8d29eede6",
+    "hash": "7c19bcc1d0ce392cab78350dcd19facd2760bfcc17e6ad4ed56f128b2646c0d9"
+  },
+  {
+    "seq": 158,
+    "at": "2026-10-25T09:31:28.243Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:28.242Z"
+    },
+    "prev": "7c19bcc1d0ce392cab78350dcd19facd2760bfcc17e6ad4ed56f128b2646c0d9",
+    "hash": "b971ce4fdd6890c2752544077f37e256900dd00ec846792fbdc5fc91989a80b2"
+  },
+  {
+    "seq": 159,
+    "at": "2026-10-25T09:31:30.252Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:30.250Z"
+    },
+    "prev": "b971ce4fdd6890c2752544077f37e256900dd00ec846792fbdc5fc91989a80b2",
+    "hash": "4bdb8ebe9bfb6ad4517cd07581def57711e5f51e2cbb9763fe8f13c2aeb3bba5"
+  },
+  {
+    "seq": 160,
+    "at": "2026-10-25T09:31:32.266Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:32.265Z"
+    },
+    "prev": "4bdb8ebe9bfb6ad4517cd07581def57711e5f51e2cbb9763fe8f13c2aeb3bba5",
+    "hash": "e11bf194c54c4aa93d308f9a0c1abbc17f2ddfd22efc80068b875cd34bee4b8b"
+  },
+  {
+    "seq": 161,
+    "at": "2026-10-25T09:31:34.271Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:34.270Z"
+    },
+    "prev": "e11bf194c54c4aa93d308f9a0c1abbc17f2ddfd22efc80068b875cd34bee4b8b",
+    "hash": "e8aa8b1cf3c3cb6f16618f10ffe963b5a512e97b70810a25cc209b4aa6eec76c"
+  },
+  {
+    "seq": 162,
+    "at": "2026-10-25T09:31:36.284Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:36.282Z"
+    },
+    "prev": "e8aa8b1cf3c3cb6f16618f10ffe963b5a512e97b70810a25cc209b4aa6eec76c",
+    "hash": "fdafec72b301dc88e047ad3d912e5748db6549876db20fd703c7ad74542a0edf"
+  },
+  {
+    "seq": 163,
+    "at": "2026-10-25T09:31:38.296Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:38.294Z"
+    },
+    "prev": "fdafec72b301dc88e047ad3d912e5748db6549876db20fd703c7ad74542a0edf",
+    "hash": "1c1f8de2676bdeda2aba300bd63e80c9eb052f2a838c2489f6278999f0e317c7"
+  },
+  {
+    "seq": 164,
+    "at": "2026-10-25T09:31:40.309Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:40.308Z"
+    },
+    "prev": "1c1f8de2676bdeda2aba300bd63e80c9eb052f2a838c2489f6278999f0e317c7",
+    "hash": "cc86d0cf66f4965471a94d1b6cfd1faec282373403021fd88c5f0595d57d3cc7"
+  },
+  {
+    "seq": 165,
+    "at": "2026-10-25T09:31:42.313Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:42.312Z"
+    },
+    "prev": "cc86d0cf66f4965471a94d1b6cfd1faec282373403021fd88c5f0595d57d3cc7",
+    "hash": "3d62c1deaf899bcd044c8df9ca69d26714e65869e54e24df858ca7de3496e2b1"
+  },
+  {
+    "seq": 166,
+    "at": "2026-10-25T09:31:44.319Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:44.318Z"
+    },
+    "prev": "3d62c1deaf899bcd044c8df9ca69d26714e65869e54e24df858ca7de3496e2b1",
+    "hash": "5afaf6747267eea3f81a4d4854ea761d5b440ed76364e2a39ebe7c6d2c3f89fc"
+  },
+  {
+    "seq": 167,
+    "at": "2026-10-25T09:31:46.328Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:46.327Z"
+    },
+    "prev": "5afaf6747267eea3f81a4d4854ea761d5b440ed76364e2a39ebe7c6d2c3f89fc",
+    "hash": "48569bc2e8f0117eb1517d5f614ae75dc98f0885800f09b240e5844d00cc18ee"
+  },
+  {
+    "seq": 168,
+    "at": "2026-10-25T09:31:48.339Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:48.338Z"
+    },
+    "prev": "48569bc2e8f0117eb1517d5f614ae75dc98f0885800f09b240e5844d00cc18ee",
+    "hash": "76d205a75a9995d2ff5999b478a3d5d1d71cb7998b1756ea93cf05718b94d9aa"
+  },
+  {
+    "seq": 169,
+    "at": "2026-10-25T09:31:50.350Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:50.348Z"
+    },
+    "prev": "76d205a75a9995d2ff5999b478a3d5d1d71cb7998b1756ea93cf05718b94d9aa",
+    "hash": "afa10fb32c78b64254d6541ff2d11211c180c0f6e654cf6d031436d1d9a018e2"
+  },
+  {
+    "seq": 170,
+    "at": "2026-10-25T09:31:52.365Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:52.365Z"
+    },
+    "prev": "afa10fb32c78b64254d6541ff2d11211c180c0f6e654cf6d031436d1d9a018e2",
+    "hash": "d2206806b741d8483835e08e5b2a66c8c323075d1822bfdc8d293e6ecbea7d6b"
+  },
+  {
+    "seq": 171,
+    "at": "2026-10-25T09:31:54.374Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:54.374Z"
+    },
+    "prev": "d2206806b741d8483835e08e5b2a66c8c323075d1822bfdc8d293e6ecbea7d6b",
+    "hash": "7bbeeabe6b765af0bfe276a7422388290b86cac940bde844c7223626d3832624"
+  },
+  {
+    "seq": 172,
+    "at": "2026-10-25T09:31:56.388Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:56.388Z"
+    },
+    "prev": "7bbeeabe6b765af0bfe276a7422388290b86cac940bde844c7223626d3832624",
+    "hash": "3189192ab0d33f81e571f6316cbeb01f04fa88934311579c86cd5dda069d0e14"
+  },
+  {
+    "seq": 173,
+    "at": "2026-10-25T09:31:58.395Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:31:58.395Z"
+    },
+    "prev": "3189192ab0d33f81e571f6316cbeb01f04fa88934311579c86cd5dda069d0e14",
+    "hash": "6659a98b417e4509de4b6e481a1b602a68bc8c991a7da74a03ece6dca7f07756"
+  },
+  {
+    "seq": 174,
+    "at": "2026-10-25T09:32:00.414Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:00.414Z"
+    },
+    "prev": "6659a98b417e4509de4b6e481a1b602a68bc8c991a7da74a03ece6dca7f07756",
+    "hash": "1075b7ace117e66dcdd3ab698047609988d32a387b44d7947cc972132b3b6f5c"
+  },
+  {
+    "seq": 175,
+    "at": "2026-10-25T09:32:02.428Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:02.428Z"
+    },
+    "prev": "1075b7ace117e66dcdd3ab698047609988d32a387b44d7947cc972132b3b6f5c",
+    "hash": "1ee31829903cad04c3818ba18316dc29cdb4a09b865e6018b15ce20814b48f2b"
+  },
+  {
+    "seq": 176,
+    "at": "2026-10-25T09:32:04.442Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:04.441Z"
+    },
+    "prev": "1ee31829903cad04c3818ba18316dc29cdb4a09b865e6018b15ce20814b48f2b",
+    "hash": "206798cba6b01c8138b23252586de0dc0b50e7244168c4f6398060285542bbf8"
+  },
+  {
+    "seq": 177,
+    "at": "2026-10-25T09:32:06.461Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:06.460Z"
+    },
+    "prev": "206798cba6b01c8138b23252586de0dc0b50e7244168c4f6398060285542bbf8",
+    "hash": "cef28e0b7de675997970a3f4f3730ae27c2a6e93ecb49cc3639471e9d378b854"
+  },
+  {
+    "seq": 178,
+    "at": "2026-10-25T09:32:08.475Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:08.474Z"
+    },
+    "prev": "cef28e0b7de675997970a3f4f3730ae27c2a6e93ecb49cc3639471e9d378b854",
+    "hash": "b7b79f21a903ffa5422719034ab6496dff6eedef7a57c0ffd47a0e7cfc4ecf9b"
+  },
+  {
+    "seq": 179,
+    "at": "2026-10-25T09:32:10.486Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:10.485Z"
+    },
+    "prev": "b7b79f21a903ffa5422719034ab6496dff6eedef7a57c0ffd47a0e7cfc4ecf9b",
+    "hash": "4befa6abbc816884b233897c94f75fbcffd16e8fab89cddaade52cb1104a22df"
+  },
+  {
+    "seq": 180,
+    "at": "2026-10-25T09:32:12.502Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:12.501Z"
+    },
+    "prev": "4befa6abbc816884b233897c94f75fbcffd16e8fab89cddaade52cb1104a22df",
+    "hash": "2c60d1b676ea6ce81d307d98b85174008fff9310d9a5fdcd2003ee9ad82905aa"
+  },
+  {
+    "seq": 181,
+    "at": "2026-10-25T09:32:14.505Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:14.505Z"
+    },
+    "prev": "2c60d1b676ea6ce81d307d98b85174008fff9310d9a5fdcd2003ee9ad82905aa",
+    "hash": "0346732734b486ee67a19ae7a051672dde9f7ca2203a64be5b301aa7e5486129"
+  },
+  {
+    "seq": 182,
+    "at": "2026-10-25T09:32:16.513Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:16.513Z"
+    },
+    "prev": "0346732734b486ee67a19ae7a051672dde9f7ca2203a64be5b301aa7e5486129",
+    "hash": "d2fe1122f1c60285cdbae948373f3808991e6e5399ff48b96d4d7bf6e4d1cace"
+  },
+  {
+    "seq": 183,
+    "at": "2026-10-25T09:32:18.529Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:18.528Z"
+    },
+    "prev": "d2fe1122f1c60285cdbae948373f3808991e6e5399ff48b96d4d7bf6e4d1cace",
+    "hash": "05a322c188dc51f18b8d306afc98162aebdab12d8278ef5a558c8bec4c2ff37b"
+  },
+  {
+    "seq": 184,
+    "at": "2026-10-25T09:32:20.538Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:20.538Z"
+    },
+    "prev": "05a322c188dc51f18b8d306afc98162aebdab12d8278ef5a558c8bec4c2ff37b",
+    "hash": "ba1754334f1c176030078a055aa7dbdb22b175822920c9588695456abe71e6d6"
+  },
+  {
+    "seq": 185,
+    "at": "2026-10-25T09:32:22.546Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:22.545Z"
+    },
+    "prev": "ba1754334f1c176030078a055aa7dbdb22b175822920c9588695456abe71e6d6",
+    "hash": "0029e190942cd133b166e8e3889e3c8f02971472d483ca7775b724ff15ac7902"
+  },
+  {
+    "seq": 186,
+    "at": "2026-10-25T09:32:24.561Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:24.560Z"
+    },
+    "prev": "0029e190942cd133b166e8e3889e3c8f02971472d483ca7775b724ff15ac7902",
+    "hash": "dbd0b46f5957c1b8fd51922797d684f8aa35f9ed4409d42f51e35a26b093ab82"
+  },
+  {
+    "seq": 187,
+    "at": "2026-10-25T09:32:26.574Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:26.574Z"
+    },
+    "prev": "dbd0b46f5957c1b8fd51922797d684f8aa35f9ed4409d42f51e35a26b093ab82",
+    "hash": "c20dd5482e9ca1a73c4090d368b3137d4fba956f15d492207d073bc6aa639a57"
+  },
+  {
+    "seq": 188,
+    "at": "2026-10-25T09:32:28.591Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:28.591Z"
+    },
+    "prev": "c20dd5482e9ca1a73c4090d368b3137d4fba956f15d492207d073bc6aa639a57",
+    "hash": "82ccab6aec2ec04f19696d5d6c22fb01b2ce9543da08f761cdfeda24b95cf086"
+  },
+  {
+    "seq": 189,
+    "at": "2026-10-25T09:32:30.606Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:30.606Z"
+    },
+    "prev": "82ccab6aec2ec04f19696d5d6c22fb01b2ce9543da08f761cdfeda24b95cf086",
+    "hash": "0016d0ef024fc58c91b9a52935ed082541f438fc0f1fcf1e49a37c9fef173c3b"
+  },
+  {
+    "seq": 190,
+    "at": "2026-10-25T09:32:32.611Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:32.611Z"
+    },
+    "prev": "0016d0ef024fc58c91b9a52935ed082541f438fc0f1fcf1e49a37c9fef173c3b",
+    "hash": "0ef855ede486cb20173c8bd55b6a5ec28213e7235cdcd97d902d63035fbbd069"
+  },
+  {
+    "seq": 191,
+    "at": "2026-10-25T09:32:34.620Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:34.620Z"
+    },
+    "prev": "0ef855ede486cb20173c8bd55b6a5ec28213e7235cdcd97d902d63035fbbd069",
+    "hash": "b1501f67c6c5a6a9c7083de0a100ba505949632869e9c1798e3b95d263a9a690"
+  },
+  {
+    "seq": 192,
+    "at": "2026-10-25T09:32:36.638Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:36.638Z"
+    },
+    "prev": "b1501f67c6c5a6a9c7083de0a100ba505949632869e9c1798e3b95d263a9a690",
+    "hash": "7cb7be31c0a44d62fe84217591ca8c390a0942c393e710618b715968c16635a7"
+  },
+  {
+    "seq": 193,
+    "at": "2026-10-25T09:32:38.643Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:38.642Z"
+    },
+    "prev": "7cb7be31c0a44d62fe84217591ca8c390a0942c393e710618b715968c16635a7",
+    "hash": "12a3599ca991e325e435c13354fe9c01d3c2a2a2ffe0f2ef8f25979a479de3fa"
+  },
+  {
+    "seq": 194,
+    "at": "2026-10-25T09:32:40.654Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:40.654Z"
+    },
+    "prev": "12a3599ca991e325e435c13354fe9c01d3c2a2a2ffe0f2ef8f25979a479de3fa",
+    "hash": "9356641a637344ced626fafcadf595826a331a8370f8b504aa0af519ccde1257"
+  },
+  {
+    "seq": 195,
+    "at": "2026-10-25T09:32:42.658Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:42.658Z"
+    },
+    "prev": "9356641a637344ced626fafcadf595826a331a8370f8b504aa0af519ccde1257",
+    "hash": "ce0db042a933ce08faf9098e68f3d311d97dadc76a1bebedf46c9ea4857c0746"
+  },
+  {
+    "seq": 196,
+    "at": "2026-10-25T09:32:44.670Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:44.669Z"
+    },
+    "prev": "ce0db042a933ce08faf9098e68f3d311d97dadc76a1bebedf46c9ea4857c0746",
+    "hash": "a2f0ea166f1e84972226a2cfa60193ddff85e7df552dd3933b7a9bfbefa15db4"
+  },
+  {
+    "seq": 197,
+    "at": "2026-10-25T09:32:46.673Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:46.673Z"
+    },
+    "prev": "a2f0ea166f1e84972226a2cfa60193ddff85e7df552dd3933b7a9bfbefa15db4",
+    "hash": "1c3ff0f87a267c8eaf4940de684ec418fbb66165327dde5ace2714c6307743c3"
+  },
+  {
+    "seq": 198,
+    "at": "2026-10-25T09:32:48.687Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:48.687Z"
+    },
+    "prev": "1c3ff0f87a267c8eaf4940de684ec418fbb66165327dde5ace2714c6307743c3",
+    "hash": "b44780a95ddb113c6fc00dde978a6acb9ff769dd4af9fbf0917417c5cf8c5d5e"
+  },
+  {
+    "seq": 199,
+    "at": "2026-10-25T09:32:50.694Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:50.694Z"
+    },
+    "prev": "b44780a95ddb113c6fc00dde978a6acb9ff769dd4af9fbf0917417c5cf8c5d5e",
+    "hash": "46accf999ea8ceec02c4a94095660cd03c44b28c7f30ae81da6e289281293818"
+  },
+  {
+    "seq": 200,
+    "at": "2026-10-25T09:32:52.704Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:52.703Z"
+    },
+    "prev": "46accf999ea8ceec02c4a94095660cd03c44b28c7f30ae81da6e289281293818",
+    "hash": "b675e091c364e56ab49fe4d71b3510be1a0148369a1b957945a25c6b9698b661"
+  },
+  {
+    "seq": 201,
+    "at": "2026-10-25T09:32:54.716Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:54.715Z"
+    },
+    "prev": "b675e091c364e56ab49fe4d71b3510be1a0148369a1b957945a25c6b9698b661",
+    "hash": "12e5f02b7d90fa53094aed672f9c041dba5b2e7ac31ba414ae93a6c959845353"
+  },
+  {
+    "seq": 202,
+    "at": "2026-10-25T09:32:56.730Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:56.728Z"
+    },
+    "prev": "12e5f02b7d90fa53094aed672f9c041dba5b2e7ac31ba414ae93a6c959845353",
+    "hash": "6dca7c09d2e4d264dd66c62f275a9a78c62e53eb4b2d66530bf9c7be649ea655"
+  },
+  {
+    "seq": 203,
+    "at": "2026-10-25T09:32:58.733Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:32:58.731Z"
+    },
+    "prev": "6dca7c09d2e4d264dd66c62f275a9a78c62e53eb4b2d66530bf9c7be649ea655",
+    "hash": "5ca154f0438abab240fc667ed9ed9e3fe2733529c2876be74bc45ff9a6931e1d"
+  },
+  {
+    "seq": 204,
+    "at": "2026-10-25T09:33:00.738Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:00.736Z"
+    },
+    "prev": "5ca154f0438abab240fc667ed9ed9e3fe2733529c2876be74bc45ff9a6931e1d",
+    "hash": "eb2a285b18a5e2380ba68a2ae9b43166a628e6e8f76385c74da50fc07ceb15e9"
+  },
+  {
+    "seq": 205,
+    "at": "2026-10-25T09:33:02.742Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:02.740Z"
+    },
+    "prev": "eb2a285b18a5e2380ba68a2ae9b43166a628e6e8f76385c74da50fc07ceb15e9",
+    "hash": "ff5917ab460c0959969e0e0ae7375defe0db9aa9c3dbebc4ca5e2c57ad31515a"
+  },
+  {
+    "seq": 206,
+    "at": "2026-10-25T09:33:04.749Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:04.748Z"
+    },
+    "prev": "ff5917ab460c0959969e0e0ae7375defe0db9aa9c3dbebc4ca5e2c57ad31515a",
+    "hash": "a6e61ac1d1442e55cfd626e1eacb96d581e26d73a2979ffca624a5a1881edbac"
+  },
+  {
+    "seq": 207,
+    "at": "2026-10-25T09:33:06.764Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:06.762Z"
+    },
+    "prev": "a6e61ac1d1442e55cfd626e1eacb96d581e26d73a2979ffca624a5a1881edbac",
+    "hash": "7ce4fc72dbe8c857512c9b7c8a4d86a208ade081d433f549bbf501093aeb507b"
+  },
+  {
+    "seq": 208,
+    "at": "2026-10-25T09:33:08.772Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:08.770Z"
+    },
+    "prev": "7ce4fc72dbe8c857512c9b7c8a4d86a208ade081d433f549bbf501093aeb507b",
+    "hash": "bfef8aa8ad260832d4faaf9173175b53e28e7c07ddb369f4581151a262da5ee6"
+  },
+  {
+    "seq": 209,
+    "at": "2026-10-25T09:33:10.782Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:10.780Z"
+    },
+    "prev": "bfef8aa8ad260832d4faaf9173175b53e28e7c07ddb369f4581151a262da5ee6",
+    "hash": "49098d2f50a1f5adc157e2534cfa4aa80665f88daec2afa78dc81025390809ed"
+  },
+  {
+    "seq": 210,
+    "at": "2026-10-25T09:33:12.790Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:12.789Z"
+    },
+    "prev": "49098d2f50a1f5adc157e2534cfa4aa80665f88daec2afa78dc81025390809ed",
+    "hash": "3bf6ae172dde618bdb65b81b71bffa9060b92c5f065f57fb760d23fde3e369ef"
+  },
+  {
+    "seq": 211,
+    "at": "2026-10-25T09:33:14.800Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:14.799Z"
+    },
+    "prev": "3bf6ae172dde618bdb65b81b71bffa9060b92c5f065f57fb760d23fde3e369ef",
+    "hash": "b87945bdb9ec81ba2f678c3ba449fd090dadf1251b4a599f3d7b03a77665caf6"
+  },
+  {
+    "seq": 212,
+    "at": "2026-10-25T09:33:16.806Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:16.805Z"
+    },
+    "prev": "b87945bdb9ec81ba2f678c3ba449fd090dadf1251b4a599f3d7b03a77665caf6",
+    "hash": "a6fd3ead7733b1367bdd5abdf0248d1c736ac7f9e2ae9859fd7d9288fc7de21f"
+  },
+  {
+    "seq": 213,
+    "at": "2026-10-25T09:33:18.824Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:18.822Z"
+    },
+    "prev": "a6fd3ead7733b1367bdd5abdf0248d1c736ac7f9e2ae9859fd7d9288fc7de21f",
+    "hash": "40364fef30d6b132e642b17d86d06338874f9ea64597bbf402db21038ad403e2"
+  },
+  {
+    "seq": 214,
+    "at": "2026-10-25T09:33:20.835Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:20.834Z"
+    },
+    "prev": "40364fef30d6b132e642b17d86d06338874f9ea64597bbf402db21038ad403e2",
+    "hash": "1354eb3c8e675ee92ffe5b60161abfb1ac235f33a5b7f00b9aa17cac04a9188d"
+  },
+  {
+    "seq": 215,
+    "at": "2026-10-25T09:33:22.849Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:22.848Z"
+    },
+    "prev": "1354eb3c8e675ee92ffe5b60161abfb1ac235f33a5b7f00b9aa17cac04a9188d",
+    "hash": "5f7f50e5a2bd7883bf19c0ac75daca12d9bf4ad939df6c07ec783fa08f56d60e"
+  },
+  {
+    "seq": 216,
+    "at": "2026-10-25T09:33:24.866Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:24.865Z"
+    },
+    "prev": "5f7f50e5a2bd7883bf19c0ac75daca12d9bf4ad939df6c07ec783fa08f56d60e",
+    "hash": "ee11968b72fc737b9b65aef3a72872bb6c3ff9c8b82efd5990720084e842b5ce"
+  },
+  {
+    "seq": 217,
+    "at": "2026-10-25T09:33:26.730Z",
+    "type": "checkup.ran",
+    "actor": "hub",
+    "data": {
+      "checkupId": "chk_mvnmr8ei7e989688",
+      "scope": "all",
+      "findings": [
+        {
+          "level": "warning",
+          "title": "设备离线：打印服务器",
+          "detail": "保留上次状态，任务排队，不解绑",
+          "evidence": "lastSeen=2026-10-23T09:18:42.399Z"
+        },
+        {
+          "level": "notice",
+          "title": "授权将在 2 天后到期",
+          "detail": "打印服务器 / 打印",
+          "evidence": "authExpiresAt=2026-10-28T09:28:42.399Z"
+        },
+        {
+          "level": "warning",
+          "title": "授权已过期：群晖 NAS / NAS 归档同步",
+          "detail": "授权已于 5 天前到期，任务已暂停",
+          "evidence": "authExpiresAt=2026-10-20T09:28:42.399Z"
+        },
+        {
+          "level": "warning",
+          "title": "版本不兼容：本地模型 / 本地摘要模型",
+          "detail": "需要 2.3 以上，当前 2.1",
+          "evidence": "capability=llm.summarize"
+        },
+        {
+          "level": "warning",
+          "title": "设备离线：旧扫描仪",
+          "detail": "保留上次状态，任务排队，不解绑",
+          "evidence": "lastSeen=2026-07-27T09:28:42.399Z"
+        },
+        {
+          "level": "notice",
+          "title": "微信通道因限流被降级到邮件",
+          "detail": "最近 1 次限流记录",
+          "evidence": "task.deliveryAttempt"
+        },
+        {
+          "level": "warning",
+          "title": "通道不可用：账号异常",
+          "detail": "最近 2 次失败记录",
+          "evidence": "task.deliveryAttempt"
+        },
+        {
+          "level": "notice",
+          "title": "未配置 AI API key",
+          "detail": "草案走规则引擎；界面显示「未知」而不是猜测",
+          "evidence": "env DEEPSEEK_API_KEY"
+        },
+        {
+          "level": "notice",
+          "title": "检测到上次异常退出",
+          "detail": "已按账本重放恢复，缺口事件已标记",
+          "evidence": "boot@2026-10-25T09:28:49.785Z"
+        }
+      ],
+      "verdict": "findings",
+      "checked": 7,
+      "items": [
+        "设备与模型",
+        "权限与角色",
+        "通道可用",
+        "账本完整性",
+        "任务健康",
+        "AI 与外部依赖",
+        "数据与审计"
+      ],
+      "summary": "发现 9 项，按影响排序如下"
+    },
+    "prev": "ee11968b72fc737b9b65aef3a72872bb6c3ff9c8b82efd5990720084e842b5ce",
+    "hash": "7f8e56e2c7f2a08bfb3dbf587d7ac3e383b75541854141217bf5f48ff27965f1"
+  },
+  {
+    "seq": 218,
+    "at": "2026-10-25T09:33:26.876Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:26.874Z"
+    },
+    "prev": "7f8e56e2c7f2a08bfb3dbf587d7ac3e383b75541854141217bf5f48ff27965f1",
+    "hash": "5bbac56a1ce3b14925a0a8d18e621c2f19d421d87456b9f12d4edf3cd95c57e9"
+  },
+  {
+    "seq": 219,
+    "at": "2026-10-25T09:33:28.891Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:28.889Z"
+    },
+    "prev": "5bbac56a1ce3b14925a0a8d18e621c2f19d421d87456b9f12d4edf3cd95c57e9",
+    "hash": "d4c61ed07969640ae23a79694ca78cb4644d24dd5695ea32e2752ebbf102d14d"
+  },
+  {
+    "seq": 220,
+    "at": "2026-10-25T09:33:30.896Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:30.895Z"
+    },
+    "prev": "d4c61ed07969640ae23a79694ca78cb4644d24dd5695ea32e2752ebbf102d14d",
+    "hash": "7c91760dbdee94f9e3e12b57f8f72267dd9975709ec2384889aea7008c479903"
+  },
+  {
+    "seq": 221,
+    "at": "2026-10-25T09:33:32.906Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:32.904Z"
+    },
+    "prev": "7c91760dbdee94f9e3e12b57f8f72267dd9975709ec2384889aea7008c479903",
+    "hash": "43bbc06ef01197f2775661a73d46d1db4c27c8f4abe8df1e6f213dd4a0901824"
+  },
+  {
+    "seq": 222,
+    "at": "2026-10-25T09:33:34.915Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:34.914Z"
+    },
+    "prev": "43bbc06ef01197f2775661a73d46d1db4c27c8f4abe8df1e6f213dd4a0901824",
+    "hash": "23a9e0c25cee3a8f732e26f73649d8148181a7a7c66ea101c7ec136f0b105c70"
+  },
+  {
+    "seq": 223,
+    "at": "2026-10-25T09:33:36.920Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:36.919Z"
+    },
+    "prev": "23a9e0c25cee3a8f732e26f73649d8148181a7a7c66ea101c7ec136f0b105c70",
+    "hash": "55cfd159e762fcf71443c713953ee7db5c6ec41a64be5d13180c5debb1e7a838"
+  },
+  {
+    "seq": 224,
+    "at": "2026-10-25T09:33:38.926Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:38.925Z"
+    },
+    "prev": "55cfd159e762fcf71443c713953ee7db5c6ec41a64be5d13180c5debb1e7a838",
+    "hash": "ab5909287fe79ecafd8224f1e4a82438bfed21dbb25d3e28646d140ea9ead46a"
+  },
+  {
+    "seq": 225,
+    "at": "2026-10-25T09:33:40.929Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:40.928Z"
+    },
+    "prev": "ab5909287fe79ecafd8224f1e4a82438bfed21dbb25d3e28646d140ea9ead46a",
+    "hash": "59a4f4c987043affa91a60a776dac068bf89dbedb46057c47c6da4ed79ddb73a"
+  },
+  {
+    "seq": 226,
+    "at": "2026-10-25T09:33:42.948Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:42.947Z"
+    },
+    "prev": "59a4f4c987043affa91a60a776dac068bf89dbedb46057c47c6da4ed79ddb73a",
+    "hash": "0a19e9a9d78662d61992ce87d1a3035b9ca233fa3ae8453437a1ab9e2b2448d6"
+  },
+  {
+    "seq": 227,
+    "at": "2026-10-25T09:33:44.952Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:44.950Z"
+    },
+    "prev": "0a19e9a9d78662d61992ce87d1a3035b9ca233fa3ae8453437a1ab9e2b2448d6",
+    "hash": "69540f9f2757eb5fcdc8fdfdc5813f6445530c47e980d44aeefc9cd55e62a3d9"
+  },
+  {
+    "seq": 228,
+    "at": "2026-10-25T09:33:46.971Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:46.969Z"
+    },
+    "prev": "69540f9f2757eb5fcdc8fdfdc5813f6445530c47e980d44aeefc9cd55e62a3d9",
+    "hash": "a932bdad1d5e084fe33d435957a49173563f87a59cbbc39590db27f3ecbc7e27"
+  },
+  {
+    "seq": 229,
+    "at": "2026-10-25T09:33:48.983Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:48.982Z"
+    },
+    "prev": "a932bdad1d5e084fe33d435957a49173563f87a59cbbc39590db27f3ecbc7e27",
+    "hash": "875b057337eb93ba73fd4750d77af98f4345bc35736b243430fa666ea590249d"
+  },
+  {
+    "seq": 230,
+    "at": "2026-10-25T09:33:50.995Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:50.993Z"
+    },
+    "prev": "875b057337eb93ba73fd4750d77af98f4345bc35736b243430fa666ea590249d",
+    "hash": "015d4020c18e75c9135907e96184974b75780db4918e8437f19832d25c2687e3"
+  },
+  {
+    "seq": 231,
+    "at": "2026-10-25T09:33:53.007Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:53.005Z"
+    },
+    "prev": "015d4020c18e75c9135907e96184974b75780db4918e8437f19832d25c2687e3",
+    "hash": "da14a7d8249410f58ca46b64574eac8cfec539bc0b431307140723296abc7c1d"
+  },
+  {
+    "seq": 232,
+    "at": "2026-10-25T09:33:55.021Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:55.020Z"
+    },
+    "prev": "da14a7d8249410f58ca46b64574eac8cfec539bc0b431307140723296abc7c1d",
+    "hash": "340136e951c77b0ab3bfbb58bf48f609462a1aef8da1b7ed424245d57e5bb157"
+  },
+  {
+    "seq": 233,
+    "at": "2026-10-25T09:33:57.038Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:57.037Z"
+    },
+    "prev": "340136e951c77b0ab3bfbb58bf48f609462a1aef8da1b7ed424245d57e5bb157",
+    "hash": "4a1579d392c4304e27ed53be7ed6da922ffeaa0ffed3656cce193a3de715668f"
+  },
+  {
+    "seq": 234,
+    "at": "2026-10-25T09:33:59.042Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:33:59.040Z"
+    },
+    "prev": "4a1579d392c4304e27ed53be7ed6da922ffeaa0ffed3656cce193a3de715668f",
+    "hash": "3e65e629084f6e3677c11160fc18891f7c4e81d512992887dc6fc2050c7d32f6"
+  },
+  {
+    "seq": 235,
+    "at": "2026-10-25T09:34:01.060Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:34:01.058Z"
+    },
+    "prev": "3e65e629084f6e3677c11160fc18891f7c4e81d512992887dc6fc2050c7d32f6",
+    "hash": "c851931dc4dd0bb10c02eba77161a266f62d77d2872bdb2f0945271c2f25e125"
+  },
+  {
+    "seq": 236,
+    "at": "2026-10-25T09:34:03.077Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:34:03.075Z"
+    },
+    "prev": "c851931dc4dd0bb10c02eba77161a266f62d77d2872bdb2f0945271c2f25e125",
+    "hash": "b1e3a0c5d142d2252ff12dd3a1287e7f3d892900ad4412797ceefc85ec04c3a6"
+  },
+  {
+    "seq": 237,
+    "at": "2026-10-25T09:34:05.083Z",
+    "type": "node.heartbeat",
+    "actor": "node:node-local",
+    "data": {
+      "nodeId": "node-local",
+      "at": "2026-10-25T09:34:05.082Z"
+    },
+    "prev": "b1e3a0c5d142d2252ff12dd3a1287e7f3d892900ad4412797ceefc85ec04c3a6",
+    "hash": "a4aa160eab72b158d13ceb92d460c8c831fa9cba6a0b441899575b607ef5ffbb"
+  },
+  {
+    "seq": 238,
+    "at": "2026-10-25T09:34:05.254Z",
+    "type": "audit.exported",
+    "actor": "hub",
+    "data": {
+      "format": "csv",
+      "count": 237,
+      "by": "你"
+    },
+    "prev": "a4aa160eab72b158d13ceb92d460c8c831fa9cba6a0b441899575b607ef5ffbb",
+    "hash": "a7249a3b50c792342c11068a8e6388d4630b4746dc3c7835e80cb497a89e893e"
+  },
+  {
+    "seq": 239,
+    "at": "2026-10-25T09:34:05.270Z",
+    "type": "audit.exported",
+    "actor": "hub",
+    "data": {
+      "format": "json",
+      "count": 238,
+      "by": "你"
+    },
+    "prev": "a7249a3b50c792342c11068a8e6388d4630b4746dc3c7835e80cb497a89e893e",
+    "hash": "2631caa0f808fa93231ef1e8fa69fe60bbf7c0d5b0171c963eab2ac13d9fec2b"
+  }
+]

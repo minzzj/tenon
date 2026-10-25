@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "node server/start.js",
-    "test": "node --test test/unit",
+    "test": "node --test \"test/unit/*.test.js\"",
     "test:e2e": "node test/e2e/run-real-browser.js"
   },
   "repository": {

@@ -39,7 +39,7 @@ jobs:
         run: |
           if (Test-Path 'test/unit') {
             $files = Get-ChildItem 'test/unit' -Recurse -Filter '*.test.js' -ErrorAction SilentlyContinue
-            if ($files) { node --test test/unit } else { Write-Host 'No unit tests yet (foundation milestone).' }
+            if ($files) { node --test "test/unit/*.test.js" } else { Write-Host 'No unit tests yet (foundation milestone).' }
           } else {
             Write-Host 'test/unit not present yet.'
           }

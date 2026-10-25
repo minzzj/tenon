@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="榫卯 Tenon · 可自建的设备、软件与 AI 连接中枢控制台">
+  <title>榫卯 Tenon · 控制台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="#/overview" aria-label="榫卯 Tenon 总览">
+        <span class="brand-mark" aria-hidden="true">榫</span>
+        <span class="brand-text"><strong>榫卯</strong><small>TENON v0.1</small></span>
+      </a>
+      <nav class="nav" id="nav" aria-label="主导航">
+        <a href="#/overview" data-route="overview"><span class="nav-idx">01</span><span>总览</span><span class="nav-en">Overview</span></a>
+        <a href="#/devices" data-route="devices"><span class="nav-idx">02</span><span>设备</span><span class="nav-en">Devices</span></a>
+        <a href="#/capabilities" data-route="capabilities"><span class="nav-idx">03</span><span>能力</span><span class="nav-en">Capabilities</span></a>
+        <a href="#/tasks" data-route="tasks"><span class="nav-idx">04</span><span>任务</span><span class="nav-en">Tasks</span></a>
+        <a href="#/messages" data-route="messages"><span class="nav-idx">05</span><span>消息</span><span class="nav-en">Messages</span></a>
+        <a href="#/checkup" data-route="checkup"><span class="nav-idx">06</span><span>体检</span><span class="nav-en">Checkup</span></a>
+        <a href="#/audit" data-route="audit"><span class="nav-idx">07</span><span>审计</span><span class="nav-en">Audit</span></a>
+        <a href="#/drills" data-route="drills"><span class="nav-idx">08</span><span>演练</span><span class="nav-en">Drills</span></a>
+        <a href="#/settings" data-route="settings"><span class="nav-idx">09</span><span>设置</span><span class="nav-en">Settings</span></a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="sf-line"><span class="sf-dot" id="sf-dot"></span><span id="sf-mode">单机模式 · 零外联</span></div>
+        <div id="sf-token">未登录 · 只读可看</div>
+        <div class="mono" style="font-size:10px;color:var(--dim)">TENON · 本机中枢</div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="view-title">总览</h1>
+          <span class="view-sub" id="view-sub">只回答三个问题：这台机器能做什么、这件事办到哪一步、数据出了哪道门</span>
+        </div>
+        <div class="topbar-right">
+          <span class="chip" id="domain-chip" title="数据域">工作室数据域</span>
+          <span class="chip chip-asof" id="data-asof" data-testid="data-asof" title="数据时间">数据截至 --:--</span>
+          <span class="chip chip-auth" id="auth-state" data-testid="auth-state" data-auth="readonly" title="鉴权状态：未登录只读，写操作会引导输入令牌">只读 · 未登录</span>
+          <span class="conn" id="conn" data-state="connecting"><i class="dot"></i><span id="conn-text">连接中</span></span>
+          <button class="btn btn-ghost btn-sm" id="btn-auth" data-testid="btn-auth" data-action="open-auth">登录</button>
+        </div>
+      </header>
+
+      <div id="offline-banner" class="offline-banner hidden" data-testid="offline-banner">
+        <strong id="offline-title">离线</strong>
+        <span id="offline-text">无法连接中枢，正在显示本机缓存；写操作已禁用。</span>
+      </div>
+
+      <main class="view" id="view" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <!-- 影响预览弹窗：断开设备前必出，取消后不留痕 -->
+  <div class="modal-backdrop hidden" id="impact-modal" role="dialog" aria-modal="true" aria-labelledby="impact-title">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="impact-title">断开前 · 影响预览</h3>
+          <div class="sub" id="impact-sub">静态可算、可离线；确定 / 可能 / 未知三级</div>
+        </div>
+        <button class="modal-close" data-action="impact-cancel" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body" data-testid="impact-preview">
+        <div id="impact-body" class="stack">
+          <div class="empty"><strong>尚未选择设备</strong>在设备卡上点「断开（先看影响）」生成影响预览。</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="hint-note" id="impact-note" style="margin-right:auto">没有记录不等于没有引用：无记录时只能人工确认。</span>
+        <button class="btn btn-ghost" data-testid="impact-cancel" data-action="impact-cancel">取消（保持原样）</button>
+        <button class="btn btn-danger" data-testid="impact-disconnect" data-action="impact-disconnect" disabled>确认断开</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 令牌登录弹窗：写操作前若无 token 时引导输入 -->
+  <div class="modal-backdrop hidden" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-head">
+        <div>
+          <h3 id="auth-title">输入操作令牌</h3>
+          <div class="sub" id="auth-reason">写操作需要令牌；首屏只读不需要登录。</div>
+        </div>
+        <button class="modal-close" data-action="auth-cancel" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="auth-form">
+          <div class="field">
+            <label for="auth-token">操作令牌（token）</label>
+            <input type="password" id="auth-token" data-testid="auth-token-input" autocomplete="off" spellcheck="false" placeholder="启动日志中打印的 operatorToken">
+          </div>
+          <div class="form-row" style="margin-top:10px">
+            <span class="hint-note">令牌只存在本机浏览器 localStorage，请求时放在 x-tenon-token 头里。</span>
+            <button type="submit" class="btn btn-primary" data-testid="auth-submit" data-action="auth-submit">验证并登录</button>
+          </div>
+          <div class="form-error" id="auth-error"></div>
+        </form>
+        <div class="alert alert-info" style="margin-top:6px">
+          令牌在首次启动时生成，保存在 <code>data/secrets.json</code> 的 <code>operatorToken</code>；也可以在 <a href="/login" target="_blank" rel="noopener">/login</a> 页登录。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toast-root" aria-live="assertive"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

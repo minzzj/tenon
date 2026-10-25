@@ -23,6 +23,15 @@ export function createChannels({ ledger, state }) {
     disabled.set(channel, reason || '不可用');
   }
 
+  function enable(channel) {
+    disabled.delete(channel);
+  }
+
+  function forceLimit(n = limitPerMinute) {
+    const t = Date.now();
+    for (let i = 0; i < n; i += 1) sends.push(t);
+  }
+
   async function deliver(taskId, { summary, link, sensitive }) {
     const order = ['wechat-mock', 'email-mock', 'station'];
     let fallbackNote = '';
@@ -76,5 +85,5 @@ export function createChannels({ ledger, state }) {
     return null;
   }
 
-  return { deliver, disable, labels: LABELS, recent };
+  return { deliver, disable, enable, forceLimit, labels: LABELS, recent };
 }

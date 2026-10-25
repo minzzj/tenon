@@ -82,14 +82,9 @@ export async function createDraft({ ledger, ai, state, text, source = 'desktop',
     cached: !!aiInfo.cached,
     fallback: !!aiInfo.fallback,
   });
-  const t = state.tasks[taskId];
-  if (!t) return { taskId, draft, ai: aiInfo };
-  const needsConfirm = draft.risk && draft.risk.level === 'irreversible';
+  const needsConfirm = !!(draft.risk && draft.risk.level === 'irreversible');
   const blocked = (draft.missing || []).length > 0;
-  const manualOnly = draft.capabilities.some((c) => c.manualOnly);
-  if (!needsConfirm && !blocked && !manualOnly) {
-    ledger.append('task.queued', { taskId, nodeId: draft.targetDevice.id, note: '可逆动作免确认，直接派发' });
-  }
+  const manualOnly = (draft.capabilities || []).some((c) => c.manualOnly);
   if (manualOnly) {
     ledger.append('task.step', { taskId, label: '仅手动', detail: '卡片标「仅手动，需要你操作」' });
   }
@@ -122,6 +117,17 @@ export function retryTask({ ledger, state, taskId }) {
   ledger.append('task.retry', { taskId });
 }
 
+export function downgradeTasks({ ledger, state, deviceId, reason }) {
+  const affected = [];
+  for (const t of Object.values(state.tasks)) {
+    if (t.nodeId !== deviceId) continue;
+    if (!['queued', 'running', 'pending', 'draft'].includes(t.status)) continue;
+    ledger.append('task.needsConfirm', { taskId: t.id, reason: reason || '设备已断开，任务降级为待确认' });
+    affected.push(t.id);
+  }
+  return affected;
+}
+
 export async function executeHubTask({ ledger, state, ai, channels, taskId }) {
   const t = state.tasks[taskId];
   if (!t || !t.capabilityId || !HUB_CAPS.has(t.capabilityId)) return false;
@@ -132,6 +138,7 @@ export async function executeHubTask({ ledger, state, ai, channels, taskId }) {
     if (t.capabilityId === 'llm.summarize') {
       ledger.append('task.step', { taskId, label: '调用模型', detail: '摘要不超过 200 字，正文不出内网' });
       const r = await ai.summarize({ text: params.text || t.text });
+      ledger.append('ai.called', { place: 'summarize', provider: (r.ai && r.ai.provider) || 'rule', model: ai.model, tokensIn: (r.ai && r.ai.tokensIn) || 0, tokensOut: (r.ai && r.ai.tokensOut) || 0, cached: false, fallback: !!(r.ai && r.ai.fallback) });
       ledger.append('task.step', { taskId, label: '生成摘要', detail: '长度 ' + r.text.length + ' 字' });
       ledger.append('task.succeeded', {
         taskId,

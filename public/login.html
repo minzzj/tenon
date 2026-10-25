@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>榫卯 Tenon · 登录</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="login-body">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-title">
+        <span class="brand-mark" aria-hidden="true">榫</span>
+        <h1>榫卯 · 登录</h1>
+      </div>
+      <p class="login-sub">操作令牌在首次启动时生成，保存在 <code>data/secrets.json</code> 的 <code>operatorToken</code>，启动日志里也会打印。登录后写操作会带 <code>x-tenon-token</code>；只读浏览不需要登录。</p>
+      <form id="login-form">
+        <div class="field">
+          <label for="login-token">操作令牌</label>
+          <input type="password" id="login-token" autocomplete="off" spellcheck="false" placeholder="operatorToken">
+        </div>
+        <div class="form-error" id="login-error"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit">验证并登录</button>
+      </form>
+      <div class="login-foot">
+        <a href="/">← 返回控制台</a>
+        <a href="/m">手机页 /m →</a>
+      </div>
+    </div>
+  </div>
+  <div class="toasts" id="toast-root"></div>
+  <script>
+    (function () {
+      'use strict';
+      window.__tenonErrors = [];
+      window.addEventListener('error', function (e) {
+        try { window.__tenonErrors.push(String((e && e.message) || e || 'error')); } catch (_) {}
+      });
+      var TOKEN_KEY = 'tenon:token';
+      function $(s) { return document.querySelector(s); }
+      function toast(msg, kind) {
+        var root = $('#toast-root');
+        if (!root) return;
+        var el = document.createElement('div');
+        el.className = 'toast ' + (kind === 'ok' ? 'toast-ok' : 'toast-bad');
+        el.innerHTML = '<span class="toast-icon">' + (kind === 'ok' ? '✓' : '×') + '</span><span>' + msg.replace(/[<>&]/g, '') + '</span>';
+        root.appendChild(el);
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 3500);
+      }
+      function safeNext() {
+        try {
+          var n = new URLSearchParams(location.search).get('next') || '';
+          if (n && n.charAt(0) === '/' && n.charAt(1) !== '/') return n;
+        } catch (_) {}
+        return '/';
+      }
+      function getToken() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; } }
+      function setToken(t) { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (_) {} }
+      var form = $('#login-form');
+      var errorEl = $('#login-error');
+      var input = $('#login-token');
+      var btn = $('#login-submit');
+      if (getToken()) {
+        if (errorEl) errorEl.textContent = '本机已保存令牌：直接验证或换一个。';
+      }
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var tok = String((input && input.value) || '').trim();
+        if (!tok) { if (errorEl) errorEl.textContent = '请输入令牌'; return; }
+        if (errorEl) errorEl.textContent = '验证中…';
+        if (btn) btn.disabled = true;
+        fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenon-token': tok, Accept: 'application/json' },
+          body: JSON.stringify({ token: tok }),
+          credentials: 'same-origin'
+        }).then(function (res) {
+          var p = (res.headers.get('content-type') || '').indexOf('json') >= 0 ? res.json().catch(function () { return null; }) : res.text().catch(function () { return null; });
+          return p.then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+        }).then(function (r) {
+          if (btn) btn.disabled = false;
+          if (r.ok && r.data && r.data.ok !== false) {
+            setToken(tok);
+            toast('登录成功，正在返回…', 'ok');
+            setTimeout(function () { location.href = safeNext(); }, 500);
+          } else if (r.status === 0) {
+            if (errorEl) errorEl.textContent = '无法连接中枢：检查服务是否启动。';
+          } else {
+            if (errorEl) errorEl.textContent = '令牌校验失败（HTTP ' + r.status + '）';
+          }
+        }).catch(function () {
+          if (btn) btn.disabled = false;
+          if (errorEl) errorEl.textContent = '网络错误：无法连接中枢。';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -28,12 +28,15 @@ function task(s, id) {
   return s.tasks[id];
 }
 
+let currentAt = null;
+
 function pushStep(t, label, detail, at) {
-  t.steps.push({ at: at || new Date().toISOString(), label, detail: detail || '' });
+  t.steps.push({ at: at || currentAt || new Date().toISOString(), label, detail: detail || '' });
 }
 
 function apply(ev, s) {
   const d = ev.data || {};
+  currentAt = ev.at;
   switch (ev.type) {
     case 'node.registered': {
       const old = s.nodes[d.nodeId];
@@ -43,7 +46,7 @@ function apply(ev, s) {
         name: d.name,
         platform: d.platform,
         fingerprint: d.fingerprint,
-        capabilities: d.capabilities || [],
+        capabilities: JSON.parse(JSON.stringify(d.capabilities || [])),
         online: true,
         lastSeen: ev.at,
         registeredAt: ev.at,
@@ -61,11 +64,11 @@ function apply(ev, s) {
         name: d.name,
         platform: d.platform || 'simulated',
         fingerprint: d.fingerprint,
-        capabilities: d.capabilities || [],
+        capabilities: JSON.parse(JSON.stringify(d.capabilities || [])),
         online: d.online !== false,
         lastSeen: ev.at,
         registeredAt: ev.at,
-        evidence: 'declared',
+        evidence: d.evidence || 'declared',
         hidden: false,
         disconnected: false,
         domain: d.domain || s.meta.domain,
@@ -258,6 +261,16 @@ function apply(ev, s) {
         t.retries = (t.retries || 0) + 1;
         t.updatedAt = ev.at;
         pushStep(t, '重试', '第 ' + t.retries + ' 次重试');
+      }
+      break;
+    }
+    case 'task.needsConfirm': {
+      const t = task(s, d.taskId);
+      if (t) {
+        t.status = 'pending';
+        t.needsReview = true;
+        t.updatedAt = ev.at;
+        pushStep(t, '待确认：设备已断开', d.reason || '断开被引用的设备后，相关任务降级为待确认');
       }
       break;
     }

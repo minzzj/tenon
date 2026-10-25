@@ -1,0 +1,139 @@
+{
+  "version": "v0.1.0",
+  "date": "2026-10-25",
+  "environment": {
+    "os": "Windows 10 19041",
+    "node": "v24.15.0",
+    "browser": "Chrome (real, dsh-browser) + isolated headless Chrome 1280x800",
+    "python": "3.11"
+  },
+  "unitTests": {
+    "command": "npm test",
+    "files": 8,
+    "total": 146,
+    "pass": 146,
+    "fail": 0,
+    "detail": {
+      "ledger": 16,
+      "state": 30,
+      "ai": 21,
+      "tasks": 23,
+      "channels": 10,
+      "checkup": 16,
+      "png": 14,
+      "seed-demo": 16
+    }
+  },
+  "seed": {
+    "events": 71,
+    "tasks": 11,
+    "checkups": 2,
+    "messages": 2,
+    "auditExports": 2,
+    "integrityOk": true
+  },
+  "acceptance": [
+    {
+      "id": "A1",
+      "name": "断网手机缓存",
+      "pass": true,
+      "evidence": [
+        "A1-offline-mobile-cache.png"
+      ],
+      "detail": "7 device cards / 14 task history / 6 receipts + offline banner"
+    },
+    {
+      "id": "A2",
+      "name": "一句话成五段草案并真实执行",
+      "pass": true,
+      "evidence": [
+        "A2-phone-draft.png",
+        "A2-desktop-timeline.png"
+      ],
+      "detail": "9 succeeded / 1 failed corrupted; outputs validated 1024x1024"
+    },
+    {
+      "id": "A3",
+      "name": "不可逆确认与拒绝留痕",
+      "pass": true,
+      "evidence": [
+        "A3-phone-irreversible-pending.png",
+        "A3-rejected-reason.png"
+      ],
+      "detail": "pending until confirm; rejected -> cancelled, reason 未填写"
+    },
+    {
+      "id": "A4",
+      "name": "回执摘要+链接、正文需登录",
+      "pass": true,
+      "evidence": [
+        "A4-messages.png",
+        "A4-receipt-gate.png",
+        "A4-receipt-loggedin.png"
+      ]
+    },
+    {
+      "id": "A5",
+      "name": "断开被3条引用设备10s内降级",
+      "pass": true,
+      "evidence": [
+        "A5-device-disconnected.png",
+        "A5-task-downgraded.png"
+      ],
+      "detail": "275ms, 3 tasks needsConfirm"
+    },
+    {
+      "id": "A6",
+      "name": "影响预览三级、取消零变化",
+      "pass": true,
+      "evidence": [
+        "A6-impact-preview.png"
+      ],
+      "detail": "certain 3 / possible 1 / unknown 1; cancel -> state signature unchanged"
+    },
+    {
+      "id": "A7",
+      "name": "断网演练功能不减审计连续",
+      "pass": true,
+      "evidence": [
+        "A7-drills-all.png",
+        "A7-checkup-findings.png"
+      ],
+      "detail": "offline drill: AI rule fallback, channel degraded to station, task still executed"
+    },
+    {
+      "id": "A8",
+      "name": "强杀重启不重复执行",
+      "pass": true,
+      "evidence": [
+        "A8-crash-recovery.png"
+      ],
+      "detail": "4 boots / 3 recoveries, 0 duplicate starts/succeeds, seq+hash chain intact, 61293ms gap marked"
+    }
+  ],
+  "extra": [
+    {
+      "id": "A9",
+      "name": "双实例只读",
+      "pass": true,
+      "detail": "readOnly=true, writes 423"
+    },
+    {
+      "id": "A10",
+      "name": "AI 真实接入",
+      "pass": true,
+      "detail": "deepseek draft provider=deepseek tokens 392/108"
+    }
+  ],
+  "boundariesCovered": 30,
+  "notCovered": [
+    "物理拔网线",
+    "真机手机",
+    "真实微信/QQ/邮件通道",
+    "真实打印机",
+    "macOS/Android原生节点",
+    "企业机房高可用"
+  ],
+  "evidenceScreenshots": 19,
+  "notes": "证据截图位于 docs/测试证据/screenshots/；真实浏览器操作为人工按用户路径点击；模拟通道在界面明确标注「模拟通道」。"
+}

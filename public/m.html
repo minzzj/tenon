@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="榫卯 Tenon · 手机页：说一句话交给电脑">
+  <title>榫卯 Tenon · 手机</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="m-body">
+  <div class="m-shell">
+    <header class="m-head">
+      <div class="m-brand">
+        <span class="brand-mark" aria-hidden="true">榫</span>
+        <span>榫卯<small>TENON · 手机</small></span>
+      </div>
+      <div class="m-header-right">
+        <a class="m-link" href="/">桌面端</a>
+        <span class="m-asof" id="m-asof">数据截至 --:--</span>
+      </div>
+    </header>
+
+    <div class="offline-banner hidden" id="m-offline-banner" data-testid="m-offline-banner">
+      <strong>离线</strong><span id="m-offline-text">数据截至 --:-- · 无法连接中枢，显示本机缓存（只读）</span>
+    </div>
+
+    <section class="m-card" style="margin-top:12px">
+      <label class="m-label" for="m-input">说一句话，<b>交给电脑</b></label>
+      <textarea id="m-input" data-testid="m-input" rows="3" placeholder="例：把昨天拍的样品图裁成方图，发到工作群"></textarea>
+      <div class="m-row">
+        <span class="m-hint" id="m-hint">可逆动作直接派发；不可逆动作停下来等你确认。</span>
+        <button class="btn btn-primary" id="m-send" data-testid="m-send">交给电脑</button>
+      </div>
+      <div class="m-offline-note hidden" id="m-offline-note">离线只读：等中枢恢复后可以继续发送。</div>
+    </section>
+
+    <section class="m-card hidden" id="m-draft" data-testid="m-draft">
+      <h2>草案 · 五段 <span class="count mono" id="m-draft-id"></span></h2>
+      <div class="m-five">
+        <div class="seg"><div class="k">① 任务草案</div><div class="v" id="m-summary">—</div></div>
+        <div class="seg"><div class="k">② 用到的能力</div><div class="v" id="m-caps">—</div></div>
+        <div class="seg"><div class="k">③ 目标设备</div><div class="v" id="m-target">—</div></div>
+        <div class="seg"><div class="k">④ 缺失项</div><div class="v" id="m-missing">—</div></div>
+        <div class="seg" id="m-risk-seg"><div class="k">⑤ 风险等级</div><div class="v" id="m-risk">—</div><div class="m-risk-reason" id="m-risk-reason"></div></div>
+      </div>
+      <div class="m-block-note hidden" id="m-block-note"></div>
+      <div class="m-row">
+        <span class="m-hint" id="m-draft-hint">确认后才会派发；拒绝也记账。</span>
+        <button class="btn btn-sm" id="m-reject" data-testid="m-reject">拒绝</button>
+        <button class="btn btn-primary btn-sm" id="m-confirm" data-testid="m-confirm">确认执行</button>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>设备 <span class="count mono" id="m-device-count">0</span></h2>
+      <div class="m-devices" id="m-devices">
+        <div class="m-receipt"><div class="sum muted">连接中枢后显示设备卡；断网时显示本机缓存。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>最近回执 <span class="count mono" id="m-receipt-count">0</span></h2>
+      <div class="m-receipts" id="m-receipts">
+        <div class="m-receipt"><div class="sum muted">任务完成后，这里只显示摘要与链接，正文不出内网。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>任务历史 <span class="count mono" id="m-task-count">0</span></h2>
+      <div class="m-receipts" id="m-tasks">
+        <div class="m-receipt"><div class="sum muted">还没有任务：在上面说一句话生成草案。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card m-auth hidden" id="m-auth">
+      <h2>输入操作令牌</h2>
+      <div class="m-sec-note">写操作需要令牌（启动日志中打印的 operatorToken）；令牌只存在本机浏览器。</div>
+      <div class="form-row" style="margin-top:8px">
+        <div class="field" style="flex:1">
+          <input type="password" id="m-token" data-testid="m-token-input" placeholder="operatorToken" autocomplete="off" spellcheck="false">
+        </div>
+        <button class="btn btn-primary" id="m-auth-save" data-testid="m-auth-save">保存</button>
+      </div>
+      <div class="form-error" id="m-auth-error"></div>
+    </section>
+
+    <div class="m-foot">
+      榫卯 Tenon v0.1 · 数据只在本机中枢<br>
+      只发摘要与链接，正文不出内网 · 默认零外联
+    </div>
+  </div>
+  <script src="m.js"></script>
+</body>
+</html>
