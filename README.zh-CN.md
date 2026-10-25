@@ -191,6 +191,13 @@ docs/         使用手册、测试方法、测试证据、产品截图、样例
 
 榫卯**不**实现 Matter/Thread 配网，**不**做云端自动化 SaaS，**不**做网盘或聊天，**不**做 GUI 点击机器人。它站在这些东西之上：给你已有的设备、软件和模型加一层「任务与责任」。
 
+
+## 宣传片（v2.1，60 秒）
+
+[![榫卯 v2.1 宣传片海报](docs/images/v2-promo-poster.jpg)](https://github.com/minzzj/tenon/releases/tag/v0.3.0)
+
+全部来自运行中的真实界面（2026-10-26 采集），包含手机遥控触控板真实移动电脑光标、手机拍照片一甩上电脑大屏的真实交互。文件：[带 BGM 版](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-promo-60s-bgm.mp4) · [静音版](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-promo-60s-silent.mp4) · [海报](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-poster.jpg) · [分镜缩略图](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-contact-sheet.jpg)。
+
 ## 路线图（v2.1）：消费级超级终端
 
 **主线是消费级超级终端：面向家庭、个人与小团队使用，不是企业系统。** 一个小软件调动家里所有设备与所有程序：说一句（也可以语音），AI 把不同设备上的不同程序调起来；手机往前一倾，正在看的内容就滑上电脑大屏。

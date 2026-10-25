@@ -192,6 +192,13 @@ Full list: [docs/假设与未覆盖清单.md](docs/假设与未覆盖清单.md).
 
 Tenon does **not** implement Matter/Thread pairing, is **not** a cloud automation SaaS, **not** a file-sync or chat product, and **not** a GUI click robot. It sits above those: a task-and-responsibility layer for the devices, software and models you already own.
 
+
+## Demo video (v2.1, 60 s)
+
+[![Tenon v2.1 promo poster](docs/images/v2-promo-poster.jpg)](https://github.com/minzzj/tenon/releases/tag/v0.3.0)
+
+Real screen recordings cut from the running app (2026-10-26), including the phone-remote pad moving the desktop cursor and a phone photo landing on the desktop screen. Files: [BGM version](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-promo-60s-bgm.mp4) · [silent version](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-promo-60s-silent.mp4) · [poster](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-poster.jpg) · [contact sheet](https://github.com/minzzj/tenon/releases/tag/v0.3.0/tenon-v2.1-contact-sheet.jpg).
+
 ## Roadmap (v2.1): consumer super terminal
 
 **Mainline: a consumer super terminal for home, personal and small-team use — not an enterprise system.** One small app lets you drive every device and program at home: say it (or speak it) and AI dispatches the right program on the right device; tilt the phone forward and the page you are reading slides onto the desktop screen.
