@@ -1,0 +1,30 @@
+name: Real-browser E2E
+
+# 手动触发：在真实 Chrome 上跑一遍可执行的真实浏览器 E2E（自启隔离实例 + 自动种子）
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run real-browser E2E (CDP + real Chrome)
+        shell: pwsh
+        run: |
+          $env:CHROME_PATH = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+          node test/e2e/run-real-browser.js
+
+      - name: Upload E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-evidence
+          path: docs/测试证据/e2e-*
+          if-no-files-found: warn

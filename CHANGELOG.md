@@ -4,7 +4,15 @@ All notable changes to Tenon (榫卯) are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Executable real-browser E2E** (`test/e2e/run-real-browser.js`, `npm run test:e2e`): zero npm dependencies; spawns an isolated hub + node + real Chrome, drives it over CDP (real navigation, mouse clicks, keyboard input, screenshots), covers 8 checks (phone draft → five-section draft → real node execution → receipt; irreversible confirm/reject; impact preview + cancel; device disconnect downgrade; inbox + receipt login gate; offline drill; ledger integrity / no duplicate execution). Evidence: `docs/测试证据/e2e-*.json` + `e2e-screenshots/`.
+
+### Fixed
+
+- Node heartbeats are persisted to the ledger at most once per 60 s (live online state stays in memory) — the audit ledger is no longer flooded by 2 s heartbeats.
+- Drill `restore` now clears the degraded state (`system.degraded {mode:"normal"}`) so the UI returns to normal after an offline drill.
+- `scripts/seed-demo.js` summary now reports the local workbench impact preview (was `undefined`).
 
 ## [0.1.0] - 2026-10-25
 

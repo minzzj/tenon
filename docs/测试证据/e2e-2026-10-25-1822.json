@@ -1,0 +1,66 @@
+{
+  "stamp": "2026-10-25 10:22:21",
+  "base": "http://127.0.0.1:7411",
+  "browser": "real Chrome/Edge via CDP (headless=new)",
+  "passed": 8,
+  "failed": 0,
+  "checks": [
+    {
+      "id": "A2",
+      "name": "手机一句话→五段草案→节点真实执行→回执",
+      "pass": true,
+      "detail": "task=task_mvnoi6eb56a37a08 status=succeeded channel=wechat-mock",
+      "screenshot": "docs/测试证据/e2e-screenshots/A2-phone-draft.png"
+    },
+    {
+      "id": "A2b",
+      "name": "桌面时间线含结果与回执步骤",
+      "pass": true,
+      "detail": "timeline ok",
+      "screenshot": "docs/测试证据/e2e-screenshots/A2-desktop-timeline.png"
+    },
+    {
+      "id": "A3",
+      "name": "不可逆未确认不执行、拒绝留事件「未填写」",
+      "pass": true,
+      "detail": "cancelled with reason 未填写",
+      "screenshot": "docs/测试证据/e2e-screenshots/A3-rejected-reason.png"
+    },
+    {
+      "id": "A6",
+      "name": "影响预览 确定3/可能1/未知1，取消后零变化",
+      "pass": true,
+      "detail": "确定 3 条、可能 1 条、未知 1 条 3 确定 · 正在进行的任务 1 可能 · 进行中或最近引用 1 未知 · 无记录，只能人工确认 确定（3） seed",
+      "screenshot": "docs/测试证据/e2e-screenshots/A6-impact-preview.png"
+    },
+    {
+      "id": "A5",
+      "name": "断开被 3 条任务引用的设备，10 秒内三处降级",
+      "pass": true,
+      "detail": "elapsed=472ms",
+      "screenshot": "docs/测试证据/e2e-screenshots/A5-device-disconnected.png"
+    },
+    {
+      "id": "A4",
+      "name": "收件箱摘要+链接、正文需登录",
+      "pass": true,
+      "detail": "gate + body ok",
+      "screenshot": "docs/测试证据/e2e-screenshots/A4-messages.png ; docs/测试证据/e2e-screenshots/A4-receipt-gate.png ; docs/测试证据/e2e-screenshots/A4-receipt-loggedin.png"
+    },
+    {
+      "id": "A7",
+      "name": "断网演练：外联关闭、AI 降级、可恢复",
+      "pass": true,
+      "detail": "degraded -> restored",
+      "screenshot": "docs/测试证据/e2e-screenshots/A7-offline-drill.png"
+    },
+    {
+      "id": "A8",
+      "name": "账本哈希链/seq 连续、无重复执行",
+      "pass": true,
+      "detail": "events=103",
+      "screenshot": null
+    }
+  ],
+  "error": null
+}

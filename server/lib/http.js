@@ -320,6 +320,7 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
       ai.available = aiDefault;
       channels.enable('wechat-mock');
       channels.enable('email-mock');
+      ledger.append('system.degraded', { mode: 'normal', reason: '演练已恢复：外联与 AI 正常' });
       ledger.append('system.diskFull', { full: false });
       ledger.append('drill.ran', { kind, detail: '演练状态已恢复' });
       return '演练状态已恢复';

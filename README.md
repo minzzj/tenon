@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md) · [Docs](docs/) · [License](LICENSE) · [Commercial use](COMMERCIAL.md) · [Security](SECURITY.md)
 
-**Status: v0.1.0 shipped — 2026-10-25.** The hub, node agent, desktop console and phone page are all runnable: **146 unit tests pass** and **8/8 real-browser acceptance checks pass**, with evidence archived in the repo. Repository: <https://github.com/minzzj/tenon>.
+**Status: v0.1.0 shipped — 2026-10-25.** The hub, node agent, desktop console and phone page are all runnable: **146 unit tests pass**, **8/8 human-driven real-browser acceptance checks pass**, and an executable real-browser E2E suite (`npm run test:e2e`, 8/8 checks) ships in the repo. Repository: <https://github.com/minzzj/tenon>.
 
 Evidence: [test results 2026-10-25](docs/测试证据/测试结果-20261025.md) · [JSON](docs/测试证据/测试结果-20261025.json) · [19 evidence screenshots](docs/测试证据/screenshots/).
 
@@ -146,6 +146,7 @@ Testing is done the way a user uses it: **real Chrome clicks, real files, real p
 |---|---|
 | Unit tests | **146 passed / 0 failed** in 8 files (`npm test`; ledger 16 / state 30 / ai 21 / tasks 23 / channels 10 / checkup 16 / png 14 / seed-demo 16) |
 | Real-browser acceptance | **8/8 acceptance checks passed** (plus 2 extra: dual-instance read-only, real AI provider); 19 evidence screenshots |
+| Executable real-browser E2E | `npm run test:e2e` — **8/8 automated checks pass** in one run: isolated instance auto-seeded, real Chrome driven over CDP (real clicks, real typing, real screenshots); evidence `docs/测试证据/e2e-2026-10-25-1822.json` + 10 screenshots |
 | Disconnect a device referenced by 3 tasks | all 3 tasks downgraded to "needs confirmation" within **275 ms** (acceptance line: 10 s) |
 | Impact preview | **certain 3 / possible 1 / unknown 1**; cancel leaves business state unchanged |
 | Dual instance | second instance is read-only; writes answer **423** ("another window is read-only") |
@@ -158,7 +159,7 @@ Common commands:
 ```bash
 npm test                          # unit tests: 146 pass
 node scripts/seed-demo.js --fresh # rebuild demo data
-npm run test:e2e                  # entry reserved (test/e2e/ is a placeholder); the v0.1.0 acceptance was human-driven real-browser testing — see the test method doc
+npm run test:e2e                  # executable real-browser E2E: isolated instance + real Chrome via CDP — 8/8 checks pass
 ```
 
 ## Repository layout
@@ -169,7 +170,7 @@ node-agent/   node: agent.js, capabilities.js, lib/png.js (pure-JS PNG codec)
 public/       desktop console (index.html/app.js/style.css); phone page (m.html/m.js); login.html
 plugins/      placeholders for capability / channel / AI-provider interfaces
 scripts/      启动.cmd, 停止.cmd, install.sh, seed-demo.js, gen-samples.py
-test/unit/    8 unit-test files (146 tests); test/e2e/ entry placeholder
+test/unit/    8 unit-test files (146 tests); test/e2e/run-real-browser.js (executable real-browser E2E)
 docs/         manual, test method, evidence, product screenshots, sample outputs, assumptions
 示例空间/      sample images, temp files and crop outputs for the demo
 ```

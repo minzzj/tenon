@@ -4,7 +4,7 @@
 
 [English](README.md) · [文档](docs/) · [许可证](LICENSE) · [商用说明](COMMERCIAL.md) · [安全](SECURITY.md)
 
-**状态：v0.1.0 已交付（2026-10-25）。** 中枢、节点、桌面控制台与手机页全部可运行；**146 条单元测试全部通过**，**真实浏览器验收 8/8 通过**。仓库：<https://github.com/minzzj/tenon>。
+**状态：v0.1.0 已交付（2026-10-25）。** 中枢、节点、桌面控制台与手机页全部可运行；**146 条单元测试全部通过**，**人工真实浏览器验收 8/8 通过**，仓库还随附**可执行的真实浏览器 E2E**（`npm run test:e2e`，8/8 项检查通过）。仓库：<https://github.com/minzzj/tenon>。
 
 证据：[测试结果-20261025.md](docs/测试证据/测试结果-20261025.md) · [JSON](docs/测试证据/测试结果-20261025.json) · [证据截图 19 张](docs/测试证据/screenshots/)。
 
@@ -145,6 +145,7 @@ python scripts/gen-samples.py
 |---|---|
 | 单元测试 | **146 条全部通过 / 0 失败**，8 个文件（`npm test`；ledger 16 / state 30 / ai 21 / tasks 23 / channels 10 / checkup 16 / png 14 / seed-demo 16） |
 | 真实浏览器验收 | **8/8 条验收全部通过**（另含双实例只读、AI 真实接入 2 项附加验收），19 张证据截图 |
+| 可执行真实浏览器 E2E | `npm run test:e2e`：**8/8 项自动检查通过**（自动种子隔离实例 + 真实 Chrome/CDP 真实点击/输入/截图），证据 `docs/测试证据/e2e-2026-10-25-1822.json` + 10 张截图 |
 | 断开被 3 条任务引用的设备 | **275 ms** 内 3 条任务全部降级为「待确认」（验收线 10 s） |
 | 影响预览 | **确定 3 / 可能 1 / 未知 1**；取消后业务状态零变化 |
 | 双实例 | 第二个实例只读，写操作返回 **423**「另一窗口为只读」 |
@@ -157,7 +158,7 @@ python scripts/gen-samples.py
 ```bash
 npm test                          # 单元测试：146 条通过
 node scripts/seed-demo.js --fresh # 重置演示数据
-npm run test:e2e                  # 入口保留（test/e2e/ 当前为占位）；v0.1.0 验收为人工真实浏览器执行，见测试方法
+npm run test:e2e                  # 可执行真实浏览器 E2E：隔离实例 + 真实 Chrome/CDP，8/8 项通过
 ```
 
 ## 仓库结构
@@ -168,7 +169,7 @@ node-agent/   节点：agent.js、capabilities.js、lib/png.js（纯 JS PNG 编�
 public/       桌面控制台 index.html / app.js / style.css；手机页 m.html / m.js；登录页 login.html
 plugins/      能力 / 通道 / AI 提供方接口占位
 scripts/      启动.cmd、停止.cmd、install.sh、seed-demo.js、gen-samples.py
-test/unit/    8 个单元测试文件（146 条）；test/e2e/ 入口占位
+test/unit/    8 个单元测试文件（146 条）；test/e2e/run-real-browser.js（可执行真实浏览器 E2E）
 docs/         使用手册、测试方法、测试证据、产品截图、样例输出、假设清单
 示例空间/      演示用样品图、临时文件与裁剪输出
 ```

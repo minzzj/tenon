@@ -362,7 +362,8 @@ function apply(ev, s) {
       break;
     }
     case 'system.degraded': {
-      s.meta.degraded = { mode: d.mode, reason: d.reason, at: ev.at };
+      if (d.mode === 'normal' || d.mode === null) delete s.meta.degraded;
+      else s.meta.degraded = { mode: d.mode, reason: d.reason, at: ev.at };
       break;
     }
     case 'system.diskFull': {

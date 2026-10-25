@@ -532,6 +532,7 @@ function buildSummary(dataDir, ledger, st, integrity) {
       '打印服务器': impact(st, PRINTER).counts,
       '群晖 NAS': impact(st, NAS).counts,
       '旧扫描仪': impact(st, SCANNER).counts,
+      '本机工作台': impact(st, LOCAL).counts,
     },
   };
 }

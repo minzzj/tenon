@@ -135,5 +135,13 @@
     "企业机房高可用"
   ],
   "evidenceScreenshots": 19,
-  "notes": "证据截图位于 docs/测试证据/screenshots/；真实浏览器操作为人工按用户路径点击；模拟通道在界面明确标注「模拟通道」。"
+  "notes": "证据截图位于 docs/测试证据/screenshots/；真实浏览器操作为人工按用户路径点击；模拟通道在界面明确标注「模拟通道」。 另有可执行真实浏览器 E2E（8/8 通过）。",
+  "executableE2E": {
+    "command": "npm run test:e2e",
+    "mode": "isolated instance (port 7411, temp data dir) + real Chrome over CDP; real clicks/typing/screenshots",
+    "passed": 8,
+    "failed": 0,
+    "evidence": "docs/测试证据/e2e-2026-10-25-1822.json",
+    "screenshots": "docs/测试证据/e2e-screenshots/ (10)"
+  }
 }
