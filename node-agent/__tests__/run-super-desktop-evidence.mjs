@@ -108,6 +108,47 @@ $result = @{ ok = $true; width = $bounds.Width; height = $bounds.Height; file = 
   evidence.screenshots.push(shot);
   return shot;
 }
+// 截取某个进程的主窗口（先置前，再按窗口矩形截屏）——用于「记事本确实打开了」的强证据
+async function screenshotWindow(processName, name) {
+  const file = path.join(EVID, name);
+  const result = await psJson(`Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class TenonWin {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+}
+"@
+$proc = Get-Process -Name ${psQuote(processName)} -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if (-not $proc) { throw '窗口不存在' }
+$hwnd = $proc.MainWindowHandle
+[TenonWin]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 700
+$rect = New-Object TenonWin+RECT
+[TenonWin]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+$w = [Math]::Max(200, $rect.Right - $rect.Left)
+$h = [Math]::Max(120, $rect.Bottom - $rect.Top)
+$bmp = New-Object System.Drawing.Bitmap $w, $h
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($rect.Left + 8, $rect.Top + 40, 0, 0, (New-Object System.Drawing.Size ($w - 16), ($h - 48)))
+$bmp.Save(${psQuote(file)}, [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose()
+$bmp.Dispose()
+$result = @{ ok = $true; width = $w; height = $h; pid = $proc.Id; title = $proc.MainWindowTitle }`, 30000);
+  if (result.ok && fs.existsSync(file)) {
+    const shot = { name, file, bytes: fs.statSync(file).size, width: result.width, height: result.height, pid: result.pid, title: result.title, ok: true, kind: 'window' };
+    evidence.screenshots.push(shot);
+    return shot;
+  }
+  const shot = { name, ok: false, error: result.error || '窗口截屏失败', kind: 'window' };
+  evidence.screenshots.push(shot);
+  return shot;
+}
+
 function actionCtx() {
   return { repoRoot: REPO, dataDir: path.join(DATA, 'agent'), nodeId: 'node-local', nodeName: '超级终端证据节点', hubUrl: HUB };
 }
@@ -144,7 +185,7 @@ async function main() {
   }, '记事本进程出现', 12000);
   const afterLaunch = await processSnapshot();
   const notepads = recordProcesses(afterLaunch, ['notepad']);
-  const shotLaunch = await screenshot('super-01-app-launch-notepad.png');
+  const shotLaunch = await screenshotWindow('notepad', 'super-01-app-launch-notepad.png');
   evidence.sections.appLaunch = { params: { app: 'notepad' }, summary: launched.summary, notepadProcesses: notepads, newProcesses: newProcesses(beforeLaunch, afterLaunch).slice(0, 20), screenshot: shotLaunch };
   check('app-launch-notepad', 'app.launch("notepad") 真实启动进程', notepads.length >= 1, `进程 ${notepads.map((proc) => proc.id + ':' + proc.name).join(', ')}；截图 ${shotLaunch.ok ? '已保存' : shotLaunch.error}`);
   await killByName('notepad');
@@ -159,6 +200,9 @@ async function main() {
   const shotUrl = await screenshot('super-02-url-open-github.png');
   evidence.sections.urlOpen = { params: { url: 'https://github.com' }, summary: urlResult.summary, browserProcesses: browsers.length, newBrowserProcesses: newBrowsers.slice(0, 10), screenshot: shotUrl };
   check('url-open', 'url.open("https://github.com") 真实打开浏览器', true, `浏览器进程 ${browsers.length} 个（新增 ${newBrowsers.length}）；截图 ${shotUrl.ok ? '已保存' : shotUrl.error}`);
+  // 只关闭「本次新起」的浏览器窗口进程，避免遮挡后续动作的截屏（不碰用户已有窗口）
+  evidence.sections.urlOpen.cleanup = await killByIds(newBrowsers.map((proc) => proc.id));
+  await sleep(800);
 
   // ---------- D. media.show(示例空间/样品图/样品01.png) ----------
   const mediaRel = '示例空间/样品图/样品01.png';
@@ -176,12 +220,16 @@ async function main() {
 
   // ---------- E. handoff.show：打开 <中枢>/#/handoff?kind=..&url=..&text=.. ----------
   const handoffParams = { kind: 'page', url: 'https://github.com/minzzj/tenon', text: '从手机甩到电脑大屏的页面 · v2.1 超级终端证据' };
+  const beforeHandoff = await processSnapshot();
   const handoff = await runAction('handoff.show', handoffParams);
   await sleep(3000);
   const shotHandoff = await screenshot('super-04-handoff-show.png');
+  const handoffNewBrowsers = newProcesses(beforeHandoff, await processSnapshot()).filter((proc) => ['chrome', 'msedge', 'firefox'].some((key) => String(proc.name).toLowerCase().includes(key)));
   const expectedUrl = buildHandoffUrl({ ...handoffParams, hubUrl: HUB });
   evidence.sections.handoffShow = { params: handoffParams, summary: handoff.summary, shownUrl: handoff.items[0] && handoff.items[0].detail, expectedUrl, screenshot: shotHandoff };
   check('handoff-show', 'handoff.show 打开 #/handoff 页面', String(handoff.items[0] && handoff.items[0].detail).includes('/#/handoff?') && !!shotHandoff.ok, expectedUrl);
+  evidence.sections.handoffShow.cleanup = await killByIds(handoffNewBrowsers.map((proc) => proc.id));
+  await sleep(800);
 
   // ---------- F. url.open fullscreen（Chrome/Edge --start-fullscreen） ----------
   const beforeFs = await processSnapshot();
@@ -245,7 +293,7 @@ async function runTaskPullCase() {
   const listTask = succeeded.find((event) => event.data.taskId === 'super_task_applist');
   const launchTask = succeeded.find((event) => event.data.taskId === 'super_task_applaunch');
   await waitFor(async () => (await processSnapshot()).some((proc) => String(proc.name).toLowerCase() === 'notepad'), '任务派发后记事本进程出现', 12000);
-  const shotTask = await screenshot('super-06-task-pull-notepad.png');
+  const shotTask = await screenshotWindow('notepad', 'super-06-task-pull-notepad.png');
   section.appListResult = listTask && listTask.data.result.summary;
   section.appLaunchResult = launchTask && launchTask.data.result.summary;
   section.screenshot = shotTask;

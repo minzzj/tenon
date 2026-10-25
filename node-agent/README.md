@@ -59,8 +59,10 @@ $env:TENON_V2=1; node node-agent/agent.js     # v2 桌面端模块 + 受控动�
 ## 本机自测
 
 ```powershell
-node --test node-agent/__tests__/desktop.test.mjs   # 单测（stub 中枢 + 真实 PowerShell 剪贴板）
-node node-agent/__tests__/run-desktop-evidence.mjs  # 真实证据（剪贴板双向/扫描入库/动作/agent 端到端）
+node --test --test-force-exit node-agent/__tests__/*.test.mjs  # 单测（27 条：v0.1 能力/剪贴板/收发/动作/超级终端动作；Windows GUI 子进程需 --test-force-exit）
+node node-agent/__tests__/run-tests.mjs                     # 同上（日志写 evidence/test-run.log，只打印摘要）
+node node-agent/__tests__/run-desktop-evidence.mjs        # 本机真实证据（剪贴板双向/扫描入库/受控动作/agent 端到端）
+node node-agent/__tests__/run-super-desktop-evidence.mjs  # v2.1 超级终端真实证据（打开程序/网页/媒体/流转 + 截屏 + task pull）
 ```
 
 ## 安全边界

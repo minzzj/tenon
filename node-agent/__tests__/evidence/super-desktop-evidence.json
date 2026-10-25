@@ -1,6 +1,6 @@
 {
   "kind": "super-desktop-evidence",
-  "startedAt": "2026-10-25T14:38:48.396Z",
+  "startedAt": "2026-10-25T14:42:01.782Z",
   "platform": "win32",
   "node": "v24.15.0",
   "checks": [
@@ -10,23 +10,23 @@
       "ok": true,
       "detail": "可用 12/12",
       "extra": null,
-      "at": "2026-10-25T14:38:48.424Z"
+      "at": "2026-10-25T14:42:01.808Z"
     },
     {
       "id": "app-launch-notepad",
       "title": "app.launch(\"notepad\") 真实启动进程",
       "ok": true,
-      "detail": "进程 17268:notepad；截图 已保存",
+      "detail": "进程 792:notepad；截图 已保存",
       "extra": null,
-      "at": "2026-10-25T14:38:51.306Z"
+      "at": "2026-10-25T14:42:05.418Z"
     },
     {
       "id": "url-open",
       "title": "url.open(\"https://github.com\") 真实打开浏览器",
       "ok": true,
-      "detail": "浏览器进程 56 个（新增 1）；截图 已保存",
+      "detail": "浏览器进程 58 个（新增 1）；截图 已保存",
       "extra": null,
-      "at": "2026-10-25T14:38:56.408Z"
+      "at": "2026-10-25T14:42:10.451Z"
     },
     {
       "id": "media-show",
@@ -34,7 +34,7 @@
       "ok": true,
       "detail": "已用默认程序打开图片：样品01.png（8.3 KB）；截图 已保存",
       "extra": null,
-      "at": "2026-10-25T14:39:01.294Z"
+      "at": "2026-10-25T14:42:16.160Z"
     },
     {
       "id": "handoff-show",
@@ -42,7 +42,7 @@
       "ok": true,
       "detail": "http://127.0.0.1:7439/#/handoff?kind=page&url=https%3A%2F%2Fgithub.com%2Fminzzj%2Ftenon&text=%E4%BB%8E%E6%89%8B%E6%9C%BA%E7%94%A9%E5%88%B0%E7%94%B5%E8%84%91%E5%A4%A7%E5%B1%8F%E7%9A%84%E9%A1%B5%E9%9D%A2+%C2%B7+v2.1+%E8%B6%85%E7%BA%A7%E7%BB%88%E7%AB%AF%E8%AF%81%E6%8D%AE",
       "extra": null,
-      "at": "2026-10-25T14:39:05.131Z"
+      "at": "2026-10-25T14:42:20.517Z"
     },
     {
       "id": "url-open-fullscreen",
@@ -50,7 +50,7 @@
       "ok": true,
       "detail": "已全屏打开网页：https://github.com（Chrome --start-fullscreen）",
       "extra": null,
-      "at": "2026-10-25T14:39:09.308Z"
+      "at": "2026-10-25T14:42:25.741Z"
     },
     {
       "id": "task-pull-register",
@@ -58,15 +58,15 @@
       "ok": true,
       "detail": "image.crop,file.hash,file.delete,printer.mock,system.open,system.volume,system.power,file.print,app.launch,url.open,media.show,handoff.show,app.list",
       "extra": null,
-      "at": "2026-10-25T14:39:09.722Z"
+      "at": "2026-10-25T14:42:26.137Z"
     },
     {
       "id": "task-pull-execute",
       "title": "走现有 task pull 执行 app.list / app.launch(\"notepad\")",
       "ok": true,
-      "detail": "本机可用程序 12/12 个：微信、Chrome 浏览器、Edge 浏览器、记事本、资源管理器、计算器、任务管理器、终端、系统设置、照片、画图、音乐播放器；另支持完整路径、http(s) URL 与 PATH 命令｜已打开「记事本」（进程已确认运行，PID 30276）",
+      "detail": "本机可用程序 12/12 个：微信、Chrome 浏览器、Edge 浏览器、记事本、资源管理器、计算器、任务管理器、终端、系统设置、照片、画图、音乐播放器；另支持完整路径、http(s) URL 与 PATH 命令｜已打开「记事本」（进程已确认运行，PID 42936）",
       "extra": null,
-      "at": "2026-10-25T14:39:12.405Z"
+      "at": "2026-10-25T14:42:29.523Z"
     },
     {
       "id": "task-pull-exit",
@@ -74,7 +74,7 @@
       "ok": true,
       "detail": "code=0",
       "extra": null,
-      "at": "2026-10-25T14:39:12.651Z"
+      "at": "2026-10-25T14:42:29.765Z"
     },
     {
       "id": "real-hub-register",
@@ -82,7 +82,7 @@
       "ok": true,
       "detail": "image.crop,file.hash,file.delete,printer.mock,system.open,system.volume,system.power,file.print,app.launch,url.open,media.show,handoff.show,app.list",
       "extra": null,
-      "at": "2026-10-25T14:39:13.206Z"
+      "at": "2026-10-25T14:42:30.321Z"
     },
     {
       "id": "real-super-programs",
@@ -90,7 +90,7 @@
       "ok": true,
       "detail": "{\"ok\":true,\"programs\":[{\"id\":\"wechat\",\"name\":\"微信\",\"emoji\":\"💬\",\"app\":\"微信\",\"mode\":\"program\",\"actionId\":\"app.launch\",\"keyw",
       "extra": null,
-      "at": "2026-10-25T14:39:13.209Z"
+      "at": "2026-10-25T14:42:30.324Z"
     },
     {
       "id": "real-hub-agent-exit",
@@ -98,7 +98,7 @@
       "ok": true,
       "detail": "code=0",
       "extra": null,
-      "at": "2026-10-25T14:39:13.219Z"
+      "at": "2026-10-25T14:42:30.334Z"
     },
     {
       "id": "real-hub-stop",
@@ -106,7 +106,7 @@
       "ok": true,
       "detail": "events=4",
       "extra": null,
-      "at": "2026-10-25T14:39:13.507Z"
+      "at": "2026-10-25T14:42:30.625Z"
     }
   ],
   "sections": {
@@ -181,38 +181,41 @@
       "params": {
         "app": "notepad"
       },
-      "summary": "已打开「记事本」（进程已确认运行，PID 17268）",
+      "summary": "已打开「记事本」（进程已确认运行，PID 792）",
       "notepadProcesses": [
         {
           "title": "无标题 - 记事本",
           "name": "notepad",
-          "id": 17268
+          "id": 792
         }
       ],
       "newProcesses": [
         {
           "title": "",
           "name": "conhost",
-          "id": 18584
+          "id": 37608
         },
         {
           "title": "无标题 - 记事本",
           "name": "notepad",
-          "id": 17268
+          "id": 792
         },
         {
           "title": "",
           "name": "powershell",
-          "id": 41736
+          "id": 32772
         }
       ],
       "screenshot": {
         "name": "super-01-app-launch-notepad.png",
         "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-01-app-launch-notepad.png",
-        "bytes": 314776,
-        "width": 2560,
-        "height": 1440,
-        "ok": true
+        "bytes": 12087,
+        "width": 1152,
+        "height": 674,
+        "pid": 792,
+        "title": "无标题 - 记事本",
+        "ok": true,
+        "kind": "window"
       }
     },
     "urlOpen": {
@@ -220,21 +223,25 @@
         "url": "https://github.com"
       },
       "summary": "已打开网页：https://github.com（默认浏览器）",
-      "browserProcesses": 56,
+      "browserProcesses": 58,
       "newBrowserProcesses": [
         {
           "title": "",
           "name": "msedge",
-          "id": 17232
+          "id": 35668
         }
       ],
       "screenshot": {
         "name": "super-02-url-open-github.png",
         "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-02-url-open-github.png",
-        "bytes": 303392,
+        "bytes": 286901,
         "width": 2560,
         "height": 1440,
         "ok": true
+      },
+      "cleanup": {
+        "ok": false,
+        "killed": 0
       }
     },
     "mediaShow": {
@@ -246,48 +253,28 @@
         {
           "title": "",
           "name": "conhost",
-          "id": 38736
-        },
-        {
-          "title": "",
-          "name": "dllhost",
-          "id": 24712
+          "id": 19260
         },
         {
           "title": "",
           "name": "Photos",
-          "id": 7888
-        },
-        {
-          "title": "样品01.png",
-          "name": "Photos",
-          "id": 43476
+          "id": 35520
         },
         {
           "title": "",
           "name": "powershell",
-          "id": 39880
+          "id": 24996
         },
         {
           "title": "",
           "name": "sppsvc",
-          "id": 28136
-        },
-        {
-          "title": "",
-          "name": "svchost",
-          "id": 16992
-        },
-        {
-          "title": "",
-          "name": "svchost",
-          "id": 25392
+          "id": 19624
         }
       ],
       "screenshot": {
         "name": "super-03-media-show-photo.png",
         "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-03-media-show-photo.png",
-        "bytes": 258960,
+        "bytes": 256914,
         "width": 2560,
         "height": 1440,
         "ok": true
@@ -309,10 +296,14 @@
       "screenshot": {
         "name": "super-04-handoff-show.png",
         "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-04-handoff-show.png",
-        "bytes": 203177,
+        "bytes": 202826,
         "width": 2560,
         "height": 1440,
         "ok": true
+      },
+      "cleanup": {
+        "ok": false,
+        "killed": 0
       }
     },
     "urlFullscreen": {
@@ -322,58 +313,58 @@
         {
           "title": "",
           "name": "chrome",
-          "id": 5092
+          "id": 2212
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 5200
+          "id": 13280
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 12228
+          "id": 14160
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 21148
+          "id": 17644
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 27384
+          "id": 18988
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 28448
+          "id": 35444
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 28668
+          "id": 36980
         },
         {
           "title": "",
           "name": "chrome",
-          "id": 29728
+          "id": 38048
+        },
+        {
+          "title": "GitHub · 变化是永恒的。GitHub 让你保持领先。 · GitHub · GitHub - Google Chrome",
+          "name": "chrome",
+          "id": 43148
         },
         {
           "title": "",
-          "name": "chrome",
-          "id": 31956
-        },
-        {
-          "title": "无标题 - Google Chrome",
-          "name": "chrome",
-          "id": 38840
+          "name": "msedge",
+          "id": 20608
         }
       ],
       "screenshot": {
         "name": "super-05-url-fullscreen.png",
         "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-05-url-fullscreen.png",
-        "bytes": 95698,
+        "bytes": 1063081,
         "width": 2560,
         "height": 1440,
         "ok": true
@@ -400,14 +391,17 @@
         "app.list"
       ],
       "appListResult": "本机可用程序 12/12 个：微信、Chrome 浏览器、Edge 浏览器、记事本、资源管理器、计算器、任务管理器、终端、系统设置、照片、画图、音乐播放器；另支持完整路径、http(s) URL 与 PATH 命令",
-      "appLaunchResult": "已打开「记事本」（进程已确认运行，PID 30276）",
+      "appLaunchResult": "已打开「记事本」（进程已确认运行，PID 42936）",
       "screenshot": {
         "name": "super-06-task-pull-notepad.png",
         "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-06-task-pull-notepad.png",
-        "bytes": 109410,
-        "width": 2560,
-        "height": 1440,
-        "ok": true
+        "bytes": 12087,
+        "width": 1152,
+        "height": 674,
+        "pid": 42936,
+        "title": "无标题 - 记事本",
+        "ok": true,
+        "kind": "window"
       },
       "logFile": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\agent-pull.log",
       "exit": {
@@ -455,15 +449,18 @@
     {
       "name": "super-01-app-launch-notepad.png",
       "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-01-app-launch-notepad.png",
-      "bytes": 314776,
-      "width": 2560,
-      "height": 1440,
-      "ok": true
+      "bytes": 12087,
+      "width": 1152,
+      "height": 674,
+      "pid": 792,
+      "title": "无标题 - 记事本",
+      "ok": true,
+      "kind": "window"
     },
     {
       "name": "super-02-url-open-github.png",
       "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-02-url-open-github.png",
-      "bytes": 303392,
+      "bytes": 286901,
       "width": 2560,
       "height": 1440,
       "ok": true
@@ -471,7 +468,7 @@
     {
       "name": "super-03-media-show-photo.png",
       "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-03-media-show-photo.png",
-      "bytes": 258960,
+      "bytes": 256914,
       "width": 2560,
       "height": 1440,
       "ok": true
@@ -479,7 +476,7 @@
     {
       "name": "super-04-handoff-show.png",
       "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-04-handoff-show.png",
-      "bytes": 203177,
+      "bytes": 202826,
       "width": 2560,
       "height": 1440,
       "ok": true
@@ -487,7 +484,7 @@
     {
       "name": "super-05-url-fullscreen.png",
       "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-05-url-fullscreen.png",
-      "bytes": 95698,
+      "bytes": 1063081,
       "width": 2560,
       "height": 1440,
       "ok": true
@@ -495,14 +492,17 @@
     {
       "name": "super-06-task-pull-notepad.png",
       "file": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\node-agent\\__tests__\\evidence\\super-06-task-pull-notepad.png",
-      "bytes": 109410,
-      "width": 2560,
-      "height": 1440,
-      "ok": true
+      "bytes": 12087,
+      "width": 1152,
+      "height": 674,
+      "pid": 42936,
+      "title": "无标题 - 记事本",
+      "ok": true,
+      "kind": "window"
     }
   ],
-  "finishedAt": "2026-10-25T14:39:13.753Z",
-  "durationMs": 25357,
+  "finishedAt": "2026-10-25T14:42:30.859Z",
+  "durationMs": 29077,
   "failures": 0,
   "verdict": "通过"
 }
