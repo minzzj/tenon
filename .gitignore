@@ -1,5 +1,6 @@
 # runtime data & logs
 data/
+data-e2e/
 logs/
 *.log
 

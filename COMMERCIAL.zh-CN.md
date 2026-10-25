@@ -1,5 +1,7 @@
 # 商用说明
 
+Copyright © 2026 minzzj · 榫卯 Tenon
+
 榫卯（Tenon）以 **Creative Commons 署名—非商业性使用—相同方式共享 4.0 国际** 许可发布（[LICENSE](LICENSE)）。简要说明：
 
 ## 不允许
@@ -27,4 +29,5 @@ ShareAlike 条件在**演绎作品被分享/分发**时生效；纯粹内部修�
 
 - 许可覆盖本仓库中的代码、文档与原创视觉素材。
 - 仅用于构建/测试的第三方工具（如浏览器、媒体编码器）遵循其自身许可证，不作为榫卯的一部分分发。
+- **非 OSI 开源许可**：CC BY-NC-SA 4.0 不是 OSI 认可的许可证，GitHub 侧栏会显示 "Other"；以仓库 [LICENSE](LICENSE) 的法律文本为准。
 - 本文不构成法律意见。以 [LICENSE](LICENSE) 中的英文法律文本为准；[LICENSE.zh-CN.md](LICENSE.zh-CN.md) 为参考译本。

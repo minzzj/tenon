@@ -1,5 +1,7 @@
 # Commercial use policy
 
+Copyright © 2026 minzzj · Tenon (榫卯)
+
 Tenon (榫卯) is released under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International** license ([LICENSE](LICENSE)). In short:
 
 ## Not permitted
@@ -27,4 +29,5 @@ For a commercial license, open an issue on <https://github.com/minzzj> / the rep
 
 - The license covers the code, documentation and original visual assets in this repository.
 - Third-party tools used only at build/test time (for example a browser or a media encoder) keep their own licenses and are not distributed as part of Tenon.
+- **Not OSI open source.** CC BY-NC-SA 4.0 is not an OSI-approved license, so GitHub shows "Other" in the repository sidebar; the legal text in [LICENSE](LICENSE) is authoritative.
 - Nothing here is legal advice. The canonical legal text is [LICENSE](LICENSE); the Chinese translation [LICENSE.zh-CN.md](LICENSE.zh-CN.md) is for reference.

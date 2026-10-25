@@ -270,7 +270,7 @@ function apply(ev, s) {
         t.status = 'pending';
         t.needsReview = true;
         t.updatedAt = ev.at;
-        pushStep(t, '待确认：设备已断开', d.reason || '断开被引用的设备后，相关任务降级为待确认');
+        pushStep(t, '待确认', d.reason || '断开被引用的设备后，相关任务降级为待确认');
       }
       break;
     }

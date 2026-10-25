@@ -24,6 +24,9 @@ const NO_START = argv.includes('--no-start');
 const KEEP = argv.includes('--keep');
 const PORT = Number(process.env.TENON_E2E_PORT || 7411);
 const BASE = (process.env.TENON_E2E_BASE || (NO_START ? 'http://127.0.0.1:7410' : 'http://127.0.0.1:' + PORT)).replace(/\/$/, '');
+// P0 回归用：同一 data-e2e 目录的第二个实例，应自动只读并拒写（端口避开 7410/7411）
+const RO_PORT = Number(process.env.TENON_E2E_RO_PORT || PORT + 1);
+const RO_BASE = 'http://127.0.0.1:' + RO_PORT;
 const DATA_DIR = path.join(ROOT, 'data-e2e');
 const EVIDENCE_DIR = path.join(ROOT, 'docs', '测试证据');
 const SHOT_DIR = path.join(EVIDENCE_DIR, 'e2e-screenshots');
@@ -35,6 +38,7 @@ const children = [];
 const pages = [];
 let chrome = null;
 let chromePort = 0;
+let nodeAgentProc = null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => console.log('[e2e] ' + m);
@@ -84,11 +88,38 @@ function startServices() {
     env: { ...process.env, TENON_HUB_URL: BASE, TENON_DATA_DIR: DATA_DIR, TENON_NODE_ID: 'node-local' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  nodeAgentProc = node;
   children.push(node);
 }
 function stopServices() {
   for (const c of children) killTree(c);
 }
+/** 账本行数（只读磁盘）。只读回归用它断言事件数前后不变。 */
+function countLedgerEvents(dir) {
+  const file = path.join(dir, 'events.jsonl');
+  return fs.readFileSync(file, 'utf8').split('\n').filter((line) => line.trim()).length;
+}
+
+/** 起第二个实例（同 DATA_DIR）：start.js 检测到 hub.lock 被活进程持有 → 自动 readOnly。 */
+async function startReadOnlyInstance() {
+  const ro = spawn(process.execPath, ['server/start.js'], {
+    cwd: ROOT,
+    env: { ...process.env, TENON_PORT: String(RO_PORT), TENON_HOST: '127.0.0.1', TENON_DATA_DIR: DATA_DIR },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  children.push(ro);
+  await waitFor(async () => {
+    try {
+      const st = await httpJson(RO_BASE + '/api/state');
+      return st && st.readOnly === true ? st : null;
+    } catch {
+      return null;
+    }
+  }, 25000, 300, '只读第二实例启动');
+  log('只读第二实例就绪：' + RO_BASE + '（readOnly=true）');
+  return ro;
+}
+
 async function waitHub() {
   await waitFor(async () => {
     try { const st = await httpJson(BASE + '/api/state'); return st && st.nodes ? st : null; } catch { return null; }
@@ -445,6 +476,52 @@ async function main() {
     assert(seqOk, '账本 seq 不连续');
     assert(dup.length === 0, '存在重复执行的任务：' + JSON.stringify(dup));
     record('A8', '账本哈希链/seq 连续、无重复执行', true, 'events=' + events.length);
+  }
+
+  // A9：只读第二实例（P0 回归）—— 所有会写账本的路径必须 423，账本事件数前后不变；
+  // 主实例的审计导出会 append audit.exported，因此必须登录令牌，未登录 401。
+  {
+    const dir = NO_START ? path.join(ROOT, 'data') : DATA_DIR;
+    const secrets = JSON.parse(fs.readFileSync(path.join(dir, 'secrets.json'), 'utf8'));
+    const unauth = await fetch(BASE + '/api/audit/export?format=json');
+    await unauth.text();
+    assert(unauth.status === 401, '主实例未鉴权 GET /api/audit/export 应 401，实际 ' + unauth.status);
+    const authed = await fetch(BASE + '/api/audit/export?format=json', { headers: { 'x-tenon-token': token } });
+    await authed.text();
+    assert(authed.status === 200, '主实例带令牌 GET /api/audit/export 应 200，实际 ' + authed.status);
+
+    // 停掉本 E2E 自己的节点进程，避免节点心跳在断言窗口内写账本，干扰「事件数前后不变」
+    if (nodeAgentProc) {
+      killTree(nodeAgentProc);
+      nodeAgentProc = null;
+    }
+    await sleep(700);
+    await startReadOnlyInstance();
+
+    const countBefore = countLedgerEvents(dir);
+    const rExport = await fetch(RO_BASE + '/api/audit/export?format=json');
+    await rExport.text();
+    assert(rExport.status === 423, '只读实例 GET /api/audit/export 应 423，实际 ' + rExport.status);
+    const rPull = await fetch(RO_BASE + '/api/node/pull?nodeId=node-local', { headers: { 'x-tenon-node': secrets.nodeToken } });
+    const pullText = await rPull.text();
+    assert(rPull.status === 423, '只读实例 GET /api/node/pull 应 423，实际 ' + rPull.status + ' ' + pullText.slice(0, 80));
+    const rDraft = await fetch(RO_BASE + '/api/tasks/draft', {
+      method: 'POST',
+      headers: { 'x-tenon-token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '只读实例写入探测 ' + Date.now() }),
+    });
+    await rDraft.text();
+    assert(rDraft.status === 423, '只读实例 POST /api/tasks/draft 应 423，实际 ' + rDraft.status);
+    await sleep(400);
+    const countAfter = countLedgerEvents(dir);
+    assert(countAfter === countBefore, '只读实例探测期间账本事件数发生变化：' + countBefore + ' -> ' + countAfter);
+
+    const roState = await httpJson(RO_BASE + '/api/state');
+    assert(roState.readOnly === true, '第二实例 readOnly 不为 true');
+    assert(roState.integrity && roState.integrity.ok === true, '只读实例读到的账本完整性失败：' + JSON.stringify(roState.integrity));
+    const mainState = await state();
+    assert(mainState.integrity && mainState.integrity.ok === true, '主实例账本完整性失败：' + JSON.stringify(mainState.integrity));
+    record('A9', '只读第二实例所有写账本路径 423、账本事件数不变；主实例审计导出需登录', true, '主实例 export 401/200；只读 export 423、node/pull 423、draft 423、events=' + countAfter + ' 不变');
   }
 
   for (const p of pages) p.close();

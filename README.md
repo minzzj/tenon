@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md) · [Docs](docs/) · [License](LICENSE) · [Commercial use](COMMERCIAL.md) · [Security](SECURITY.md)
 
-**Status: v0.1.0 shipped — 2026-10-25.** The hub, node agent, desktop console and phone page are all runnable: **146 unit tests pass**, **8/8 human-driven real-browser acceptance checks pass**, and an executable real-browser E2E suite (`npm run test:e2e`, 8/8 checks) ships in the repo. Repository: <https://github.com/minzzj/tenon>.
+**Status: v0.1.0 shipped — 2026-10-25.** The hub, node agent, desktop console and phone page are all runnable: **146 unit tests pass**, **8/8 human-driven real-browser acceptance checks pass**, and an executable real-browser E2E suite (`npm run test:e2e`, 9/9 checks including the read-only regression) ships in the repo. Repository: <https://github.com/minzzj/tenon>.
 
 Evidence: [test results 2026-10-25](docs/测试证据/测试结果-20261025.md) · [JSON](docs/测试证据/测试结果-20261025.json) · [19 evidence screenshots](docs/测试证据/screenshots/).
 
@@ -132,7 +132,7 @@ python scripts/gen-samples.py
 
 ## Design principles
 
-- **Local-first.** Everything runs on your machine or your LAN. No vendor cloud in the middle; public relay is optional, off by default.
+- **Local-first.** Everything runs on your machine or your LAN. No vendor cloud in the middle. The public relay is only a reserved interface — it is **not implemented in this version**; the default is zero outbound connections.
 - **Evidence over guessing.** Relation strength is *certain / possible / unknown*; a relationship without evidence is shown as unknown, never inferred into a fact.
 - **Append-only ledger.** Events carry `seq` and a hash chain and are replayed into an index at start-up — crash recovery, audit, export and migration all read the same source of truth.
 - **Zero runtime dependencies.** Node.js built-in modules only; the UI is plain HTML/CSS/JS with no CDN and no external fonts, so the product keeps working with the network unplugged.
@@ -146,7 +146,7 @@ Testing is done the way a user uses it: **real Chrome clicks, real files, real p
 |---|---|
 | Unit tests | **146 passed / 0 failed** in 8 files (`npm test`; ledger 16 / state 30 / ai 21 / tasks 23 / channels 10 / checkup 16 / png 14 / seed-demo 16) |
 | Real-browser acceptance | **8/8 acceptance checks passed** (plus 2 extra: dual-instance read-only, real AI provider); 19 evidence screenshots |
-| Executable real-browser E2E | `npm run test:e2e` — **8/8 automated checks pass** in one run: isolated instance auto-seeded, real Chrome driven over CDP (real clicks, real typing, real screenshots); evidence `docs/测试证据/e2e-2026-10-25-1822.json` + 10 screenshots; **also passes in GitHub Actions** ([run](https://github.com/minzzj/tenon/actions/runs/40184873877)) |
+| Executable real-browser E2E | `npm run test:e2e` — **9/9 automated checks pass** in one run: isolated instance auto-seeded, real Chrome driven over CDP (real clicks, real typing, real screenshots); includes the read-only second-instance regression (all ledger-writing paths return 423, ledger unchanged); evidence `docs/测试证据/e2e-2026-10-25-11-13-07.json` + `e2e-screenshots/`; **also passes in GitHub Actions** (`Real-browser E2E` workflow) |
 | Disconnect a device referenced by 3 tasks | all 3 tasks downgraded to "needs confirmation" within **275 ms** (acceptance line: 10 s) |
 | Impact preview | **certain 3 / possible 1 / unknown 1**; cancel leaves business state unchanged |
 | Dual instance | second instance is read-only; writes answer **423** ("another window is read-only") |
@@ -159,7 +159,7 @@ Common commands:
 ```bash
 npm test                          # unit tests: 146 pass
 node scripts/seed-demo.js --fresh # rebuild demo data
-npm run test:e2e                  # executable real-browser E2E: isolated instance + real Chrome via CDP — 8/8 checks pass
+npm run test:e2e                  # executable real-browser E2E: isolated instance + real Chrome via CDP — 9/9 checks pass
 ```
 
 ## Repository layout
@@ -193,6 +193,8 @@ Full list: [docs/假设与未覆盖清单.md](docs/假设与未覆盖清单.md).
 Tenon does **not** implement Matter/Thread pairing, is **not** a cloud automation SaaS, **not** a file-sync or chat product, and **not** a GUI click robot. It sits above those: a task-and-responsibility layer for the devices, software and models you already own.
 
 ## License
+
+Copyright © 2026 minzzj · Tenon (榫卯)
 
 [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](LICENSE) — free to download, run, modify and share **for non-commercial purposes**. If you distribute a modified version, it must stay under the same license (or a compatible one). **Commercial use is not permitted** — see [COMMERCIAL.md](COMMERCIAL.md).
 

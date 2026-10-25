@@ -11,6 +11,17 @@ import { createChannels } from './channels.js';
 import { runCheckup } from './checkup.js';
 
 const HUB_CAPS = new Set(['channel.notify', 'llm.summarize']);
+
+// P0 修复：只读实例只放行「不写账本」的纯读接口；其余 /api/* 一律 423（含节点接口与 GET 写路径）。
+const READ_ONLY_GET = new Set(['/api/state', '/api/stream', '/api/messages', '/api/impact']);
+const READ_ONLY_POST = new Set(['/api/auth', '/api/logout']);
+function readOnlyAllowed(method, pathname) {
+  if (method === 'GET' && READ_ONLY_GET.has(pathname)) return true;
+  if (method === 'GET' && /^\/api\/checkup\/[^/]+\/export$/.test(pathname)) return true;
+  if (method === 'POST' && READ_ONLY_POST.has(pathname)) return true;
+  return false;
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -72,7 +83,7 @@ function readBody(req, limit = 1048576) {
   });
 }
 
-export function createHttpServer({ root, ledger, state, ai, secret, mode, readOnly, version = '0.1.0' }) {
+export function createHttpServer({ root, ledger, state, ai, secret, mode, readOnly, version = '0.1.0', onShutdown }) {
   const channels = createChannels({ ledger, state });
   const clients = new Set();
   const scheduled = new Set();
@@ -330,6 +341,11 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
 
   async function handleApi(req, res, u, pathname) {
     const method = req.method;
+    // P0 修复：只读实例必须在鉴权与路由分发之前统一拦截。此前 /api/node/* 在 readOnly 判断之前分发、
+    // GET /api/audit/export 会 append audit.exported，导致第二实例也能写账本、写坏哈希链。
+    if (readOnly && !readOnlyAllowed(method, pathname)) {
+      return json(res, 423, { error: '另一窗口为只读' });
+    }
     if (pathname === '/api/state' && method === 'GET') return json(res, 200, buildSnapshot());
     if (pathname === '/api/stream' && method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
@@ -348,8 +364,21 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
       res.setHeader('Set-Cookie', 'tenon_token=; Path=/; Max-Age=0');
       return json(res, 200, { ok: true });
     }
+    if (pathname === '/api/shutdown' && method === 'POST') {
+      // P2 修复：优雅停机——由 start.js 的 shutdown 写 system.stopped、关服务、释放 hub.lock；
+      // 不直接 process.exit，避免正常停机被下次启动误判为崩溃恢复。
+      if (!authed(req)) return json(res, 401, { error: '需要登录令牌' });
+      json(res, 200, { ok: true, detail: '正在优雅停止：写入 system.stopped 并释放锁' });
+      setTimeout(() => {
+        try {
+          if (typeof onShutdown === 'function') onShutdown();
+        } catch {
+          /* ignore */
+        }
+      }, 150);
+      return undefined;
+    }
     if (pathname.startsWith('/api/node/')) return handleNode(req, res, u, pathname);
-    if (method !== 'GET' && readOnly) return json(res, 423, { error: '另一窗口为只读' });
     if (method !== 'GET' && !authed(req)) return json(res, 401, { error: '需要登录令牌' });
 
     let m;
@@ -423,6 +452,8 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
       return send(res, 200, lines.join('\n'), 'text/markdown; charset=utf-8', { 'Content-Disposition': `attachment; filename="checkup-${c.id}.md"` });
     }
     if (pathname === '/api/audit/export' && method === 'GET') {
+      // P0 修复：导出动作会 append audit.exported（写账本），必须登录；只读实例已在顶部 423。
+      if (!authed(req)) return json(res, 401, { error: '需要登录令牌' });
       const format = u.searchParams.get('format') || 'csv';
       const events = ledger.events;
       ledger.append('audit.exported', { format, count: events.length, by: '你' });
@@ -482,6 +513,7 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
   heartbeat.unref();
 
   function kick() {
+    if (readOnly) return; // P0 修复：只读实例不得触发任何会 append 账本的后台动作（回执/中枢执行）
     const st = replay(ledger.events);
     for (const t of Object.values(st.tasks)) {
       if (t.status === 'queued' && HUB_CAPS.has(t.capabilityId)) schedule('hubrun:' + t.id, () => executeHubTask({ ledger, state: replay(ledger.events), ai, channels, taskId: t.id }));

@@ -73,10 +73,15 @@ if (!readOnly) {
     ledger.append('system.crashRecovery', {
       gapMs,
       tasksResumed: stillRunning,
-      note: '缺失约 ' + Math.max(1, Math.round(gapMs / 60000)) + ' 分钟事件，任务未重复',
+      note: '缺失约 ' + Math.max(1, Math.round(gapMs / 60000)) + ' 分钟事件，任务未重复；在途任务已降级为待确认',
     });
+    // P1 修复：重启后仍在 running 的任务必须降级为「待确认」，否则会永久停在“执行中”。
+    // state.js 的 task.needsConfirm 会把任务置为 pending 并标 needsReview（界面上可重新确认/取消）。
     for (const id of stillRunning) {
-      ledger.append('task.step', { taskId: id, label: '重启核对', detail: '任务未重复执行，现场已保留' });
+      ledger.append('task.needsConfirm', {
+        taskId: id,
+        reason: '进程重启，任务未重复执行，已降级为待确认',
+      });
     }
   }
 
@@ -108,10 +113,16 @@ function lanUrls(p) {
 }
 
 const ai = new AI();
-const { httpServer, kick } = createHttpServer({ root, ledger, state: replay(ledger.events), ai, secret, mode, readOnly, version });
+const { httpServer, kick } = createHttpServer({
+  root, ledger, state: replay(ledger.events), ai, secret, mode, readOnly, version,
+  onShutdown: () => shutdown(),
+});
 
 let server;
+let stopping = false;
 function shutdown() {
+  if (stopping) return; // 幂等：SIGINT 与 /api/shutdown 同时到达时只清理一次
+  stopping = true;
   try {
     if (!readOnly) ledger.append('system.stopped', { pid: process.pid });
   } catch {
@@ -133,13 +144,20 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 server = httpServer.listen(port, host, () => {
-  const urls = lanUrls(port);
   console.log('榫卯 Tenon v' + version + ' · 中枢已启动');
   console.log('模式: ' + mode + (readOnly ? ' · 只读实例' : '') + ' | 数据目录: ' + dataDir);
   console.log('桌面控制台: http://127.0.0.1:' + port);
-  for (const u of urls) console.log('手机端（局域网）: ' + u + '/m');
+  // P2 修复：只有绑定 0.0.0.0（或具体局域网 IP）时才打印手机可达地址；
+  // 默认 127.0.0.1 时打印如何开启局域网，避免打印不可达的地址误导用户。
+  if (host === '0.0.0.0' || host === '::') {
+    for (const u of lanUrls(port)) console.log('手机端（局域网）: ' + u + '/m');
+  } else if (host === '127.0.0.1' || host === 'localhost') {
+    console.log('手机端：需设置 TENON_HOST=0.0.0.0 后重启，再用 http://<电脑IP>:' + port + '/m');
+  } else {
+    console.log('手机端（局域网）: http://' + host + ':' + port + '/m');
+  }
   console.log('操作令牌: ' + secret.operatorToken);
   console.log('节点令牌文件: ' + secretsFile);
-  if (recovered) console.log('异常恢复: 缺失约 ' + Math.max(1, Math.round(gapMs / 60000)) + ' 分钟事件，任务未重复执行');
+  if (recovered) console.log('异常恢复: 缺失约 ' + Math.max(1, Math.round(gapMs / 60000)) + ' 分钟事件，任务未重复；在途任务已降级为待确认');
   kick();
 });
