@@ -1,0 +1,281 @@
+# 榫卯 v2-P0 桌面端 Agent · 真实中枢联调证据
+
+- 时间：2026-10-25T13:52:47.846Z → 2026-10-25T13:53:00.906Z（耗时 13.1s）
+- 中枢：http://127.0.0.1:7439（真实 server/start.js + link/assets/things/enterprise 模块，隔离端口）
+- 环境：win32 / Node v24.15.0
+- 结论：**通过**（14/14 项通过）
+
+| # | 检查项 | 结果 | 说明 |
+|---|---|---|---|
+| 1 | 真实中枢 v2 模块路由可用（GET /api/v2/link/info） | ✅ 通过 | {"ok":true,"deviceId":"dev_583414cda7","name":"zhangzijun","platform":"windows","fingerprint":"449d4f7e5eba7bb8","port":7439,"host":"127.0.0.1","version":2,"dis |
+| 2 | 真实注册 8 项能力并通过 /api/state 可见 | ✅ 通过 | image.crop,file.hash,file.delete,printer.mock,system.open,system.volume,system.power,file.print |
+| 3 | 2 秒心跳持续生效（注册 9.5 秒后 /api/state 仍 online=true） | ✅ 通过 | lastSeen=2026-10-25T13:52:48.630Z |
+| 4 | 真实中枢收到 agent 上报的剪贴板 | ✅ 通过 | from=node-local kind=text |
+| 5 | 真实账本写入 clipboard.shared 事件 | ✅ 通过 | {"from":"node-local","kind":"text","preview":"真实联调-电脑剪贴板-1792936378180-中文"} |
+| 6 | 手机剪贴板经真实中枢 → 本机剪贴板（PowerShell 回读一致） | ✅ 通过 | 真实联调-手机剪贴板-1792936378898 |
+| 7 | 真实 assets-core 入库 + 搜索 + 缩略图 | ✅ 通过 | 入库 3 个 / 搜索 total=1 / 缩略图 OK |
+| 8 | 真实 link-core 接收手机上传并校验 sha256（to-desktop 等待桌面 ack） | ✅ 通过 | transferId=tr_mvnw10to438c40 |
+| 9 | 入站文件真实落盘接收目录 + sha256 一致 + ack 后 status=completed | ✅ 通过 | H:\minzzj文件\技术部\项目\官方\榫卯\_internal\v2-desktop-data\receive\真实联调手机截图.png；event.file=c4c97a2b2f87… |
+| 10 | 真实账本写入 transfer.completed（ack 产生） | ✅ 通过 | direction=to-desktop bytes=55 |
+| 11 | 真实出站分块传输（init → PUT chunk?file= → finish{sha256}）完成 | ✅ 通过 | 2643 字节 / 44ms / 67769 B/s |
+| 12 | 真实通知 relayed → 账本事件 + agent SSE 镜像 | ✅ 通过 | 真实通知镜像-1792936380243 |
+| 13 | 关闭 stdin 后真实 agent 优雅退出（exit code 0） | ✅ 通过 | code=0 |
+| 14 | 真实中枢优雅停止并写 system.stopped | ✅ 通过 | events=15 |
+
+## 原始数据
+
+```json
+{
+  "hub": {
+    "url": "http://127.0.0.1:7439",
+    "secrets": {
+      "nodeToken": "node_000…",
+      "operatorToken": "tok_1010…"
+    },
+    "logTail": [
+      "[v2] mounted link routes=19",
+      "[v2] mounted assets routes=10",
+      "[v2] mounted things routes=8",
+      "[v2] mounted enterprise routes=14",
+      "榫卯 Tenon v0.1.0 · 中枢已启动",
+      "模式: solo | 数据目录: H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\hub",
+      "桌面控制台: http://127.0.0.1:7439",
+      "手机端：需设置 TENON_HOST=0.0.0.0 后重启，再用 http://<电脑IP>:7439/m",
+      "操作令牌: tok_1010f3c101233be9cd41",
+      "节点令牌文件: H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\hub\\secrets.json",
+      "v2 模块: link, assets, things, enterprise"
+    ]
+  },
+  "linkInfo": {
+    "ok": true,
+    "deviceId": "dev_583414cda7",
+    "name": "zhangzijun",
+    "platform": "windows",
+    "fingerprint": "449d4f7e5eba7bb8",
+    "port": 7439,
+    "host": "127.0.0.1",
+    "version": 2,
+    "discovery": {
+      "enabled": true,
+      "port": 7414,
+      "reason": ""
+    },
+    "pairing": {
+      "trusted": 0,
+      "codeExpiresAt": null
+    }
+  },
+  "register": {
+    "nodeId": "node-local",
+    "name": "真实联调工作台",
+    "online": true,
+    "capabilities": [
+      "image.crop",
+      "file.hash",
+      "file.delete",
+      "printer.mock",
+      "system.open",
+      "system.volume",
+      "system.power",
+      "file.print"
+    ]
+  },
+  "heartbeat": {
+    "onlineAfterWait": true,
+    "lastSeen": "2026-10-25T13:52:48.630Z",
+    "waitMs": 9500,
+    "note": "node.heartbeat 落账本按 60s 节流（Lead 侧优化），在线判定用 liveSeen(8s) 窗口",
+    "ledgerHeartbeats": 0
+  },
+  "clipboardLocalToHub": {
+    "text": "真实联调-电脑剪贴板-1792936378180-中文",
+    "from": "node-local",
+    "kind": "text"
+  },
+  "clipboardEvent": {
+    "seq": 5,
+    "at": "2026-10-25T13:52:58.886Z",
+    "type": "clipboard.shared",
+    "actor": "link",
+    "data": {
+      "from": "node-local",
+      "kind": "text",
+      "preview": "真实联调-电脑剪贴板-1792936378180-中文"
+    },
+    "prev": "30ac24dc195705150110849aa1afa3eaab12691241a38d98d1b76d45d78e84da",
+    "hash": "56f3d512cb95cafc67e3e33402ed3469814618321bfd76bb081f244d3a1f406e"
+  },
+  "clipboardHubToLocal": {
+    "text": "真实联调-手机剪贴板-1792936378898",
+    "readBackMatched": true
+  },
+  "v2Health": {
+    "modules": [
+      "link",
+      "assets",
+      "things",
+      "enterprise"
+    ],
+    "pending": []
+  },
+  "assetsIngest": {
+    "ok": true,
+    "ingested": 3,
+    "failed": 0,
+    "items": [
+      {
+        "path": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\示例空间\\样品图\\样品01.png",
+        "ok": true,
+        "assetId": "asset_mvnw10mmd0br55"
+      },
+      {
+        "path": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\示例空间\\样品图\\样品02.png",
+        "ok": true,
+        "assetId": "asset_mvnw10q9jaartj"
+      },
+      {
+        "path": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\示例空间\\样品图\\样品03.png",
+        "ok": true,
+        "assetId": "asset_mvnw10rs9eglt5"
+      }
+    ]
+  },
+  "assetsSearch": {
+    "total": 1,
+    "first": {
+      "id": "asset_mvnw10mmd0br55",
+      "sha256": "27ff12b5bc27b569a642c2237ae06dd75e77b335dc8bdc34ae8477c9d454c9ec",
+      "kind": "image",
+      "ext": "png",
+      "mime": "image/png",
+      "name": "样品01.png",
+      "size": 8502,
+      "source": {
+        "deviceId": "node-local",
+        "path": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\示例空间\\样品图\\样品01.png",
+        "origin": "ingest",
+        "mtimeMs": 1792918886000
+      },
+      "storedPath": null,
+      "thumb": {
+        "320": "assets/thumbs/27ff12b5bc27b569a642c2237ae06dd75e77b335dc8bdc34ae8477c9d454c9ec-320.webp",
+        "640": "assets/thumbs/27ff12b5bc27b569a642c2237ae06dd75e77b335dc8bdc34ae8477c9d454c9ec-640.webp"
+      },
+      "thumbError": null,
+      "image": {
+        "width": 640,
+        "height": 480,
+        "format": "png",
+        "space": "srgb",
+        "hasAlpha": false,
+        "orientation": null
+      },
+      "exif": {},
+      "imageError": null,
+      "ocr": {
+        "status": "pending",
+        "text": "",
+        "error": null,
+        "lang": "chi_sim+eng",
+        "confidence": null,
+        "at": null
+      },
+      "tags": [],
+      "shares": [],
+      "removed": false,
+      "createdAt": "2026-10-25T13:52:59.758Z",
+      "updatedAt": "2026-10-25T13:52:59.758Z",
+      "lastSeenAt": null,
+      "occurrences": [
+        {
+          "deviceId": "node-local",
+          "path": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\示例空间\\样品图\\样品01.png",
+          "at": "2026-10-25T13:52:59.758Z",
+          "origin": "ingest"
+        }
+      ],
+      "thumbUrls": {
+        "320": "/api/v2/assets/asset_mvnw10mmd0br55/thumb?w=320",
+        "640": "/api/v2/assets/asset_mvnw10mmd0br55/thumb?w=640"
+      }
+    }
+  },
+  "assetsThumb": {
+    "assetId": "asset_mvnw10mmd0br55",
+    "bytes": 2398,
+    "magic": "52494646"
+  },
+  "inboundInit": {
+    "transferId": "tr_mvnw10to438c40",
+    "chunkSize": 1048576,
+    "finish": {
+      "ok": true,
+      "verified": true,
+      "awaitingAck": true
+    }
+  },
+  "inboundTransfer": {
+    "transferId": "tr_mvnw10to438c40",
+    "status": "completed",
+    "transferEventFile": {
+      "name": "真实联调手机截图.png",
+      "size": 55,
+      "sha256": "c4c97a2b2f87d954a19b95d15ce17efe15901186cb52e5723c584478ffed037f",
+      "ok": true
+    },
+    "savedOnDisk": "H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\receive\\真实联调手机截图.png",
+    "receiveDirFiles": [
+      "真实联调手机截图.png"
+    ],
+    "ackLogged": true,
+    "note": "link-core 的 transfer view 不返回路径，落盘位置用「接收目录内按 sha256 找文件 + agent 日志」验证"
+  },
+  "outboundTransfer": {
+    "transferId": "tr_mvnw10yv8fb0b8",
+    "bytes": 2643,
+    "ms": 44,
+    "sha256": "0856cfa2a6b62349c9034cb6a7b5dc4c7fd349959af49abdb7e4a048ce5498a6",
+    "hubStatus": "completed",
+    "hubSpeedBps": 67769
+  },
+  "notificationMirror": {
+    "title": "真实通知镜像-1792936380243",
+    "ledgerEvent": {
+      "from": "phone-android",
+      "app": "com.tencent.mm",
+      "title": "真实通知镜像-1792936380243",
+      "preview": "来自真实中枢的通知"
+    },
+    "seenInAgentLog": true
+  },
+  "agentLogTail": [
+    "[21:52:48] 首次运行，已生成节点身份 node-local（保存在 H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\agent\\node-identity.json）",
+    "[21:52:48] 榫卯节点 Agent v0.2.0 启动",
+    "[21:52:48] 仓库根：H:\\minzzj文件\\技术部\\项目\\官方\\榫卯",
+    "[21:52:48] 中枢：http://127.0.0.1:7439",
+    "[21:52:48] 节点：真实联调工作台（node-local）",
+    "[21:52:48] 数据目录：H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\agent｜已有幂等记录 0 条",
+    "[21:52:48] 已注册到中枢 http://127.0.0.1:7439：node-local（能力 8 项，含 v2 动作）",
+    "[21:52:48] 已上线：心跳每 2 秒，拉任务每 1 秒（v2 桌面模块随之启动）；Ctrl+C 优雅退出",
+    "[21:52:48] v2 桌面端模块启用（TENON_V2=1）：剪贴板 / 文件收发 / 通知 / 受控动作",
+    "[21:52:48] [通知] 已发送（method=log）：榫卯 v2 · 桌面端已连接 · 真实联调工作台 已上线：剪贴板、文件收发、通知同步已启用",
+    "[21:52:48] 桌面通知通道：log（回退）",
+    "[21:52:48] [剪贴板] 已启动：每 0.4 秒轮询（读+写双向，防回环）",
+    "[21:52:48] [传输] 已启动：每 0.5 秒查询入站传输，接收目录 H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\receive",
+    "[21:52:48] v2 模块就绪：动作能力 4 项已注册；接收目录 H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\receive",
+    "[21:52:59] [剪贴板] 已接收来自 phone-android 的文本（24 字）",
+    "[21:53:00] [传输] 已接收 真实联调手机截图.png（55 字节）→ H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\receive\\真实联调手机截图.png",
+    "[21:53:00] [通知] 已发送（method=log）：真实通知镜像-1792936380243 · 来自真实中枢的通知",
+    "[21:53:00] 收到 stdin，准备优雅退出…",
+    "[21:53:00] v2 模块已停止",
+    "[21:53:00] 节点已停止（已执行任务 0 个，幂等状态保存在 H:\\minzzj文件\\技术部\\项目\\官方\\榫卯\\_internal\\v2-desktop-data\\agent\\node-state.json）"
+  ],
+  "hubStop": {
+    "exitCode": 0,
+    "systemStopped": true,
+    "eventCount": 15
+  }
+}
+```
+
+中枢日志：`node-agent/__tests__/evidence/hub.log`；节点日志：`node-agent/__tests__/evidence/agent-real.log`

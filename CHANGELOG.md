@@ -2,6 +2,30 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-25
+
+### Added
+
+- **Consumer super terminal (`#/super`, v2.1 P0)**: one small app to drive every device and program at home. New default home with device cards, program tiles, one-line AI input, voice button (browser speech recognition with text fallback), and a "handoff" panel. Verified in a real browser: 14/14 checks, 0 JS errors (`docs/测试证据/v2.1-超级终端-验收-20261025.md`).
+- **AI intent + assistant** (`server/lib/super/`): natural-language request → plan → real task dispatch. DeepSeek-backed when `DEEPSEEK_API_KEY` is set; deterministic rule engine fallback that covers open-app / open-URL / show-media / print / volume / handoff / "coming home". Real desktop effects verified: `app.launch` opened Notepad and WeChat on the desktop node (PID reported), `handoff.show` opened the handoff page on the desktop.
+- **Phone-to-desktop handoff**: `POST /api/v2/super/handoff` + `super.handoff` ledger event; `/m` mobile page has a "甩到电脑" button and a tilt gesture (`deviceorientation`, >25° quick tilt, 1s debounce) that pushes the current page to the desktop; desktop `#/handoff` page shows it with a slide-in animation.
+- **Desktop action capabilities** (`node-agent/`): `app.launch`, `url.open`, `media.show`, `handoff.show`, `app.list` with built-in program map (WeChat / Chrome / Edge / Notepad / Explorer / Calculator / Photos / terminal / music…), injected via `TENON_V2=1`.
+- **Android 0.2.0** (`android/`): tilt-to-handoff via accelerometer with configurable threshold, `SpeechRecognizer` voice commands, shortcut tiles, settings page. APK built: `android/dist/tenon-android-0.2.0-debug.apk`, 1,232,442 B, SHA-256 `439E616D44800EE0FF279F3C3D391226E3747E8DC9A8613EAE26A9359AA7F67B` (debug-signed; real-device test pending).
+- **v2-P0 foundation** (previously developed, now documented and accepted): link layer (UDP discovery, 6-digit/QR pairing incl. Android anonymous pairing, resumable chunked transfer with SHA-256, clipboard/notification relay, 22 routes), asset centre (hash dedupe, sharp thumbnails, tesseract OCR, search, lineage, basket; 500 images indexed in ~6s), things/scenes, enterprise control plane (optional plugin), 5 new web pages + mobile pages. Isolated-instance acceptance: 9/9 checks, 55 routes (`docs/测试证据/v2-acceptance-2026-10-25-14-32-08.json`).
+- **Docs**: consumer vision v2.1, product definition v2 (enterprise moved to optional appendix), v2.1 acceptance evidence, updated delivery list and README roadmap in both languages.
+
+### Changed
+
+- Mobile/desktop navigation and copy re-oriented to consumer language (家 / 我的设备 / 程序), with the enterprise console kept under "更多" as an optional plugin.
+- `scripts/启动.cmd` now starts hub and node with `TENON_V2=1`; `npm run test:v2` and `npm run test:modules` added.
+
+### Fixed
+
+- Link module routes were unreachable through the v2 gateway (path-normalisation mismatch) — fixed in `server/lib/v2/index.js`.
+- `/api/v2/link/*` writes no longer blocked by the operator-token gate before the link module's own auth (peer tokens / anonymous QR pairing), while every other v2 module still requires the operator token.
+- Node classification in `server/lib/super/catalog.js` picked "printer" for a PC that had `printer.mock`; computer capabilities now win, so `app.launch` resolves to the desktop.
+- `state.js` snapshot made defensive for partial states; v2 event branches added (`link.*`, `transfer.*`, `clipboard.shared`, `notification.relayed`, `asset.*`, `basket.updated`, `scene.*`, `org.*`/`enterprise.*`, `super.*`).
+
 ## [Unreleased]
 
 ### Added

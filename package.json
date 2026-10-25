@@ -1,7 +1,7 @@
 {
   "name": "tenon",
-  "version": "0.1.0",
-  "description": "Tenon (榫卯) — a self-hostable hub that connects devices, software and AI into one auditable task chain",
+  "version": "0.2.0",
+  "description": "Tenon (榫卯) — a consumer super terminal: one small app to drive every device and program at home, by voice/AI, with phone-to-desktop handoff and an auditable ledger",
   "type": "module",
   "private": true,
   "license": "CC-BY-NC-SA-4.0",
@@ -11,18 +11,26 @@
   "scripts": {
     "start": "node server/start.js",
     "test": "node --test \"test/unit/*.test.js\"",
-    "test:e2e": "node test/e2e/run-real-browser.js"
+    "test:e2e": "node test/e2e/run-real-browser.js",
+    "test:v2": "node scripts/verify-v2.js",
+    "e2e": "node test/e2e/run-real-browser.js",
+    "test:modules": "node --test \"server/lib/link/__tests__/link.test.mjs\" \"server/lib/assets/__tests__/assets.test.mjs\" \"server/lib/things/__tests__/things.test.mjs\" \"server/lib/enterprise/__tests__/enterprise.test.mjs\" \"server/lib/super/__tests__/super.test.mjs\""
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/minzzj/tenon.git"
   },
   "keywords": [
-    "local-first",
+    "super-terminal",
     "device-hub",
-    "task-ledger",
+    "voice-assistant",
+    "handoff",
+    "local-first",
     "audit",
-    "self-hosted",
     "ai"
-  ]
+  ],
+  "dependencies": {
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0"
+  }
 }

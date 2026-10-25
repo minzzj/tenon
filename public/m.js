@@ -453,6 +453,125 @@
     });
   }
 
+
+  /* ---------- 超级终端：甩到电脑 / 倾斜手势 / 语音 ---------- */
+  function mSetResult(text, kind) {
+    var el = $('#m-handoff-result');
+    if (el) el.textContent = text;
+    if (kind) toast(text, kind, 4600);
+  }
+  function mHandoff(trigger) {
+    if (isOffline()) { mSetResult('离线只读：连上中枢才能甩过去', 'warn'); return; }
+    var tok = getToken();
+    if (!tok) {
+      showAuthPanel('甩到电脑需要写操作令牌');
+      mSetResult('先保存操作令牌，再甩到电脑', 'warn');
+      return;
+    }
+    mSetResult('正在甩到电脑…');
+    api('/api/v2/super/handoff', { method: 'POST', body: { kind: 'page', url: location.href, from: 'phone', trigger: trigger || 'button' }, token: tok }).then(function (res) {
+      if (res.status === 401) {
+        setToken('');
+        showAuthPanel('令牌失效，请重新输入');
+        mSetResult('令牌失效，请重新输入', 'bad');
+        return;
+      }
+      if (res.ok && res.data && res.data.ok !== false) {
+        mSetResult('已甩到电脑：' + (res.data.handoffId || '已送达'), 'ok');
+        toast('电脑上会滑入这条内容', 'ok');
+      } else if (res.status === 404) {
+        mSetResult('超级终端服务还没接上（/api/v2/super/handoff 404）；页面已记下，后端就绪后一甩即到', 'warn');
+      } else {
+        mSetResult('甩送失败：' + ((res.data && (res.data.error || res.data.message)) || ('HTTP ' + res.status)), 'bad');
+      }
+    });
+  }
+  var mTilt = { prev: null, prevAt: 0, lastTrigger: 0, enabled: false };
+  function mTiltStatus(text) {
+    var el = $('#m-tilt-status');
+    if (el) el.textContent = text;
+  }
+  function mEnableTilt() {
+    var doEnable = function (ok) {
+      if (!ok) { mTiltStatus('倾斜权限未开启：仍可点「甩到电脑」按钮'); toast('倾斜权限未开启，仍可点「甩到电脑」', 'warn'); return; }
+      if (mTilt.enabled) return;
+      mTilt.enabled = true;
+      mTiltStatus('倾斜手势已开启：把手机往前一倾就甩到电脑');
+      toast('倾斜手势已开启', 'ok');
+    };
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(function (r) { doEnable(r === 'granted'); }).catch(function () { doEnable(false); });
+      } else if (typeof window.addEventListener === 'function') {
+        doEnable(true);
+      } else doEnable(false);
+    } catch (_) { doEnable(false); }
+  }
+  function mOnTilt(ev) {
+    if (ev && (ev.beta === null || ev.beta === undefined)) return;
+    var now = Date.now();
+    if (mTilt.prev === null) { mTilt.prev = ev.beta; mTilt.prevAt = now; return; }
+    var delta = Math.abs(ev.beta - mTilt.prev);
+    var dt = now - mTilt.prevAt;
+    if (delta > 25 && dt < 700 && now - mTilt.lastTrigger > 1000) {
+      mTilt.lastTrigger = now;
+      mTilt.prev = ev.beta;
+      mTilt.prevAt = now;
+      mSetResult('正在甩到电脑…');
+      mHandoff('tilt');
+      return;
+    }
+    if (dt > 120) { mTilt.prev = ev.beta; mTilt.prevAt = now; }
+  }
+  function mVoice() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      toast('浏览器不支持麦克风，已切文字输入', 'warn', 4800);
+      var i0 = $('#m-input');
+      if (i0) i0.focus();
+      return;
+    }
+    try {
+      var rec = new SR();
+      rec.lang = 'zh-CN';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = function (e) {
+        var t = '';
+        try { t = e.results[0][0].transcript || ''; } catch (_) {}
+        var input = $('#m-input');
+        if (input && t) input.value = t;
+        toast(t ? ('听到：' + t) : '没听清，已切文字输入', t ? 'ok' : 'warn');
+      };
+      rec.onerror = function (e) {
+        var why = e && e.error;
+        toast(why === 'not-allowed' ? '麦克风权限被拒绝，已切文字输入' : ('语音识别不可用（' + (why || '未知') + '），已切文字输入'), 'warn', 4800);
+        var i2 = $('#m-input');
+        if (i2) i2.focus();
+      };
+      rec.start();
+      toast('正在听…请说话', 'ok');
+    } catch (_) {
+      toast('语音识别启动失败，已切文字输入', 'warn');
+      var i3 = $('#m-input');
+      if (i3) i3.focus();
+    }
+  }
+  function mSuperInit() {
+    var tiltBtn = $('#m-tilt-btn');
+    if (tiltBtn) tiltBtn.addEventListener('click', function () {
+      mEnableTilt();
+      if (!mTilt.enabled && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS 需要用户手势授权，授权回调里再触发一次
+      }
+      if (!mTilt.enabled) mSetResult('正在甩到电脑…');
+      mHandoff('button');
+    });
+    var voiceBtn = $('#m-voice');
+    if (voiceBtn) voiceBtn.addEventListener('click', mVoice);
+    try { window.addEventListener('deviceorientation', mOnTilt); } catch (_) {}
+  }
+
   /* ---------- 初始化 ---------- */
   function init() {
     var sendBtn = $('#m-send');
@@ -473,6 +592,7 @@
         if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); send(); }
       });
     }
+    mSuperInit();
     if (getToken()) {
       var panel = $('#m-auth');
       if (panel) panel.classList.add('hidden');

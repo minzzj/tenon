@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070B14">
+  <meta name="description" content="榫卯 Tenon · 手机互联：配对、传文件、剪贴板、通知">
+  <title>榫卯 Tenon · 手机互联</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style-v2.css">
+</head>
+<body class="m-body" data-page="link">
+  <div class="v2-m-shell">
+    <header class="m-head">
+      <div class="m-brand">
+        <span class="brand-mark" aria-hidden="true">榫</span>
+        <span>互联<small>TENON · 手机</small></span>
+      </div>
+      <div class="m-header-right">
+        <a class="m-link" href="/m">← 返回手机页</a>
+        <span class="m-asof" id="m-asof">数据截至 --:--</span>
+      </div>
+    </header>
+
+    <div class="offline-banner hidden" id="m-offline-banner-v2" data-testid="m-offline-banner">
+      <strong>离线</strong><span id="m-offline-text-v2">数据截至 --:-- · 无法连接中枢，显示本机缓存（只读）</span>
+    </div>
+
+    <div id="m-degrade" style="margin-top:12px"></div>
+
+    <section class="m-card">
+      <h2>配对 <span class="count">同一 WiFi</span></h2>
+      <div class="m-row" style="align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">
+          <div class="tiny dim">本机配对码（在电脑上输入，或电脑扫码）</div>
+          <div class="pair-code" id="m-pair-code" data-testid="m-link-code" style="font-size:22px">----</div>
+          <div class="v2-m-note">配对码由中枢 <code>GET /api/v2/link/peers</code> 下发；接口未就绪时显示临时码，仍需后端支持才能完成配对。</div>
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:10px">
+        <div class="field" style="flex:1">
+          <input type="text" id="m-link-code-input" data-testid="m-link-code-input" placeholder="电脑上显示的 6 位配对码" inputmode="numeric" maxlength="8">
+        </div>
+        <button class="btn btn-primary" data-mv2="pair" data-testid="m-btn-pair" data-mv2-write="1">配对</button>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>已发现设备 <span class="count mono" id="m-peer-count"></span></h2>
+      <div class="m-receipts" id="m-peers" data-testid="m-peer-list">
+        <div class="m-receipt"><div class="sum muted">未发现设备：同一 WiFi 下电脑会出现在这里。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>文件传输 <span class="count">分块 + SHA-256</span></h2>
+      <div class="form-row">
+        <div class="field" style="flex:1">
+          <label style="font-size:11px;color:var(--muted)">选择要发送到电脑的文件</label>
+          <input type="file" id="m-file-input" data-testid="m-file-input" multiple>
+        </div>
+        <button class="btn btn-primary" data-mv2="upload" data-testid="m-btn-upload" data-mv2-write="1">发送</button>
+      </div>
+      <div class="m-receipts" id="m-transfers" data-testid="m-transfer-list" style="margin-top:10px">
+        <div class="m-receipt"><div class="sum muted">还没有传输记录。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>剪贴板互传 <span class="count">手机复制 → 电脑粘贴</span></h2>
+      <div class="field">
+        <textarea id="m-clipboard-input" data-testid="m-clipboard-input" rows="2" placeholder="复制一段文本或链接，发给电脑"></textarea>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn btn-primary" data-mv2="clipboard-send" data-testid="m-btn-clipboard-send" data-mv2-write="1">发送到电脑</button>
+      </div>
+      <div class="m-receipt" id="m-clipboard-latest" data-testid="m-clipboard-latest" style="margin-top:10px">
+        <div class="tiny dim">暂无接收记录</div>
+      </div>
+      <h2 style="margin-top:14px">本会话记录 <span class="count mono"></span></h2>
+      <div class="m-receipts" id="m-clipboard-history" data-testid="m-clipboard-history">
+        <div class="tiny dim">本会话发送 / 接收的剪贴板记录会出现在这里。</div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>通知镜像 <span class="count mono"></span></h2>
+      <div class="m-receipts" id="m-notifications" data-testid="m-notification-list">
+        <div class="tiny dim">手机通知镜像会显示在这里（notification.relayed）。</div>
+      </div>
+    </section>
+
+    <section class="m-card hidden" id="m-token-row">
+      <h2>输入操作令牌</h2>
+      <div class="m-sec-note">写操作（配对 / 传文件 / 剪贴板）需要令牌；令牌只存在本机浏览器。</div>
+      <div class="form-row" style="margin-top:8px">
+        <div class="field" style="flex:1"><input type="password" id="m-token-input" data-testid="m-token-input" placeholder="operatorToken" autocomplete="off" spellcheck="false"></div>
+        <button class="btn btn-primary" data-mv2="token-save" data-testid="m-token-save">保存</button>
+      </div>
+    </section>
+
+    <div class="m-card" style="text-align:center">
+      <a class="m-link" href="/m/assets">去素材库 / 中转站 →</a>
+    </div>
+
+    <div class="m-foot">
+      榫卯 Tenon v2-P0 · 互联<br>
+      配对 ≤10s · 只发摘要与链接，正文不出内网 · 默认零外联
+    </div>
+  </div>
+  <script src="/m-v2.js"></script>
+</body>
+</html>

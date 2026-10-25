@@ -113,8 +113,8 @@ function lanUrls(p) {
 }
 
 const ai = new AI();
-const { httpServer, kick } = createHttpServer({
-  root, ledger, state: replay(ledger.events), ai, secret, mode, readOnly, version,
+const { httpServer, kick, v2 } = await createHttpServer({
+  root, ledger, state: replay(ledger.events), ai, secret, mode, readOnly, version, dataDir,
   onShutdown: () => shutdown(),
 });
 
@@ -158,6 +158,8 @@ server = httpServer.listen(port, host, () => {
   }
   console.log('操作令牌: ' + secret.operatorToken);
   console.log('节点令牌文件: ' + secretsFile);
+  const v2mods = v2 && v2.services ? Object.keys(v2.services) : [];
+  console.log('v2 模块: ' + (v2mods.length ? v2mods.join(', ') : '（未实现，接口返回 503）') + (v2 && v2.mountErrors && v2.mountErrors.length ? ' | 待接入: ' + v2.mountErrors.join(', ') : ''));
   if (recovered) console.log('异常恢复: 缺失约 ' + Math.max(1, Math.round(gapMs / 60000)) + ' 分钟事件，任务未重复；在途任务已降级为待确认');
   kick();
 });

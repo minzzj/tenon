@@ -1,0 +1,69 @@
+{
+  "stamp": "2026-10-25 14:11:45",
+  "base": "http://127.0.0.1:7441",
+  "modules": [
+    "link",
+    "assets",
+    "things",
+    "enterprise"
+  ],
+  "routes": 55,
+  "passed": 9,
+  "failed": 0,
+  "checks": [
+    {
+      "id": "C0",
+      "name": "v2 模块全部挂载",
+      "pass": true,
+      "detail": "link, assets, things, enterprise routes=55"
+    },
+    {
+      "id": "C1",
+      "name": "连接层 info/peers/pair-qr",
+      "pass": true,
+      "detail": "deviceId=dev_87166a619d code=611966 qr=tenon://pair?host=127.0.0.1:…"
+    },
+    {
+      "id": "C2",
+      "name": "剪贴板写入/读取",
+      "pass": true,
+      "detail": "text=v2 clipboard 17929375061"
+    },
+    {
+      "id": "C3",
+      "name": "通知镜像事件",
+      "pass": true,
+      "detail": "WeChat/v2 验收通知"
+    },
+    {
+      "id": "C4",
+      "name": "素材入库/去重/搜索/缩略图/谱系",
+      "pass": true,
+      "detail": "total=2 sha256=27ff12b5bc27 thumb=4690B dup=checked"
+    },
+    {
+      "id": "C5",
+      "name": "超级中转站暂存",
+      "pass": true,
+      "detail": "basket={\"total\":1,\"staged\":1,\"taken\":0,\"file\":\"H:\\\\minzzj文件\\\\技术部\\\\项目\\\\官方\\\\榫卯\\\\data-v2-e"
+    },
+    {
+      "id": "C6",
+      "name": "场景创建/执行/备份落盘",
+      "pass": true,
+      "detail": "scene=scene_mvnwp5vwcdba2e15 files=1"
+    },
+    {
+      "id": "C7",
+      "name": "企业成员/策略/审批/审计导出",
+      "pass": true,
+      "detail": "users=2 retention=30"
+    },
+    {
+      "id": "C8",
+      "name": "v2 账本完整性/事件覆盖",
+      "pass": true,
+      "detail": "events=13 types=6"
+    }
+  ]
+}

@@ -6,7 +6,10 @@
   <meta name="color-scheme" content="dark">
   <meta name="description" content="榫卯 Tenon · 手机页：说一句话交给电脑">
   <title>榫卯 Tenon · 手机</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#070B14">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-v2.css">
 </head>
 <body class="m-body">
   <div class="m-shell">
@@ -49,6 +52,26 @@
         <span class="m-hint" id="m-draft-hint">确认后才会派发；拒绝也记账。</span>
         <button class="btn btn-sm" id="m-reject" data-testid="m-reject">拒绝</button>
         <button class="btn btn-primary btn-sm" id="m-confirm" data-testid="m-confirm">确认执行</button>
+      </div>
+    </section>
+
+    <section class="m-card super-m-card">
+      <h2>超级终端 <span class="count">手机一倾，内容就到电脑</span></h2>
+      <button class="m-tilt-btn" id="m-tilt-btn" data-testid="m-tilt-btn">📱 甩到电脑</button>
+      <div class="m-tilt-status" id="m-tilt-status" data-testid="m-tilt-status">点按钮开启倾斜手势；把手机往前一倾，当前页面就滑到电脑上。</div>
+      <div class="m-row" style="margin-top:10px">
+        <button class="btn" id="m-voice" data-testid="m-voice">🎤 按住说话</button>
+        <span class="m-hint" id="m-handoff-result" data-testid="m-handoff-result">语音识别后会填到输入框，再点「交给电脑」。</span>
+      </div>
+      <div class="v2-m-note">支持麦克风/倾斜的浏览器可直接用；不支持时自动退回文字与按钮，不假装可用。</div>
+    </section>
+
+    <section class="m-card">
+      <h2>v2 · 互联 / 素材 / 中转站 <span class="count mono">新</span></h2>
+      <div class="m-v2-entries">
+        <a class="m-v2-entry" href="/m/link" data-testid="m-entry-link"><span class="ico" aria-hidden="true">⇄</span><span><b>互联</b><span class="sub">配对码 · 传文件 · 剪贴板 · 通知</span></span><span class="arrow" aria-hidden="true">→</span></a>
+        <a class="m-v2-entry" href="/m/assets" data-testid="m-entry-assets"><span class="ico" aria-hidden="true">▦</span><span><b>素材库</b><span class="sub">搜索 · OCR · 缩略图 · 浏览</span></span><span class="arrow" aria-hidden="true">→</span></a>
+        <a class="m-v2-entry" href="/m/assets#basket" data-testid="m-entry-basket"><span class="ico" aria-hidden="true">⇥</span><span><b>中转站</b><span class="sub">手机暂存 · 电脑一次取用</span></span><span class="arrow" aria-hidden="true">→</span></a>
       </div>
     </section>
 

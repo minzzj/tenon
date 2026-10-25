@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">榫卯 Tenon</string>
+    <string name="title_settings">设置 · 榫卯 Tenon</string>
+    <string name="title_assets">素材库 · 榫卯 Tenon</string>
+    <string name="share_label">分享到榫卯</string>
+    <string name="notification_listener_label">榫卯通知镜像</string>
+    <string name="notif_channel_name">榫卯同步</string>
+    <string name="notif_channel_desc">剪贴板同步与连接状态</string>
+</resources>

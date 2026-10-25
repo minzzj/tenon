@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070B14">
+  <meta name="description" content="榫卯 Tenon · 手机素材库与中转站">
+  <title>榫卯 Tenon · 手机素材</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style-v2.css">
+</head>
+<body class="m-body" data-page="assets">
+  <div class="v2-m-shell">
+    <header class="m-head">
+      <div class="m-brand">
+        <span class="brand-mark" aria-hidden="true">榫</span>
+        <span>素材<small>TENON · 手机</small></span>
+      </div>
+      <div class="m-header-right">
+        <a class="m-link" href="/m">← 返回手机页</a>
+        <span class="m-asof" id="m-asof">数据截至 --:--</span>
+      </div>
+    </header>
+
+    <div class="offline-banner hidden" id="m-offline-banner-v2" data-testid="m-offline-banner">
+      <strong>离线</strong><span id="m-offline-text-v2">数据截至 --:-- · 无法连接中枢，显示本机缓存（只读）</span>
+    </div>
+
+    <div id="m-degrade" style="margin-top:12px"></div>
+
+    <section class="m-card">
+      <h2>搜索素材 <span class="count mono" id="m-asset-count">0</span></h2>
+      <div class="field">
+        <input type="text" id="m-asset-search" data-testid="m-asset-search" placeholder="文件名 / OCR 文本 / 标签">
+      </div>
+      <div class="form-row" style="margin-top:8px">
+        <div class="field" style="flex:1">
+          <select id="m-asset-filter-kind" data-testid="m-asset-filter-kind">
+            <option value="">全部类型</option>
+            <option value="image">图片</option>
+            <option value="video">视频</option>
+            <option value="audio">音频</option>
+            <option value="doc">文档</option>
+            <option value="pdf">PDF</option>
+          </select>
+        </div>
+        <button class="btn btn-sm" data-mv2="refresh" data-testid="m-btn-asset-refresh">刷新</button>
+      </div>
+      <div class="v2-m-grid" id="m-assets-grid" data-testid="m-assets-grid" style="margin-top:10px">
+        <div class="m-receipt" style="grid-column:1/-1"><div class="sum muted">暂无素材：手机分享/上传或电脑扫描入库后出现在这里。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>素材详情</h2>
+      <div id="m-asset-detail" data-testid="m-asset-detail-wrap">
+        <div class="m-receipt"><div class="sum muted">点上面素材卡查看详情，可加入中转站。</div></div>
+      </div>
+    </section>
+
+    <section class="m-card" id="basket">
+      <h2>中转站 <span class="count mono" id="m-basket-count">0</span></h2>
+      <div class="m-receipts" id="m-basket" data-testid="m-basket-list">
+        <div class="tiny dim">中转站是空的：在「素材」页选素材加入。</div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label style="font-size:11px;color:var(--muted)">取用目标设备</label>
+        <select id="m-basket-target" data-testid="m-basket-target">
+          <option value="">选择目标设备（电脑等）</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-primary" data-mv2="basket-take" data-testid="m-btn-basket-take" data-mv2-write="1">一次取用</button>
+        <button class="btn btn-sm" data-mv2="basket-clear" data-testid="m-btn-basket-clear">清空</button>
+      </div>
+      <div class="v2-m-note">投递走 <code>POST /api/v2/assets/basket</code>；列表接口契约未定义时，本机暂存用 localStorage 记录。</div>
+    </section>
+
+    <section class="m-card hidden" id="m-token-row">
+      <h2>输入操作令牌</h2>
+      <div class="m-sec-note">写操作（加入中转站 / 取用）需要令牌；令牌只存在本机浏览器。</div>
+      <div class="form-row" style="margin-top:8px">
+        <div class="field" style="flex:1"><input type="password" id="m-token-input" data-testid="m-token-input" placeholder="operatorToken" autocomplete="off" spellcheck="false"></div>
+        <button class="btn btn-primary" data-mv2="token-save" data-testid="m-token-save">保存</button>
+      </div>
+    </section>
+
+    <div class="m-card" style="text-align:center">
+      <a class="m-link" href="/m/link">去互联 / 配对 →</a>
+    </div>
+
+    <div class="m-foot">
+      榫卯 Tenon v2-P0 · 素材库与中转站<br>
+      自动归集 · 哈希去重 · OCR 搜索 · 跨设备流转 · 数据在本机中枢
+    </div>
+  </div>
+  <script src="/m-v2.js"></script>
+</body>
+</html>

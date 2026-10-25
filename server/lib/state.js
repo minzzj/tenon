@@ -14,6 +14,11 @@ export function replay(events) {
     meta: { mode: 'solo', domain: 'studio', domainLabel: '工作室数据域', startedAt: null },
     loops: [],
     drills: [],
+    link: { peers: {}, trusted: {}, transfers: {}, clipboard: null, notifications: [] },
+    assets: { items: {}, shares: [], basket: [] },
+    scenes: { items: {}, runs: [] },
+    org: { users: {}, policy: {}, approvals: [], denied: [] },
+    super: { asks: [], handoffs: [] },
     seq: 0,
     dataAsOf: null,
     startedAt: null,
@@ -386,6 +391,109 @@ function apply(ev, s) {
       s.meta.lastRoleError = { at: ev.at, need: d.need, message: d.message };
       break;
     }
+    case 'link.peer.seen': {
+      s.link.peers[d.deviceId] = { ...d, seenAt: ev.at };
+      break;
+    }
+    case 'link.paired': {
+      s.link.trusted[d.peerId] = { peerId: d.peerId, name: d.name, platform: d.platform, fingerprint: d.fingerprint, by: d.by || '你', pairedAt: ev.at };
+      break;
+    }
+    case 'link.revoked': {
+      delete s.link.trusted[d.peerId];
+      break;
+    }
+    case 'transfer.started': {
+      s.link.transfers[d.transferId] = { id: d.transferId, transferId: d.transferId, peerId: d.peerId, direction: d.direction, files: d.files || [], totalBytes: d.totalBytes || 0, status: 'running', startedAt: ev.at };
+      break;
+    }
+    case 'transfer.completed': {
+      const t = s.link.transfers[d.transferId] || { id: d.transferId, transferId: d.transferId };
+      Object.assign(t, { status: 'done', files: d.files || t.files, bytes: d.bytes || 0, ms: d.ms || 0, speedBps: d.speedBps || 0, completedAt: ev.at });
+      s.link.transfers[d.transferId] = t;
+      break;
+    }
+    case 'transfer.failed': {
+      const tf = s.link.transfers[d.transferId] || { id: d.transferId, transferId: d.transferId };
+      Object.assign(tf, { status: 'failed', reason: d.reason || '', failedAt: ev.at });
+      s.link.transfers[d.transferId] = tf;
+      break;
+    }
+    case 'clipboard.shared': {
+      s.link.clipboard = { at: ev.at, from: d.from || '', to: d.to || '', kind: d.kind || 'text', preview: d.preview || '', text: d.text || '' };
+      break;
+    }
+    case 'notification.relayed': {
+      s.link.notifications.push({ at: ev.at, from: d.from || '', app: d.app || '', title: d.title || '', text: d.text || '' });
+      if (s.link.notifications.length > 100) s.link.notifications = s.link.notifications.slice(-100);
+      break;
+    }
+    case 'asset.ingested': {
+      s.assets.items[d.assetId] = { assetId: d.assetId, sha256: d.sha256, kind: d.kind, name: d.name, size: d.size, source: d.source || null, tags: [], ocrText: d.ocrText || '', at: ev.at };
+      break;
+    }
+    case 'asset.tagged': {
+      const a = s.assets.items[d.assetId];
+      if (a) a.tags = [...new Set([...(a.tags || []), ...(d.tags || [])])];
+      break;
+    }
+    case 'asset.shared': {
+      s.assets.shares.push({ at: ev.at, assetId: d.assetId, to: d.to, kind: d.kind || 'link' });
+      break;
+    }
+    case 'asset.removed': {
+      const ar = s.assets.items[d.assetId];
+      if (ar) { ar.removed = true; ar.removedAt = ev.at; }
+      break;
+    }
+    case 'basket.updated': {
+      s.assets.basket = Array.isArray(d.items) ? d.items : [];
+      break;
+    }
+    case 'scene.defined': {
+      s.scenes.items[d.sceneId] = { sceneId: d.sceneId, name: d.name, steps: d.steps || [], at: ev.at };
+      break;
+    }
+    case 'scene.ran': {
+      s.scenes.runs.push({ at: ev.at, sceneId: d.sceneId, by: d.by || '你', ok: d.ok !== false, result: d.result || '' });
+      if (s.scenes.runs.length > 100) s.scenes.runs = s.scenes.runs.slice(-100);
+      break;
+    }
+    case 'org.user.changed': {
+      s.org.users[d.userId] = { userId: d.userId, name: d.name || d.userId, role: d.role || 'member', at: ev.at };
+      break;
+    }
+    case 'super.asked': {
+      s.super.asks.push({ at: ev.at, text: d.text || '', reply: d.reply || '', plan: d.plan || [], result: d.result || null, needsConfirm: !!d.needsConfirm });
+      if (s.super.asks.length > 100) s.super.asks = s.super.asks.slice(-100);
+      break;
+    }
+    case 'super.handoff': {
+      s.super.handoffs.push({ at: ev.at, handoffId: d.handoffId || '', kind: d.kind || 'page', payload: d.payload || d, from: d.fromDevice || '', to: d.toDevice || 'desktop', text: d.text || '', url: d.url || '', assetId: d.assetId || '', dispatched: !!d.dispatched });
+      if (s.super.handoffs.length > 100) s.super.handoffs = s.super.handoffs.slice(-100);
+      break;
+    }
+    case 'enterprise.role.changed': {
+      s.org.users[d.userId] = { userId: d.userId, name: d.name || (s.org.users[d.userId] && s.org.users[d.userId].name) || d.userId, role: d.role || 'member', at: ev.at };
+      break;
+    }
+    case 'org.policy.changed': {
+      Object.assign(s.org.policy, d.policy || {});
+      break;
+    }
+    case 'approval.requested': {
+      s.org.approvals.push({ at: ev.at, requestId: d.requestId, action: d.action, by: d.by || '', status: 'pending' });
+      break;
+    }
+    case 'approval.decided': {
+      const ap = s.org.approvals.find((x) => x.requestId === d.requestId);
+      if (ap) { ap.status = d.ok ? 'approved' : 'rejected'; ap.decidedBy = d.by; ap.decidedAt = ev.at; }
+      break;
+    }
+    case 'enterprise.denied': {
+      s.org.denied.push({ at: ev.at, userId: d.userId || '', action: d.action || '', reason: d.reason || '' });
+      break;
+    }
     default:
       break;
   }
@@ -458,6 +566,10 @@ export function impact(state, deviceId) {
 }
 
 export function snapshot(state, extra = {}) {
+  const link = state.link || { peers: {}, trusted: {}, transfers: {}, clipboard: null, notifications: [] };
+  const assets = state.assets || { items: {}, shares: [], basket: [] };
+  const scenes = state.scenes || { items: {}, runs: [] };
+  const org = state.org || { users: {}, policy: {}, approvals: [], denied: [] };
   return {
     mode: state.meta.mode,
     domainLabel: state.meta.domainLabel,
@@ -472,6 +584,32 @@ export function snapshot(state, extra = {}) {
     loops: state.loops,
     audit: state.audit,
     impacts: state.impacts.slice(-5).reverse(),
+    v2: {
+      link: {
+        peers: Object.values(link.peers || {}),
+        trusted: Object.values(link.trusted || {}),
+        transfers: Object.values(link.transfers || {}).slice(-20).reverse(),
+        clipboard: link.clipboard,
+        notifications: (link.notifications || []).slice(-20).reverse(),
+      },
+      assets: {
+        count: Object.values(assets.items || {}).filter((a) => !a.removed).length,
+        recent: Object.values(assets.items || {}).filter((a) => !a.removed).slice(-12).reverse(),
+        shares: (assets.shares || []).slice(-10).reverse(),
+        basket: assets.basket || [],
+      },
+      scenes: { items: Object.values(scenes.items || {}), runs: (scenes.runs || []).slice(-10).reverse() },
+      super: {
+        asks: (state.super && state.super.asks ? state.super.asks : []).slice(-10).reverse(),
+        handoffs: (state.super && state.super.handoffs ? state.super.handoffs : []).slice(-10).reverse(),
+      },
+      org: {
+        users: Object.values(org.users || {}),
+        policy: org.policy || {},
+        approvals: (org.approvals || []).slice(-20).reverse(),
+        denied: (org.denied || []).slice(-20).reverse(),
+      },
+    },
     meta: state.meta,
     seq: state.seq,
     ...extra,

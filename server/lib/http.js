@@ -9,6 +9,7 @@ import {
 } from './tasks.js';
 import { createChannels } from './channels.js';
 import { runCheckup } from './checkup.js';
+import { createV2 } from './v2/index.js';
 
 const HUB_CAPS = new Set(['channel.notify', 'llm.summarize']);
 
@@ -19,6 +20,7 @@ function readOnlyAllowed(method, pathname) {
   if (method === 'GET' && READ_ONLY_GET.has(pathname)) return true;
   if (method === 'GET' && /^\/api\/checkup\/[^/]+\/export$/.test(pathname)) return true;
   if (method === 'POST' && READ_ONLY_POST.has(pathname)) return true;
+  if (method === 'GET' && pathname.startsWith('/api/v2/')) return true;
   return false;
 }
 
@@ -83,7 +85,7 @@ function readBody(req, limit = 1048576) {
   });
 }
 
-export function createHttpServer({ root, ledger, state, ai, secret, mode, readOnly, version = '0.1.0', onShutdown }) {
+export async function createHttpServer({ root, ledger, state, ai, secret, mode, readOnly, version = '0.1.0', onShutdown, dataDir }) {
   const channels = createChannels({ ledger, state });
   const clients = new Set();
   const scheduled = new Set();
@@ -168,6 +170,7 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
   }
 
   const authed = (req) => tokenOf(req) === secret.operatorToken;
+  const v2 = await createV2({ root, ledger, state, ai, secret, readOnly, dataDir: dataDir || path.join(root, 'data'), authed });
 
   function serveFile(res, rel) {
     const full = path.resolve(pub, rel);
@@ -364,6 +367,14 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
       res.setHeader('Set-Cookie', 'tenon_token=; Path=/; Max-Age=0');
       return json(res, 200, { ok: true });
     }
+    if (pathname.startsWith('/api/v2/')) {
+      if (readOnly && method !== 'GET') return json(res, 423, { error: '另一窗口为只读' });
+      // link 模块内部自带鉴权（operatorToken / nodeToken / 配对后的 peerToken，含匿名凭配对码配对），
+      // 其余 v2 模块仍由这里统一要求 operator token。
+      const isLinkModule = pathname.startsWith('/api/v2/link/');
+      if (method !== 'GET' && !isLinkModule && !authed(req)) return json(res, 401, { error: '需要登录令牌' });
+      return v2.handle(req, res, u, pathname);
+    }
     if (pathname === '/api/shutdown' && method === 'POST') {
       // P2 修复：优雅停机——由 start.js 的 shutdown 写 system.stopped、关服务、释放 hub.lock；
       // 不直接 process.exit，避免正常停机被下次启动误判为崩溃恢复。
@@ -492,6 +503,8 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
       if (pathname.startsWith('/api/')) return await handleApi(req, res, u, pathname);
       if (pathname === '/' || pathname === '/index.html') return serveFile(res, 'index.html');
       if (pathname === '/m' || pathname === '/m/') return serveFile(res, 'm.html');
+      if (pathname === '/m/link') return serveFile(res, 'm-link.html');
+      if (pathname === '/m/assets') return serveFile(res, 'm-assets.html');
       if (pathname === '/login') return serveFile(res, 'login.html');
       if (pathname.startsWith('/r/')) return receiptPage(req, res, pathname.slice(3));
       return serveFile(res, pathname.replace(/^\/+/, ''));
@@ -523,5 +536,5 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
     }
   }
 
-  return { httpServer, kick, channels };
+  return { httpServer, kick, channels, v2 };
 }

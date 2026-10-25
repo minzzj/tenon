@@ -1,0 +1,116 @@
+{
+  "title": "v2.1 消费级超级终端 P0 · 本地验收",
+  "date": "2026-10-25 22:35 (Asia/Shanghai)",
+  "environment": {
+    "hub": "http://127.0.0.1:7410 (Windows, 0.0.0.0/LAN, data/)",
+    "node_agent": "node-agent v2.1 with TENON_V2=1 (app.launch/url.open/media.show/handoff.show/app.list)",
+    "browser": "real Chrome via Playwright (headless), 1440x900 desktop + 430x860 mobile",
+    "ai": "rule engine fallback (DEEPSEEK_API_KEY not set in this shell)",
+    "real_device": "Android phone NOT attached (adb devices empty); APK built only"
+  },
+  "results": {
+    "unit_tests_v01": "146/146 pass",
+    "v2_module_tests": "65/65 pass (link13/assets13/things9/enterprise17/super13)",
+    "v1_real_browser_e2e": "9/9 pass",
+    "v2_api_acceptance": "9/9 pass (evidence docs/测试证据/v2-acceptance-2026-10-25-14-32-08.json)",
+    "v21_real_browser_ui": "14/14 pass, 0 JS errors",
+    "v21_ui_checks": [
+      {
+        "name": "打开 / 默认进入超级终端",
+        "ok": true,
+        "detail": "http://127.0.0.1:7410/#/super"
+      },
+      {
+        "name": "超级终端页面标题/文案",
+        "ok": true,
+        "detail": "榫 榫卯 TENON v2.1 ◈ 超级终端 Super ◉ 我的设备 Devices ▦ 素材库 Assets ⇄ 互联 Link ⚡ 场景 Scenes 更多 ▾ ↗ 流转接收 Handoff 01 总览 Overview 03 能力 "
+      },
+      {
+        "name": "设备卡片",
+        "ok": true,
+        "detail": "9"
+      },
+      {
+        "name": "程序 tiles",
+        "ok": true,
+        "detail": "8"
+      },
+      {
+        "name": "AI 输入框",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "name": "语音按钮",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "name": "一句话执行（程序 tile）",
+        "ok": true,
+        "detail": "榫 榫卯 TENON v2.1 ◈ 超级终端 Super ◉ 我的设备 Devices ▦ 素材库 Assets ⇄ 互联 Link ⚡ 场景 Scenes 更多 ▾ ↗ 流转接收 Handoff 01 总览 Overview 03 能力 Capabilities 04 任务 Tasks 05 消息 Messages "
+      },
+      {
+        "name": "语音/文字指令执行结果显示",
+        "ok": true,
+        "detail": "榫 榫卯 TENON v2.1 ◈ 超级终端 Super ◉ 我的设备 Devices ▦ 素材库 Assets ⇄ 互联 Link ⚡ 场景 Scenes 更多 ▾ ↗ 流转接收 Handoff 01 总览 Overview 03 能力 Capabilities 04 任务 Tasks 05 消息 Messages "
+      },
+      {
+        "name": "流转接收页渲染",
+        "ok": true,
+        "detail": "榫 榫卯 TENON v2.1 ◈ 超级终端 Super ◉ 我的设备 Devices ▦ 素材库 Assets ⇄ 互联 Link ⚡ 场景 Scenes 更多 ▾ ↗ 流转接收 Handoff 01 总览 Overview 03 能力 "
+      },
+      {
+        "name": "超级终端最近流转卡片",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "name": "手机页甩到电脑按钮",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "name": "甩屏反馈",
+        "ok": true,
+        "detail": "榫 榫卯 TENON · 手机 桌面端 数据截至 22:31 说一句话，交给电脑 可逆动作直接派发；不可逆动作停下来等你确认。 交给电脑 超级终端 手机一倾，内容就到电脑 📱 甩到电脑 倾斜手势已开启：把手机往前一倾就甩到电脑 🎤 按住说话 已甩到电脑：handoff_mvnxeaxte8658d9d 支持麦克风/倾斜"
+      },
+      {
+        "name": "倾斜手势触发（模拟 deviceorientation）",
+        "ok": true,
+        "detail": "已派发 beta 0→40 事件"
+      },
+      {
+        "name": "流转/问答已落账本",
+        "ok": true,
+        "detail": "handoffId count=18 asks key=1"
+      }
+    ],
+    "real_desktop_actions": [
+      "app.launch 打开记事本：task succeeded，步骤记录「已打开「记事本」窗口并确认运行（PID 13544）」",
+      "app.launch 打开微信：task succeeded，步骤记录「已打开「微信」窗口并已发送界面」",
+      "handoff.show：node-agent 在电脑浏览器打开 http://127.0.0.1:7410/#/handoff?kind=page&url=...（task succeeded）"
+    ],
+    "handoff": "POST /api/v2/super/handoff → dispatched:true，task 派发到 node-local；手机页倾斜手势模拟触发成功，handoff 事件入账本",
+    "ledger": "super.asked / super.handoff 事件 + 复用 task.*；/api/state v2.super.asks/handoffs 可见；账本完整性检查通过",
+    "android": "APK built: android/dist/tenon-android-0.2.0-debug.apk 1,232,442 B SHA-256 439E616D44800EE0FF279F3C3D391226E3747E8DC9A8613EAE26A9359AA7F67B (debug-signed, lint 0 errors); NOT installed/tested on a real device"
+  },
+  "screenshots": [
+    "v21-super-home.png",
+    "v21-super-ask.png",
+    "v21-super-ask2.png",
+    "v21-handoff.png",
+    "v21-m-home.png",
+    "v21-m-tilt.png",
+    "v2-assets.png",
+    "v2-basket.png",
+    "v2-enterprise.png"
+  ],
+  "honest_gaps": [
+    "Android real-device install/interaction not verified (no device attached)",
+    "voice input uses browser SpeechRecognition; in headless verification it degrades to text (as designed); real microphone not exercised",
+    "AI intent ran on rule-engine fallback because DEEPSEEK_API_KEY was not set in this shell; DeepSeek path covered by unit tests",
+    "home devices TV/speaker/light are simulated (simulated:true); only the Windows desktop and Android app are real devices",
+    "handoff from a real phone's physical tilt was simulated via injected deviceorientation events in headless Chrome; Android sensor code compiles but is not device-tested"
+  ]
+}

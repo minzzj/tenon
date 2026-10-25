@@ -5,26 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <meta name="description" content="榫卯 Tenon · 可自建的设备、软件与 AI 连接中枢控制台">
-  <title>榫卯 Tenon · 控制台</title>
+  <title>榫卯 Tenon · 超级终端</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-v2.css">
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <a class="brand" href="#/overview" aria-label="榫卯 Tenon 总览">
+      <a class="brand" href="#/super" aria-label="榫卯 Tenon 超级终端">
         <span class="brand-mark" aria-hidden="true">榫</span>
-        <span class="brand-text"><strong>榫卯</strong><small>TENON v0.1</small></span>
+        <span class="brand-text"><strong>榫卯</strong><small>TENON v2.1</small></span>
       </a>
       <nav class="nav" id="nav" aria-label="主导航">
-        <a href="#/overview" data-route="overview"><span class="nav-idx">01</span><span>总览</span><span class="nav-en">Overview</span></a>
-        <a href="#/devices" data-route="devices"><span class="nav-idx">02</span><span>设备</span><span class="nav-en">Devices</span></a>
-        <a href="#/capabilities" data-route="capabilities"><span class="nav-idx">03</span><span>能力</span><span class="nav-en">Capabilities</span></a>
-        <a href="#/tasks" data-route="tasks"><span class="nav-idx">04</span><span>任务</span><span class="nav-en">Tasks</span></a>
-        <a href="#/messages" data-route="messages"><span class="nav-idx">05</span><span>消息</span><span class="nav-en">Messages</span></a>
-        <a href="#/checkup" data-route="checkup"><span class="nav-idx">06</span><span>体检</span><span class="nav-en">Checkup</span></a>
-        <a href="#/audit" data-route="audit"><span class="nav-idx">07</span><span>审计</span><span class="nav-en">Audit</span></a>
-        <a href="#/drills" data-route="drills"><span class="nav-idx">08</span><span>演练</span><span class="nav-en">Drills</span></a>
-        <a href="#/settings" data-route="settings"><span class="nav-idx">09</span><span>设置</span><span class="nav-en">Settings</span></a>
+        <a href="#/super" data-route="super"><span class="nav-idx">◈</span><span>超级终端</span><span class="nav-en">Super</span></a>
+        <a href="#/devices" data-route="devices"><span class="nav-idx">◉</span><span>我的设备</span><span class="nav-en">Devices</span></a>
+        <a href="#/assets" data-route="assets"><span class="nav-idx">▦</span><span>素材库</span><span class="nav-en">Assets</span></a>
+        <a href="#/link" data-route="link"><span class="nav-idx">⇄</span><span>互联</span><span class="nav-en">Link</span></a>
+        <a href="#/scenes" data-route="scenes"><span class="nav-idx">⚡</span><span>场景</span><span class="nav-en">Scenes</span></a>
+        <button class="nav-more-toggle" id="nav-more-toggle" data-action="nav-toggle" aria-expanded="false" aria-controls="nav-more">更多 <span class="nav-caret">▾</span></button>
+        <div class="nav nav-more" id="nav-more">
+          <a href="#/handoff" data-route="handoff"><span class="nav-idx">↗</span><span>流转接收</span><span class="nav-en">Handoff</span></a>
+          <a href="#/overview" data-route="overview"><span class="nav-idx">01</span><span>总览</span><span class="nav-en">Overview</span></a>
+          <a href="#/capabilities" data-route="capabilities"><span class="nav-idx">03</span><span>能力</span><span class="nav-en">Capabilities</span></a>
+          <a href="#/tasks" data-route="tasks"><span class="nav-idx">04</span><span>任务</span><span class="nav-en">Tasks</span></a>
+          <a href="#/messages" data-route="messages"><span class="nav-idx">05</span><span>消息</span><span class="nav-en">Messages</span></a>
+          <a href="#/basket" data-route="basket"><span class="nav-idx">12</span><span>中转站</span><span class="nav-en">Basket</span></a>
+          <a href="#/checkup" data-route="checkup"><span class="nav-idx">06</span><span>体检</span><span class="nav-en">Checkup</span></a>
+          <a href="#/audit" data-route="audit"><span class="nav-idx">07</span><span>审计</span><span class="nav-en">Audit</span></a>
+          <a href="#/drills" data-route="drills"><span class="nav-idx">08</span><span>演练</span><span class="nav-en">Drills</span></a>
+          <a href="#/enterprise" data-route="enterprise"><span class="nav-idx">14</span><span>旧控制台</span><span class="nav-en">Legacy</span></a>
+          <a href="#/settings" data-route="settings"><span class="nav-idx">09</span><span>设置</span><span class="nav-en">Settings</span></a>
+        </div>
       </nav>
       <div class="sidebar-foot">
         <div class="sf-line"><span class="sf-dot" id="sf-dot"></span><span id="sf-mode">单机模式 · 零外联</span></div>
@@ -109,8 +120,28 @@
     </div>
   </div>
 
+  <!-- v2 · 通用操作确认弹窗（不可逆动作 / 撤销信任等） -->
+  <div class="modal-backdrop hidden" id="v2-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="v2-confirm-title">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head">
+        <div>
+          <h3 id="v2-confirm-title">确认执行</h3>
+          <div class="sub" id="v2-confirm-sub"></div>
+        </div>
+        <button class="modal-close" data-v2="confirm-cancel" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body" id="v2-confirm-body" data-testid="v2-confirm"></div>
+      <div class="modal-foot">
+        <span class="hint-note" style="margin-right:auto">不可逆动作执行后不能自动撤销；取消则什么都不做。</span>
+        <button class="btn btn-ghost" data-testid="v2-confirm-cancel" data-v2="confirm-cancel">取消</button>
+        <button class="btn btn-danger" data-testid="v2-confirm-ok" data-v2="confirm-ok">确认执行</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toasts" id="toast-root" aria-live="assertive"></div>
 
+  <script src="qr.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

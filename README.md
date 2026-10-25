@@ -192,6 +192,18 @@ Full list: [docs/假设与未覆盖清单.md](docs/假设与未覆盖清单.md).
 
 Tenon does **not** implement Matter/Thread pairing, is **not** a cloud automation SaaS, **not** a file-sync or chat product, and **not** a GUI click robot. It sits above those: a task-and-responsibility layer for the devices, software and models you already own.
 
+## Roadmap (v2.1): consumer super terminal
+
+**Mainline: a consumer super terminal for home, personal and small-team use — not an enterprise system.** One small app lets you drive every device and program at home: say it (or speak it) and AI dispatches the right program on the right device; tilt the phone forward and the page you are reading slides onto the desktop screen.
+
+The foundation is in place: **v2-P0 (interconnection + asset centre + scenes) is implemented and accepted** — 9/9 checks against an isolated instance on 2026-10-25 14:11 (evidence: [v2-acceptance-2026-10-25-14-11-45.json](docs/测试证据/v2-acceptance-2026-10-25-14-11-45.json)). The consumer super-terminal P0 (`#/super` home, voice + AI intent, device/program catalogue, handoff, phone tilt gesture) was **implemented and locally verified on 2026-10-25 night**: real-browser run 14/14 checks, 0 JS errors, real desktop app launches and a real phone-to-desktop handoff (evidence: [v2.1-超级终端-验收-20261025.md](docs/测试证据/v2.1-超级终端-验收-20261025.md)). Android real-device install is still pending (no device attached; APK built and signed).
+
+- [Product vision v2.1: consumer super terminal](docs/产品愿景-v2.1-消费级超级终端.md) — three core experiences, comparison with HarmonyOS Super Device / Apple Handoff / Xiaomi Smart Hub, tonight's P0 scope, and the mapping back to the original vision.
+- [Product definition v2](docs/产品定义-v2.md) — v2-P0 spec (interconnection, assets, scenes) plus the v2.1 mainline story; the enterprise form is an optional plugin.
+- [Manual v2: interconnection & assets](docs/使用手册-v2-互联与素材.md) — operation spec for `#/link`, `#/assets`, `#/basket`, `#/scenes`, `#/enterprise`.
+
+Enterprise features (roles, approvals, audit retention) exist as an **optional plugin form — not the mainline**. Status and evidence are updated only after acceptance.
+
 ## License
 
 Copyright © 2026 minzzj · Tenon (榫卯)

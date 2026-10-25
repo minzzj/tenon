@@ -24,7 +24,8 @@ jobs:
             'COMMERCIAL.md', 'COMMERCIAL.zh-CN.md',
             'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md',
             'docs/产品定义.md', 'docs/假设与未覆盖清单.md',
-            'docs/使用手册.md', 'docs/测试方法.md', 'docs/交付物清单.md'
+            'docs/使用手册.md', 'docs/测试方法.md', 'docs/交付物清单.md',
+            'docs/产品定义-v2.md', 'docs/产品愿景-v2.1-消费级超级终端.md', 'docs/使用手册-v2-互联与素材.md'
           )
           $missing = $required | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "Missing required files: $($missing -join ', ')" }
@@ -43,3 +44,24 @@ jobs:
           } else {
             Write-Host 'test/unit not present yet.'
           }
+
+  v2-modules-and-acceptance:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: v2 module tests (link/assets/things/enterprise/super)
+        shell: pwsh
+        run: |
+          node --test server/lib/link/__tests__/link.test.mjs server/lib/assets/__tests__/assets.test.mjs server/lib/things/__tests__/things.test.mjs server/lib/enterprise/__tests__/enterprise.test.mjs server/lib/super/__tests__/super.test.mjs
+
+      - name: v2 API acceptance (isolated instance)
+        shell: pwsh
+        run: node scripts/verify-v2.js

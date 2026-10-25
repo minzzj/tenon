@@ -6,16 +6,25 @@
 // 环境变量：TENON_HUB_URL（默认 http://127.0.0.1:7410）、TENON_NODE_NAME（默认 工作台）、
 //           TENON_DATA_DIR（可选，默认 <仓库根>/data）、TENON_NODE_TOKEN（可选，覆盖 secrets.json）、
 //           TENON_NODE_ID（可选，首次生成的节点 id，默认 node-local，与 seed-demo 的「本机工作台」对齐）
+// v2（TENON_V2=1 启用）：TENON_V2=1、TENON_RECEIVE_DIR（默认 示例空间/接收）、TENON_CLIPBOARD=0 关闭剪贴板、
+//           TENON_CLIPBOARD_MS（默认 1000）、TENON_ALLOW_POWER=1 才允许 system.power、TENON_OPERATOR_TOKEN 覆盖
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { capabilities, manifest } from './capabilities.js';
+import { actionCapabilities, actionsManifest } from './actions.js';
+import { appCapabilities, appsManifest } from './apps.js';
+import { loadSecrets, HubClient, subscribeEvents } from './hub.js';
+import { createClipboardSync } from './clipboard.js';
+import { createNotifier } from './notifier.js';
+import { createLinkService } from './link.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(HERE, '..');
-export const AGENT_VERSION = '0.1.0';
+export const AGENT_VERSION = '0.2.0';
+export const V2_ENABLED = String(process.env.TENON_V2 || '') === '1';
 const HUB_URL = String(process.env.TENON_HUB_URL || 'http://127.0.0.1:7410').replace(/\/+$/, '');
 const NODE_NAME = String(process.env.TENON_NODE_NAME || '工作台');
 const NODE_ID_DEFAULT = String(process.env.TENON_NODE_ID || 'node-local').trim() || 'node-local';
@@ -118,7 +127,13 @@ export class NodeAgent {
     this.fingerprint = this.identity.fingerprint;
     this.hubUrl = HUB_URL;
     this.dataDir = DATA_DIR;
-    this.token = loadNodeToken();
+    this.secrets = loadSecrets(SECRETS_FILE);
+    this.token = this.secrets.nodeToken || loadNodeToken();
+    this.operatorToken = this.secrets.operatorToken || '';
+    this.v2Enabled = options.v2Enabled !== undefined ? !!options.v2Enabled : V2_ENABLED;
+    this.activeCapabilities = this.v2Enabled ? [...capabilities, ...actionCapabilities, ...appCapabilities] : capabilities;
+    this.activeManifest = this.v2Enabled ? [...manifest, ...actionsManifest, ...appsManifest] : manifest;
+    this.v2 = { hub: null, clipboard: null, notifier: null, link: null, stopStream: null, started: false, errors: [], lastInboundKick: 0 };
     this.registered = false;
     this.stopping = false;
     this.executing = false;
@@ -186,7 +201,7 @@ export class NodeAgent {
       name: this.nodeName,
       platform: this.platform,
       fingerprint: this.fingerprint,
-      capabilities: manifest,
+      capabilities: this.activeManifest,
     };
     const data = await this.http('/api/node/register', { body: payload });
     const first = !this.registered;
@@ -195,7 +210,7 @@ export class NodeAgent {
       log('已重新注册到中枢，节点恢复在线');
       this.registerDown = false;
     } else if (first) {
-      log(`已注册到中枢 ${this.hubUrl}：${data.nodeId || this.nodeId}（能力 ${manifest.length} 项）`);
+      log(`已注册到中枢 ${this.hubUrl}：${data.nodeId || this.nodeId}（能力 ${this.activeManifest.length} 项${this.v2Enabled ? '，含 v2 动作' : ''}）`);
     }
     return true;
   }
@@ -365,6 +380,10 @@ export class NodeAgent {
       nodeId: this.nodeId,
       nodeName: this.nodeName,
       taskId,
+      v2: this.v2Enabled,
+      hubUrl: this.hubUrl,
+      hub: this.v2.hub,
+      notifier: this.v2.notifier,
       async step(label, detail) {
         await agent.safeReport('task.step', { taskId, label, detail });
       },
@@ -386,7 +405,7 @@ export class NodeAgent {
       return;
     }
     const capabilityId = this.capabilityIdOf(task);
-    const capability = capabilities.find((cap) => cap.id === capabilityId) || null;
+    const capability = this.activeCapabilities.find((cap) => cap.id === capabilityId) || null;
     this.executing = true;
     this.currentTaskId = taskId;
     const startedAt = Date.now();
@@ -435,6 +454,7 @@ export class NodeAgent {
     if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
     if (this.pullTimer) clearTimeout(this.pullTimer);
     log(`收到 ${signal}，准备优雅退出…`);
+    await this.stopV2();
     const startedAt = Date.now();
     while (this.executing && Date.now() - startedAt < 5000) await sleep(100);
     if (this.executing) log('仍有任务在执行，等待超过 5 秒，直接退出（中枢会按心跳超时标记离线）');
@@ -456,7 +476,81 @@ export class NodeAgent {
     if (this.stopping) return;
     this.startHeartbeatLoop();
     this.startPullLoop();
-    log(`已上线：心跳每 ${HEARTBEAT_MS / 1000} 秒，拉任务每 ${PULL_MS / 1000} 秒；Ctrl+C 优雅退出`);
+    log(`已上线：心跳每 ${HEARTBEAT_MS / 1000} 秒，拉任务每 ${PULL_MS / 1000} 秒${this.v2Enabled ? '（v2 桌面模块随之启动）' : ''}；Ctrl+C 优雅退出`);
+    if (this.v2Enabled) await this.startV2();
+  }
+
+  // 中枢 SSE 事件 → 本机动作（手机通知镜像、手机推文件后立即拉一次入站）
+  async handleHubEvent(event) {
+    if (!event || typeof event !== 'object') return;
+    try {
+      if (event.type === 'notification.relayed' && this.v2.notifier) {
+        await this.v2.notifier.mirrorEvent(event);
+      } else if (event.type === 'transfer.completed' || event.type === 'transfer.started') {
+        const now = Date.now();
+        if (this.v2.link && now - (this.v2.lastInboundKick || 0) > 800) {
+          this.v2.lastInboundKick = now;
+          await this.v2.link.receiveOnce().catch(() => {});
+        }
+      }
+    } catch (err) {
+      this.v2.errors.push({ at: new Date().toISOString(), message: String(err && err.message ? err.message : err) });
+      if (this.v2.errors.length > 10) this.v2.errors.shift();
+    }
+  }
+
+  // TENON_V2=1：启用剪贴板同步 / 文件收发 / 通知镜像 / 受控动作（动作能力已随注册上报）
+  async startV2() {
+    log('v2 桌面端模块启用（TENON_V2=1）：剪贴板 / 文件收发 / 通知 / 受控动作');
+    const hubClient = new HubClient({ baseUrl: this.hubUrl, nodeToken: this.token, operatorToken: this.operatorToken, log });
+    this.v2.hub = hubClient;
+    this.v2.notifier = createNotifier({ hub: hubClient, deviceId: this.nodeId, log });
+    if (!this.operatorToken) log('警告：data/secrets.json 里没有 operatorToken，v2 写接口会 401（请用中枢生成的 secrets.json）');
+    try {
+      const probe = await this.v2.notifier.notify({ title: '榫卯 v2 · 桌面端已连接', body: `${this.nodeName} 已上线：剪贴板、文件收发、通知同步已启用` });
+      log(`桌面通知通道：${probe.method}${probe.fallback ? '（回退）' : ''}`);
+    } catch (err) {
+      log(`桌面通知探针失败：${err && err.message ? err.message : err}`);
+    }
+    if (String(process.env.TENON_CLIPBOARD || '1') !== '0') {
+      this.v2.clipboard = createClipboardSync({
+        hub: hubClient,
+        deviceId: this.nodeId,
+        pollMs: Math.max(250, Number(process.env.TENON_CLIPBOARD_MS) || 1000),
+        log,
+      });
+      this.v2.clipboard.start();
+    } else {
+      log('剪贴板同步已按 TENON_CLIPBOARD=0 关闭');
+    }
+    const receiveDir = path.resolve(REPO_ROOT, String(process.env.TENON_RECEIVE_DIR || '示例空间/接收'));
+    this.v2.link = createLinkService({
+      hub: hubClient,
+      deviceId: this.nodeId,
+      nodeName: this.nodeName,
+      receiveDir,
+      stateFile: path.join(this.dataDir, 'node-link-state.json'),
+      log,
+      pollMs: Math.max(500, Number(process.env.TENON_TRANSFER_POLL_MS) || 1500),
+    });
+    this.v2.link.start();
+    this.v2.stopStream = subscribeEvents({
+      hub: hubClient,
+      onEvent: (event) => this.handleHubEvent(event),
+      onError: (err) => log(`[v2] 事件订阅断开（自动重连）：${err && err.message ? err.message : err}`),
+    });
+    this.v2.started = true;
+    log(`v2 模块就绪：受控动作 ${actionCapabilities.length} 项 + 超级终端动作 ${appCapabilities.length} 项已随注册上报；接收目录 ${receiveDir}`);
+  }
+
+  async stopV2() {
+    if (!this.v2.started && !this.v2.hub) return;
+    if (typeof this.v2.stopStream === 'function') this.v2.stopStream();
+    if (this.v2.clipboard) this.v2.clipboard.stop();
+    if (this.v2.link) this.v2.link.stop();
+    if (this.v2.notifier) this.v2.notifier.stopMirror();
+    this.v2.started = false;
+    log('v2 模块已停止');
   }
 }
 

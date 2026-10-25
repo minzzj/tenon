@@ -1,0 +1,12 @@
+{
+  "name": "榫卯 Tenon",
+  "short_name": "榫卯",
+  "description": "可自建的设备、软件与 AI 连接中枢 · 手机零安装备用入口",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070B14",
+  "theme_color": "#070B14",
+  "lang": "zh-CN"
+}

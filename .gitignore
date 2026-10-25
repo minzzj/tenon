@@ -25,3 +25,6 @@ Thumbs.db
 .DS_Store
 .idea/
 .vscode/
+# 本地验收/隔离实例数据（不提交）
+data-v2-e2e/
+data-super-e2e/

@@ -24,7 +24,14 @@
     checkup: { title: '体检', sub: '一键体检：阻断 / 警告 / 提示 / 无法判定；空结果也列出检查范围' },
     audit: { title: '审计', sub: '账本可导出 CSV / JSON / Markdown；导出本身也记账' },
     drills: { title: '演练', sub: '断网、限流、授权过期、版本不符、循环、磁盘满、跨域、无证据：显式降级而不是删除' },
-    settings: { title: '设置', sub: '模式、数据目录、AI 状态、token 用量、许可证' }
+    settings: { title: '设置', sub: '模式、数据目录、AI 状态、token 用量、许可证' },
+    link: { title: '互联', sub: '发现、配对、信任、文件互传、剪贴板与通知镜像；零外网依赖' },
+    assets: { title: '素材库', sub: '归集、哈希去重、OCR 搜索、标签与谱系；批量加入中转站' },
+    basket: { title: '中转站', sub: '手机暂存、电脑一次取用；跨设备流转的超级中转站' },
+    scenes: { title: '场景', sub: '打印素材 / 投屏照片 / 备份到 NAS；不可逆动作需确认' },
+    enterprise: { title: '企业控制台', sub: '成员与角色、动作权限、审批、审计导出与保留期' },
+    super: { title: '超级终端', sub: '一台小软件，调动家里所有设备与程序 · 说话或一倾，内容就滑到电脑上' },
+    handoff: { title: '流转接收', sub: '从手机流转过来的网页 / 照片 / 文字，滑入电脑，可打开或收藏' }
   };
   var STATUS = {
     draft: { label: '草案', cls: 'b-muted' },
@@ -68,6 +75,7 @@
     snapshot: null,
     route: 'overview',
     param: null,
+    query: {},
     stale: false,
     serverOk: false,
     sseOpen: false,
@@ -428,6 +436,10 @@
     }
     var s = snap();
     setText('#domain-chip', (s && s.domainLabel) ? s.domainLabel : '工作室数据域');
+    if (S.route === 'super' || S.route === 'handoff') {
+      var dc2 = $('#domain-chip');
+      if (dc2) { dc2.textContent = '我的设备'; dc2.setAttribute('title', '本机中枢 · 数据只在家里'); }
+    }
     setText('#sf-mode', (s ? modeLabel(s.mode) : (S.stale ? '离线' : '连接中')) + (s && s.readOnly ? ' · 只读' : ' · 零外联'));
     var dot = $('#sf-dot');
     if (dot) dot.style.background = S.stale ? 'var(--amber)' : 'var(--green)';
@@ -447,6 +459,8 @@
       if (a.getAttribute('data-route') === S.route) a.classList.add('active');
       else a.classList.remove('active');
     });
+    var navMore = $('#nav-more');
+    if (navMore && navMore.querySelector('a.active')) navMore.classList.add('open');
     document.title = '榫卯 Tenon · ' + meta.title;
   }
 
@@ -495,11 +509,12 @@
   function modalOpen() {
     var imp = $('#impact-modal');
     var auth = $('#auth-modal');
-    return !!(imp && !imp.classList.contains('hidden')) || !!(auth && !auth.classList.contains('hidden'));
+    var v2c = $('#v2-confirm-modal');
+    return !!(imp && !imp.classList.contains('hidden')) || !!(auth && !auth.classList.contains('hidden')) || !!(v2c && !v2c.classList.contains('hidden'));
   }
   function stateSig() {
     var s = snap();
-    if (!s) return 'none';
+    if (!s) return 'none' + (v2IsRoute(S.route) ? '|v2:' + v2Sig() : '');
     var parts = [];
     parts.push('m:' + (s.mode || '') + ':' + (s.readOnly ? 1 : 0) + ':' + (s.domainLabel || ''));
     var meta = objOf(s.meta);
@@ -533,6 +548,7 @@
       var sel = S.selectedTaskId ? taskById(S.selectedTaskId) : null;
       if (sel) parts.push('steps:' + listOf(sel.steps).length);
     }
+    if (v2IsRoute(S.route)) parts.push('v2:' + v2Sig());
     return parts.join('||');
   }
   /* 不重建列表 DOM，只就地更新「在线 / 最近活跃 / 数据时间」等文字 */
@@ -608,6 +624,7 @@
       var type = obj && obj.type ? String(obj.type) : '';
       if (type === 'node.heartbeat') { applyHeartbeatEvent(obj); return; }
       if (type === 'ai.called') { refreshSoon(1200); return; }
+      if (v2IsRealtimeEvent(type)) { v2OnRealtimeEvent(obj); refreshSoon(SSE_DEBOUNCE); return; }
       refreshSoon(SSE_DEBOUNCE);
     };
     es.onerror = function () {
@@ -621,19 +638,32 @@
 
   /* ---------- 路由与渲染 ---------- */
   function parseRoute() {
-    var raw = (location.hash || '#/overview').replace(/^#\/?/, '');
+    var raw = (location.hash || '').replace(/^#\/?/, '');
+    var query = {};
+    var qi = raw.indexOf('?');
+    if (qi >= 0) {
+      var qs = raw.slice(qi + 1);
+      raw = raw.slice(0, qi);
+      qs.split('&').forEach(function (kv) {
+        if (!kv) return;
+        var p = kv.split('=');
+        try { query[decodeURIComponent(p[0])] = decodeURIComponent((p[1] || '').replace(/\+/g, ' ')); } catch (_) {}
+      });
+    }
     var parts = raw.split('/').filter(Boolean);
-    var name = ROUTE_META[parts[0]] ? parts[0] : 'overview';
+    var name = ROUTE_META[parts[0]] ? parts[0] : (raw ? 'overview' : 'super');
     var param = null;
     if (parts[1]) { try { param = decodeURIComponent(parts[1]); } catch (_) { param = parts[1]; } }
-    return { name: name, param: param };
+    return { name: name, param: param, query: query };
   }
   function onRoute() {
     var r = parseRoute();
     var changed = (r.name !== S.route) || (r.param !== S.param);
     S.route = r.name;
     S.param = r.param;
+    S.query = r.query || {};
     if (S.route === 'tasks' && S.param) S.selectedTaskId = S.param;
+    if (v2IsRoute(S.route)) v2EnsureLoaded(S.route);
     render(true);
     if (changed) { try { window.scrollTo(0, 0); } catch (_) {} }
   }
@@ -672,6 +702,7 @@
     var draftFocus = draftEl && document.activeElement === draftEl;
     var scopeEl = $('#checkup-scope');
     var scopeVal = scopeEl ? scopeEl.value : '';
+    var v2Form = v2CaptureForm();
     var html = '';
     try {
       html = routeHtml();
@@ -686,6 +717,8 @@
       var d2 = $('#draft-text');
       if (d2) { try { d2.focus(); d2.setSelectionRange(d2.value.length, d2.value.length); } catch (_) {} }
     }
+    v2RestoreForm(v2Form);
+    v2AfterRender();
     S.lastRenderRoute = S.route;
     S.lastRenderParam = S.param;
     S.lastRenderSig = stateSig();
@@ -704,6 +737,13 @@
       case 'audit': return renderAudit();
       case 'drills': return renderDrills();
       case 'settings': return renderSettings();
+      case 'link': return v2RenderLink();
+      case 'assets': return v2RenderAssets();
+      case 'basket': return v2RenderBasket();
+      case 'scenes': return v2RenderScenes();
+      case 'enterprise': return v2RenderEnterprise();
+      case 'super': return superRenderSuper();
+      case 'handoff': return superRenderHandoff();
       default: return renderOverview();
     }
   }
@@ -1550,6 +1590,12 @@
       case 'checkup-export': download('/api/checkup/' + encodeURIComponent(ds.checkupId) + '/export?format=md', 'tenon-checkup-' + ds.checkupId + '.md'); break;
       case 'export': download('/api/audit/export?format=' + encodeURIComponent(ds.format || 'json'), 'tenon-audit.' + (ds.format || 'json')); break;
       case 'drill': runDrill(ds.kind); break;
+      case 'nav-toggle': {
+        var moreBox2 = $('#nav-more');
+        if (moreBox2) moreBox2.classList.toggle('open');
+        if (target) target.setAttribute('aria-expanded', (moreBox2 && moreBox2.classList.contains('open')) ? 'true' : 'false');
+        break;
+      }
       case 'token-clear':
         setToken('');
         updateChrome();
@@ -1576,15 +1622,2152 @@
     if (ev.target && ev.target.id === 'checkup-scope') S.checkupScope = ev.target.value;
   }
 
+  /* ======================================================================
+   * v2-P0 页面：互联 / 素材库 / 中转站 / 场景 / 企业控制台
+   * 与真实中枢（7410，v2 全模块 51 路由）对齐后的版本：
+   *   - 配对码：GET /api/v2/link/pair/qr（不再从 peers.pairing 读）
+   *   - 中转站：GET /api/v2/assets/basket、POST /api/v2/assets/basket {items:[{assetId}],to}、
+   *             POST /api/v2/assets/basket/take {ids,to}
+   *   - 传输：GET /api/v2/link/transfers + transfer.* SSE
+   *   - 审批：GET /api/v2/approvals、POST /api/v2/approvals/:id/decide {ok,reason}
+   *   - 成员：GET/POST /api/v2/org/users、PATCH /api/v2/org/users/:id {role,allowedActions,status}
+   * 只追加，不改动 v0.1 已验收的 9 页与 testid；接口异常时降级不崩。
+   * ====================================================================== */
+
+  var V2_ROUTES = { link: 1, assets: 1, basket: 1, scenes: 1, enterprise: 1, super: 1, handoff: 1 };
+  var V2_LOCAL_ACTIONS = [
+    { id: 'asset.print', name: '打印素材', risk: 'irreversible', requiresConfirmation: true },
+    { id: 'asset.showOnDesktop', name: '投屏到电脑', risk: 'reversible' },
+    { id: 'asset.backup', name: '备份到文件夹 / NAS', risk: 'reversible' },
+    { id: 'channel.notify', name: '发送通知', risk: 'irreversible', requiresConfirmation: true },
+    { id: 'system.open', name: '打开应用 / 文件', risk: 'reversible' }
+  ];
+  var V2_EXTRA_ACTIONS = ['asset.ingest', 'asset.tag', 'asset.share', 'transfer.send', 'clipboard.share', 'scene.run', 'audit.export'];
+  var V2_ROLES = [
+    { id: 'admin', name: '管理员' },
+    { id: 'member', name: '成员' },
+    { id: 'guest', name: '访客' }
+  ];
+  var V2 = {
+    loaded: {},
+    loading: {},
+    status: {},
+    data: {
+      peers: [],
+      self: null,
+      discovery: null,
+      pairQr: null,
+      transfers: [],
+      clipboard: null,
+      clipHistory: [],
+      notifications: [],
+      assets: [],
+      assetTotal: 0,
+      assetStats: null,
+      assetDetail: null,
+      assetLineage: null,
+      assetFilters: { q: '', kind: '', device: '', from: '', to: '' },
+      assetSelection: [],
+      basket: [],
+      basketStats: null,
+      basketTarget: '',
+      scenes: [],
+      sceneRuns: [],
+      sceneFormOpen: false,
+      sceneDraftSteps: [],
+      orgUsers: [],
+      orgRoles: [],
+      editUserId: '',
+      approvals: [],
+      policy: null,
+      actions: [],
+      actor: 'u_admin',
+      entTab: 'users',
+      lastLoad: 0
+    },
+    confirm: null
+  };
+
+  /* ---------- v2 基础工具 ---------- */
+  function v2IsRoute(route) { return !!V2_ROUTES[route || S.route]; }
+  function v2Arr(data, keys) {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    var cand = keys || ['items', 'list', 'data', 'results', 'peers', 'assets', 'scenes', 'users', 'approvals', 'transfers', 'notifications', 'basket'];
+    for (var i = 0; i < cand.length; i++) if (Array.isArray(data[cand[i]])) return data[cand[i]];
+    return [];
+  }
+  function v2Bytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  }
+  function v2Speed(bps) { return bps ? v2Bytes(bps) + '/s' : '—'; }
+  function v2ErrText(st) {
+    if (!st) return '未检测';
+    if (st.kind === 'missing') return '接口未挂载（HTTP 404）';
+    if (st.kind === 'auth') return '需要操作令牌（HTTP ' + st.http + '）';
+    if (st.kind === 'offline') return '无法连接中枢（离线）';
+    return st.msg || ('HTTP ' + st.http);
+  }
+  function v2Degrade(keys, what) {
+    var missing = [];
+    for (var i = 0; i < keys.length; i++) {
+      var st = V2.status[keys[i]];
+      if (st && !st.ok) missing.push(st);
+    }
+    if (!missing.length) return '';
+    var lines = missing.map(function (st) { return '<code>' + esc(st.path || '') + '</code> ' + esc(v2ErrText(st)); }).join(' · ');
+    return '<div class="v2-degrade alert alert-warn" data-testid="v2-degrade">' +
+      '<div><strong>' + esc(what || 'v2 接口未就绪') + '（只读降级）</strong>：' + lines +
+      ' <button class="btn btn-sm" data-v2="refresh-page" data-page="' + attr(S.route) + '">重试</button></div>' +
+      '<div class="hint-note">页面布局与交互可用；中枢挂载 <code>/api/v2/*</code> 后自动加载真实数据，无需额外操作。</div></div>';
+  }
+  function v2LoadingNote(keys) {
+    for (var i = 0; i < keys.length; i++) if (!V2.status[keys[i]]) return '<div class="tiny dim" data-testid="v2-loading">正在检测 v2 接口…</div>';
+    return '';
+  }
+  function v2RefreshBtn(page, testid) {
+    return '<button class="btn btn-sm" data-v2="refresh-page" data-page="' + attr(page || S.route) + '" data-testid="' + attr(testid || ('btn-refresh-' + (page || S.route))) + '">刷新</button>';
+  }
+  function v2Fetch(key, path, opts) {
+    V2.loading[key] = true;
+    return api(path, opts || {}).then(function (res) {
+      V2.loading[key] = false;
+      var bad = !res.ok || (res.data && typeof res.data === 'object' && res.data.ok === false && res.data.error);
+      if (!bad) {
+        V2.status[key] = { ok: true, kind: 'ok', http: res.status, path: path, at: Date.now() };
+        return res.data;
+      }
+      var kind = res.network ? 'offline' : (res.status === 404 ? 'missing' : ((res.status === 401 || res.status === 403) ? 'auth' : 'error'));
+      var msg = '';
+      if (res.data && typeof res.data === 'object') msg = res.data.error || res.data.message || '';
+      else if (typeof res.data === 'string') msg = res.data.slice(0, 120);
+      V2.status[key] = { ok: false, kind: kind, http: res.status, path: path, msg: msg, at: Date.now() };
+      return null;
+    }, function () {
+      V2.loading[key] = false;
+      V2.status[key] = { ok: false, kind: 'error', http: 0, path: path };
+      return null;
+    });
+  }
+  /* v2 写操作：支持 POST / PATCH / PUT / DELETE，复用令牌引导 */
+  function v2WriteMethod(method, path, body, label) {
+    if (S.snapshot && S.snapshot.readOnly) { toast('只读模式：当前角色缺写权限', 'warn'); return Promise.resolve(null); }
+    if (S.stale && !S.serverOk) { toast(asOfLabel() + ' · 离线只读，写操作不可用', 'warn'); return Promise.resolve(null); }
+    return askTokenIfNeeded().then(function (tok) {
+      if (!tok) { toast('已取消：未提供令牌', 'warn'); return null; }
+      var opts = { method: method, body: body === undefined ? {} : body, token: tok };
+      return api(path, opts).then(function (res) {
+        if (res.status === 401) {
+          setToken('');
+          return askToken('令牌无效或已过期，请重新输入').then(function (tok2) {
+            if (!tok2) return null;
+            return api(path, { method: method, body: body === undefined ? {} : body, token: tok2 });
+          });
+        }
+        return res;
+      }).then(function (res) {
+        if (!res) return null;
+        if (res.status === 401) { toast(label + '失败：令牌无效（HTTP 401）', 'bad'); return null; }
+        if (res.network) { toast(label + '失败：无法连接中枢', 'bad'); return null; }
+        if (!res.ok) {
+          var msg = (res.data && (res.data.error || res.data.message)) || ('HTTP ' + res.status);
+          toast(label + '失败：' + msg, 'bad');
+          return null;
+        }
+        if (res.data && res.data.ok === false && !res.data.needsConfirm) {
+          toast(label + '失败：' + (res.data.error || '服务端拒绝'), 'bad');
+          return null;
+        }
+        toast(label + '：已完成', 'ok');
+        refreshSoon(160);
+        return res.data || { ok: true };
+      });
+    });
+  }
+  function v2Post(path, body, label) { return v2WriteMethod('POST', path, body, label); }
+  function v2Patch(path, body, label) { return v2WriteMethod('PATCH', path, body, label); }
+
+  /* ---------- 数据加载 ---------- */
+  function v2LoadPeers() {
+    return v2Fetch('peers', '/api/v2/link/peers').then(function (data) {
+      if (!data) { V2.data.peers = []; return; }
+      V2.data.self = data.self || null;
+      V2.data.discovery = data.discovery || null;
+      V2.data.peers = v2Arr(data, ['peers', 'items', 'list']);
+    });
+  }
+  function v2LoadPairQr() {
+    return v2Fetch('pairQr', '/api/v2/link/pair/qr').then(function (data) {
+      if (data && data.code) V2.data.pairQr = data;
+    });
+  }
+  function v2LoadClipboardLatest() {
+    return v2Fetch('clipboard', '/api/v2/link/clipboard/latest').then(function (data) {
+      if (!data) return;
+      V2.data.clipboard = data.clipboard || data.item || data || null;
+    });
+  }
+  function v2NormTransfer(t) {
+    t = t || {};
+    var files = listOf(t.files);
+    var normFiles = files.map(function (f) { return (f && typeof f === 'object') ? f : { name: String(f) }; });
+    var total = Number(t.totalBytes || t.bytes || t.size || 0);
+    var sent = Number(t.sentBytes || t.bytesSent || (t.status === 'completed' ? total : 0) || 0);
+    var status = String(t.status || t.state || 'started');
+    var progress = t.progress !== undefined ? Number(t.progress) : (total ? Math.min(100, Math.round(sent / total * 100)) : (status === 'completed' ? 100 : 0));
+    return {
+      transferId: String(t.transferId || t.id || t.transfer || ''),
+      peerId: t.peerId || t.nodeId || t.peerDeviceId || t.from || t.to || '',
+      peerName: t.peerName || t.nodeName || '',
+      direction: t.direction || (String(t.state || '').indexOf('incoming') >= 0 ? 'receive' : 'send'),
+      files: normFiles,
+      totalBytes: total,
+      sentBytes: sent,
+      status: status,
+      progress: progress,
+      speedBps: Number(t.speedBps || t.speed || 0),
+      sha256: t.sha256 || '',
+      reason: t.reason || t.error || '',
+      at: t.createdAt || t.at || t.startedAt || t.updatedAt || ''
+    };
+  }
+  function v2MergeTransfers(list) {
+    var incoming = listOf(list).map(v2NormTransfer);
+    var existing = V2.data.transfers.slice();
+    var used = {};
+    var out = [];
+    incoming.forEach(function (t) {
+      used[t.transferId] = 1;
+      var match = null;
+      for (var i = 0; i < existing.length; i++) if (existing[i].transferId === t.transferId) { match = existing[i]; break; }
+      if (match && match.progress >= t.progress && match.status === 'completed') {
+        out.push(match);
+      } else if (match) {
+        for (var k in t) if (Object.prototype.hasOwnProperty.call(t, k)) match[k] = t[k];
+        out.push(match);
+      } else {
+        out.push(t);
+      }
+    });
+    existing.forEach(function (t) { if (!used[t.transferId]) out.push(t); });
+    V2.data.transfers = out.slice(0, 20);
+  }
+  function v2LoadTransfers() {
+    return v2Fetch('transfers', '/api/v2/link/transfers').then(function (data) {
+      if (!data) return;
+      v2MergeTransfers(v2Arr(data, ['transfers', 'items', 'list']));
+    });
+  }
+  function v2LoadNotifications() {
+    return v2Fetch('notifications', '/api/v2/link/notifications').then(function (data) {
+      if (!data) return;
+      var list = v2Arr(data, ['notifications', 'items', 'list']);
+      var seen = {};
+      V2.data.notifications.forEach(function (n) { seen[(n.at || '') + '|' + (n.title || '')] = 1; });
+      list.forEach(function (n) {
+        var item = { app: n.app || n.from || '通知', title: n.title || '', preview: n.preview || n.text || '', at: n.at || '', from: n.from || '' };
+        if (!seen[(item.at || '') + '|' + (item.title || '')]) V2.data.notifications.push(item);
+      });
+      V2.data.notifications = V2.data.notifications.slice(0, 20);
+    });
+  }
+  function v2LoadAssets() {
+    var f = V2.data.assetFilters;
+    var q = ['limit=60', 'offset=0'];
+    if (f.q) q.push('q=' + encodeURIComponent(f.q));
+    if (f.kind) q.push('kind=' + encodeURIComponent(f.kind));
+    if (f.device) q.push('device=' + encodeURIComponent(f.device));
+    if (f.from) q.push('from=' + encodeURIComponent(f.from));
+    if (f.to) q.push('to=' + encodeURIComponent(f.to));
+    var path = '/api/v2/assets?' + q.join('&');
+    return v2Fetch('assets', path).then(function (data) {
+      if (!data) { V2.data.assets = []; return; }
+      V2.data.assets = v2Arr(data, ['assets', 'items', 'list']);
+      V2.data.assetTotal = data.total !== undefined ? data.total : V2.data.assets.length;
+    });
+  }
+  function v2LoadAssetStats() {
+    return v2Fetch('assetStats', '/api/v2/assets/stats').then(function (data) {
+      if (data) V2.data.assetStats = data;
+    });
+  }
+  function v2LoadAssetDetail(id) {
+    if (!id) return Promise.resolve();
+    return v2Fetch('assetDetail', '/api/v2/assets/' + encodeURIComponent(id)).then(function (data) {
+      if (!data) return;
+      V2.data.assetDetail = data.asset || data;
+      V2.data.assetLineage = data.lineage || null;
+    });
+  }
+  function v2LoadBasket() {
+    return v2Fetch('basketList', '/api/v2/assets/basket').then(function (data) {
+      if (!data) return;
+      V2.data.basket = v2Arr(data, ['items', 'basket', 'list']);
+      V2.data.basketStats = data.stats || null;
+    });
+  }
+  function v2LoadScenes() {
+    return v2Fetch('scenes', '/api/v2/scenes').then(function (data) {
+      if (!data) { V2.data.scenes = []; return; }
+      V2.data.scenes = v2Arr(data, ['scenes', 'items', 'list']);
+    });
+  }
+  function v2LoadActions() {
+    return v2Fetch('model', '/api/v2/things/model').then(function (data) {
+      var acts = data && (data.actions || (data.model && data.model.actions));
+      if (Array.isArray(acts) && acts.length) V2.data.actions = acts;
+      else if (!V2.data.actions.length) V2.data.actions = V2_LOCAL_ACTIONS.slice();
+    });
+  }
+  function v2LoadOrgUsers() {
+    return v2Fetch('orgUsers', '/api/v2/org/users').then(function (data) {
+      if (!data) return;
+      V2.data.orgUsers = v2Arr(data, ['users', 'items', 'list', 'members']);
+      V2.data.orgRoles = v2Arr(data, ['roles']);
+      if (data.actor && data.actor.userId) V2.data.actor = data.actor.userId;
+    });
+  }
+  function v2LoadPolicy() {
+    return v2Fetch('policy', '/api/v2/org/policy').then(function (data) {
+      if (data) V2.data.policy = data.policy || data;
+    });
+  }
+  function v2LoadApprovals() {
+    return v2Fetch('approvals', '/api/v2/approvals').then(function (data) {
+      if (!data) return;
+      V2.data.approvals = v2Arr(data, ['approvals', 'items', 'list']);
+    });
+  }
+  function v2RefreshPage(page) {
+    page = page || S.route;
+    if (page === 'link') return Promise.all([v2LoadPeers(), v2LoadPairQr(), v2LoadClipboardLatest(), v2LoadTransfers(), v2LoadNotifications()]);
+    if (page === 'assets') return Promise.all([v2LoadAssets(), v2LoadAssetStats()]);
+    if (page === 'basket') return Promise.all([v2LoadBasket(), v2LoadAssets(), v2LoadPeers()]);
+    if (page === 'scenes') return Promise.all([v2LoadScenes(), v2LoadActions()]);
+    if (page === 'enterprise') {
+      return Promise.all([v2LoadOrgUsers(), v2LoadPolicy(), v2LoadApprovals(), v2LoadActions()]).then(function () {
+        if (!V2.data.policy) V2.data.policy = { approvalRequiredForIrreversible: true, auditRetentionDays: 30, retentionOptions: [7, 30, 180] };
+      });
+    }
+    if (page === 'super' || page === 'handoff') return superLoadState();
+    return Promise.resolve();
+  }
+  function v2EnsureLoaded(route) {
+    route = route || S.route;
+    if (!v2IsRoute(route)) return;
+    var now = Date.now();
+    if (V2.loading[route + ':all']) return;
+    if (V2.loaded[route] && now - V2.loaded[route] < 12000) return;
+    V2.loaded[route] = now;
+    V2.loading[route + ':all'] = true;
+    v2RefreshPage(route).then(function () {
+      V2.loading[route + ':all'] = false;
+      render();
+    });
+  }
+
+  /* ---------- 配对 / 二维码 ---------- */
+  function v2PairingInfo() {
+    var q = V2.data.pairQr;
+    if (q && q.code) {
+      return {
+        code: String(q.code),
+        qr: q.qr || '',
+        host: (q.host || location.hostname) + (q.port ? ':' + q.port : ''),
+        hostRaw: q.host || location.hostname,
+        port: q.port || location.port || '',
+        expiresAt: q.expiresAt || '',
+        ttlMs: q.ttlMs || 0,
+        deviceId: q.deviceId || (V2.data.self && V2.data.self.deviceId) || '',
+        name: q.name || (V2.data.self && V2.data.self.name) || '',
+        platform: q.platform || '',
+        source: 'backend',
+        fingerprint: ''
+      };
+    }
+    return { code: '', qr: '', host: '', hostRaw: '', port: '', expiresAt: '', ttlMs: 0, deviceId: '', name: '', platform: '', source: 'missing', fingerprint: '' };
+  }
+  function v2PairPayload() {
+    var info = v2PairingInfo();
+    return info.qr ? String(info.qr) : '';
+  }
+  function v2AfterRender() {
+    if (S.route !== 'link') return;
+    var canvas = $('#pair-qr');
+    if (!canvas) return;
+    var payload = v2PairPayload();
+    if (!payload) { canvas.setAttribute('data-ok', '0'); return; }
+    try {
+      if (!window.TenonQR || typeof window.TenonQR.render !== 'function') throw new Error('qr.js 未加载');
+      window.TenonQR.render(canvas, payload, { size: 148, margin: 3 });
+      canvas.setAttribute('data-ok', '1');
+    } catch (err) {
+      window.__tenonErrors.push('qr fallback: ' + String((err && err.message) || err));
+      canvas.setAttribute('data-ok', '0');
+      var ctx = canvas.getContext && canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = 148;
+        canvas.height = 148;
+        ctx.fillStyle = '#0c1524';
+        ctx.fillRect(0, 0, 148, 148);
+        ctx.fillStyle = '#8fa3bd';
+        ctx.font = '11px ui-monospace, monospace';
+        ctx.fillText('二维码不可用', 10, 46);
+        ctx.fillText('请使用配对码手动配对', 10, 66);
+      }
+    }
+  }
+  function v2DoPair() {
+    var input = $('#pair-code-input');
+    var code = input ? String(input.value || '').replace(/\D/g, '') : '';
+    if (!/^\d{4,8}$/.test(code)) { toast('请输入对方显示的 4–8 位配对码', 'warn'); if (input) { try { input.focus(); } catch (_) {} } return; }
+    v2Post('/api/v2/link/pair', { code: code }, '配对设备').then(function (data) {
+      if (!data) return;
+      if (input) input.value = '';
+      v2RefreshPage('link').then(function () { render(); });
+    });
+  }
+  function v2DoRegenerate() {
+    v2Post('/api/v2/link/pair/regenerate', {}, '刷新配对码').then(function (data) {
+      if (!data) return;
+      v2LoadPairQr().then(function () { render(); });
+    });
+  }
+  function v2DoRevoke(peerId) {
+    if (!peerId) return;
+    v2ConfirmOpen('撤销信任设备', '撤销后该设备不能再向本机发起任务或传输。', '<div class="tiny muted">设备：<code>' + esc(peerId) + '</code></div>', function () {
+      return v2Post('/api/v2/link/revoke', { peerId: peerId }, '撤销信任').then(function (data) {
+        if (data) v2RefreshPage('link').then(function () { render(); });
+      });
+    });
+  }
+
+  /* ---------- 文件传输 ---------- */
+  function v2FindTransfer(id) {
+    for (var i = 0; i < V2.data.transfers.length; i++) if (V2.data.transfers[i].transferId === id) return V2.data.transfers[i];
+    return null;
+  }
+  function v2UpsertTransfer(t) {
+    var cur = v2FindTransfer(t.transferId);
+    if (cur) { for (var k in t) if (Object.prototype.hasOwnProperty.call(t, k)) cur[k] = t[k]; return cur; }
+    var norm = v2NormTransfer(t);
+    V2.data.transfers.unshift(norm);
+    if (V2.data.transfers.length > 20) V2.data.transfers.length = 20;
+    return norm;
+  }
+  function v2PatchTransfers() {
+    var rows = $$('[data-testid="transfer-row"]');
+    for (var i = 0; i < rows.length; i++) {
+      var t = v2FindTransfer(rows[i].getAttribute('data-transfer-id'));
+      if (!t) continue;
+      var bar = rows[i].querySelector('.progress > i');
+      if (bar) bar.style.width = Math.max(0, Math.min(100, t.progress || 0)) + '%';
+      var st = rows[i].querySelector('[data-role="transfer-status"]');
+      if (st) st.textContent = v2TransferStatusText(t);
+    }
+  }
+  function v2TransferStatusText(t) {
+    var map = { started: '已发起', uploading: '传输中', receiving: '接收中', finishing: '校验 SHA-256…', completed: '已完成 · 校验通过', failed: '失败', cancelled: '已取消', staged: '待确认', queued: '排队中' };
+    var s = map[t.status] || t.status;
+    if (t.status === 'uploading' || t.status === 'receiving') s += ' ' + (t.progress || 0) + '% · ' + v2Speed(t.speedBps);
+    if (t.status === 'completed') {
+      if (t.totalBytes) s += ' · ' + v2Bytes(t.totalBytes);
+      if (t.sha256) s += ' · SHA-256 ' + String(t.sha256).slice(0, 10) + '…';
+    }
+    if (t.reason) s += ' · ' + t.reason;
+    return s;
+  }
+  function v2TransferFilesText(t) {
+    var files = listOf(t.files);
+    if (!files.length) return '（未知文件）';
+    var names = files.map(function (f) { return (f && f.name) ? f.name : '文件'; });
+    if (names.length <= 2) return names.join('、');
+    return names.slice(0, 2).join('、') + ' 等 ' + names.length + ' 个';
+  }
+  function v2StartUpload() {
+    var input = $('#transfer-files');
+    var peerSel = $('#transfer-peer');
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) { toast('先选择要发送的文件', 'warn'); return; }
+    var peerId = peerSel ? peerSel.value : '';
+    if (!peerId) { toast('先选择已配对的目标设备', 'warn'); return; }
+    var meta = files.map(function (f) { return { name: f.name, size: f.size }; });
+    var total = files.reduce(function (a, f) { return a + f.size; }, 0);
+    v2Post('/api/v2/link/transfer/init', { peerId: peerId, direction: 'send', files: meta }, '发起文件传输').then(function (data) {
+      if (!data || !data.transferId) return;
+      var transferId = data.transferId;
+      var chunkSize = Number(data.chunkSize) || 1048576;
+      v2UpsertTransfer({ transferId: transferId, peerId: peerId, direction: 'send', files: meta, totalBytes: total, status: 'uploading', progress: 0, at: nowIso() });
+      render();
+      v2UploadAll(transferId, chunkSize, files, total).then(function () {
+        v2UpsertTransfer({ transferId: transferId, status: 'finishing', progress: 100 });
+        v2PatchTransfers();
+        return v2Post('/api/v2/link/transfer/' + encodeURIComponent(transferId) + '/finish', {}, '完成文件传输');
+      }).then(function (fin) {
+        v2UpsertTransfer({ transferId: transferId, status: 'completed', progress: 100, sha256: (fin && (fin.sha256 || (fin.result && fin.result.sha256))) || '' });
+        v2PatchTransfers();
+        render();
+      }).catch(function (err) {
+        v2UpsertTransfer({ transferId: transferId, status: 'failed', reason: String((err && err.message) || err) });
+        v2PatchTransfers();
+        toast('传输失败：' + String((err && err.message) || err), 'bad');
+      });
+    });
+  }
+  function v2UploadAll(transferId, chunkSize, files, total) {
+    var fi = 0, off = 0, sent = 0;
+    function step() {
+      if (fi >= files.length) return Promise.resolve();
+      var file = files[fi];
+      if (off >= file.size) { fi++; off = 0; return step(); }
+      var end = Math.min(off + chunkSize, file.size);
+      var blob = file.slice(off, end);
+      var tok = getToken();
+      var started = Date.now();
+      var headers = { 'Content-Type': 'application/octet-stream' };
+      if (tok) headers['x-tenon-token'] = tok;
+      return fetch('/api/v2/link/transfer/' + encodeURIComponent(transferId) + '/chunk?offset=' + sent, {
+        method: 'PUT', headers: headers, body: blob, credentials: 'same-origin'
+      }).then(function (res) {
+        if (!res.ok) throw new Error(res.status === 401 ? '需要操作令牌（HTTP 401）' : ('分块上传失败 HTTP ' + res.status));
+        sent += blob.size;
+        off = end;
+        var t = v2FindTransfer(transferId);
+        if (t) {
+          t.sentBytes = sent; t.totalBytes = total;
+          t.progress = total ? Math.min(99, Math.round(sent / total * 100)) : 0;
+          t.speedBps = Math.round(blob.size / Math.max(0.001, (Date.now() - started) / 1000));
+        }
+        v2PatchTransfers();
+        return step();
+      });
+    }
+    return step();
+  }
+
+  /* ---------- 剪贴板 ---------- */
+  function v2SendClipboard() {
+    var input = $('#clipboard-input');
+    var kindSel = $('#clipboard-kind');
+    var text = input ? String(input.value || '').trim() : '';
+    if (!text) { toast('先输入要互传的文本或链接', 'warn'); return; }
+    var kind = kindSel ? kindSel.value : 'text';
+    v2Post('/api/v2/link/clipboard', { kind: kind, text: text, from: 'web-ui' }, '发送剪贴板').then(function (data) {
+      if (!data) return;
+      if (input) input.value = '';
+      V2.data.clipHistory.unshift({ kind: kind, text: text, at: nowIso(), direction: 'send' });
+      if (V2.data.clipHistory.length > 20) V2.data.clipHistory.length = 20;
+      v2LoadClipboardLatest().then(function () { render(); });
+    });
+  }
+
+  /* ---------- 素材库 ---------- */
+  function v2AssetKind(kind) {
+    var m = { image: '图片', video: '视频', audio: '音频', doc: '文档', pdf: 'PDF', other: '其他' };
+    return m[kind] || kind || '素材';
+  }
+  function v2AssetThumbUrl(a, w) {
+    var id = a.id || a.assetId;
+    var urls = a.thumbUrls;
+    if (urls && urls[String(w)]) return urls[String(w)];
+    if (urls && urls[w]) return urls[w];
+    return '/api/v2/assets/' + encodeURIComponent(id) + '/thumb?w=' + (w || 320);
+  }
+  function v2AssetHasThumb(a) {
+    return !!(a && (a.thumbUrls || a.thumb) && !a.thumbError);
+  }
+  function v2AssetTags(a) { return listOf(a && a.tags); }
+  function v2AssetOcrText(a) {
+    if (!a) return '';
+    if (a.ocr && a.ocr.text) return a.ocr.text;
+    return a.ocrText || '';
+  }
+  function v2AssetSource(a) {
+    var s = objOf(a && a.source);
+    return (s.deviceId ? s.deviceId : '未知设备') + (s.path ? ' · ' + s.path : '');
+  }
+  function v2AssetDeviceOptions() {
+    var seen = {}, out = [];
+    var add = function (id, label) { if (!id || seen[id]) return; seen[id] = 1; out.push({ id: id, label: label || id }); };
+    var st = V2.data.assetStats;
+    if (st && st.byDevice) for (var k in st.byDevice) add(k, k);
+    nodesList().forEach(function (n) { add(n.id, n.name + '（' + n.id + '）'); });
+    add('node-local', 'node-local');
+    return out;
+  }
+  function v2AssetSelected(id) { return V2.data.assetSelection.indexOf(id) >= 0; }
+  function v2ToggleAssetSelect(id) {
+    var i = V2.data.assetSelection.indexOf(id);
+    if (i >= 0) V2.data.assetSelection.splice(i, 1);
+    else V2.data.assetSelection.push(id);
+  }
+  function v2OpenAsset(id) {
+    V2.data.assetDetail = null;
+    V2.data.assetLineage = null;
+    v2LoadAssetDetail(id).then(function () { render(); });
+  }
+  function v2AddSelectedToBasket() {
+    if (!V2.data.assetSelection.length) { toast('先勾选要加入中转站的素材', 'warn'); return; }
+    v2AddToBasket(V2.data.assetSelection.slice(), '#asset-basket-target');
+  }
+  function v2AddAssetToBasket(id) {
+    if (!id) return;
+    v2AddToBasket([id], '#asset-basket-target');
+  }
+  function v2AddToBasket(ids, targetSel) {
+    var target = $(targetSel || '#asset-basket-target');
+    var to = target ? target.value : '';
+    var items = ids.map(function (id) { return { assetId: id }; });
+    v2Post('/api/v2/assets/basket', { items: items, to: to || undefined, note: 'web-ui' }, '加入中转站').then(function (data) {
+      if (!data) return;
+      V2.data.assetSelection = [];
+      v2LoadBasket().then(function () { render(); });
+    });
+  }
+  function v2AddTag() {
+    var a = V2.data.assetDetail;
+    if (!a) return;
+    var input = $('#asset-tag-input');
+    var tags = String(input ? input.value : '').split(/[，,\s]+/).filter(Boolean);
+    if (!tags.length) { toast('先输入标签（逗号分隔）', 'warn'); return; }
+    v2Post('/api/v2/assets/' + encodeURIComponent(a.id || a.assetId) + '/tags', { tags: tags }, '素材打标签').then(function (data) {
+      if (!data) return;
+      if (input) input.value = '';
+      V2.data.assetDetail = data.asset || a;
+      render();
+    });
+  }
+
+  /* ---------- 中转站 ---------- */
+  function v2BasketId(item) { return item.id || item.basketId || item.assetId; }
+  function v2BasketStaged(items) {
+    return listOf(items || V2.data.basket).filter(function (b) { return (b.status || 'staged') === 'staged'; });
+  }
+  function v2BasketTake(ids) {
+    var staged = v2BasketStaged();
+    var takeIds = listOf(ids).length ? ids : staged.map(v2BasketId);
+    if (!takeIds.length) { toast('中转站没有待取用的条目', 'warn'); return; }
+    var sel = $('#basket-target');
+    var to = sel ? sel.value : (V2.data.basketTarget || '');
+    v2Post('/api/v2/assets/basket/take', { ids: takeIds, to: to || undefined }, '中转站取用').then(function (data) {
+      if (!data) return;
+      toast('已取用 ' + ((data.taken || takeIds).length) + ' 项' + (to ? ' → ' + to : ''), 'ok');
+      v2LoadBasket().then(function () { render(); });
+    });
+  }
+  function v2BasketClear() {
+    var staged = v2BasketStaged();
+    if (!staged.length) { toast('没有待取用的条目可清空', 'warn'); return; }
+    v2WriteMethod('DELETE', '/api/v2/assets/basket', { ids: staged.map(v2BasketId) }, '清空中转站').then(function (data) {
+      if (data) { v2LoadBasket().then(function () { render(); }); return; }
+      v2Post('/api/v2/assets/basket/take', { ids: staged.map(v2BasketId) }, '逐条取用清空').then(function (d2) {
+        if (d2) v2LoadBasket().then(function () { render(); });
+      });
+    });
+  }
+
+  /* ---------- 场景 ---------- */
+  function v2ActionById(id) {
+    var acts = V2.data.actions.length ? V2.data.actions : V2_LOCAL_ACTIONS;
+    for (var i = 0; i < acts.length; i++) {
+      if (acts[i].id === id || acts[i].actionId === id) return acts[i];
+    }
+    for (var j = 0; j < V2_LOCAL_ACTIONS.length; j++) if (V2_LOCAL_ACTIONS[j].id === id) return V2_LOCAL_ACTIONS[j];
+    return null;
+  }
+  function v2StepRisk(step) {
+    var a = v2ActionById(step && (step.actionId || step.id || step.action));
+    if (a && a.risk) return a.risk;
+    if (step && step.risk) return step.risk;
+    return 'reversible';
+  }
+  function v2StepNeedsConfirm(step) {
+    var a = v2ActionById(step && (step.actionId || step.id || step.action));
+    return !!(step && step.needsConfirm) || !!(a && (a.requiresConfirmation || a.risk === 'irreversible'));
+  }
+  function v2ActionDefaultParams(actionId) {
+    var act = v2ActionById(actionId);
+    var schema = act && act.params;
+    var out = {};
+    if (schema && schema.properties) {
+      for (var k in schema.properties) {
+        var p = schema.properties[k] || {};
+        if (p.default !== undefined) out[k] = p.default;
+        else if (p.type === 'integer' || p.type === 'number') out[k] = p.minimum !== undefined ? p.minimum : 1;
+        else if (p.type === 'boolean') out[k] = false;
+        else if (p.type === 'array') out[k] = [];
+        else out[k] = '';
+      }
+    }
+    return out;
+  }
+  function v2ActionRequiredParams(actionId) {
+    var act = v2ActionById(actionId);
+    return (act && act.params && listOf(act.params.required)) || [];
+  }
+  function v2SceneAddStep() {
+    var first = (V2.data.actions[0] && V2.data.actions[0].id) || 'asset.backup';
+    V2.data.sceneDraftSteps.push({ actionId: first, targetDeviceId: '', params: JSON.stringify(v2ActionDefaultParams(first)) });
+    render(true);
+  }
+  function v2SceneDelStep(idx) {
+    V2.data.sceneDraftSteps.splice(Number(idx) || 0, 1);
+    render(true);
+  }
+  function v2SceneSave() {
+    var nameEl = $('#scene-name');
+    var name = nameEl ? String(nameEl.value || '').trim() : '';
+    if (!name) { toast('先给场景起个名字', 'warn'); return; }
+    if (!V2.data.sceneDraftSteps.length) { toast('至少添加一个步骤', 'warn'); return; }
+    var steps = [];
+    var bad = '';
+    V2.data.sceneDraftSteps.forEach(function (st) {
+      var params = {};
+      try { params = st.params ? JSON.parse(st.params) : {}; } catch (_) { bad = '参数 JSON 格式错误：' + st.actionId; params = null; }
+      if (params === null) return;
+      var req = v2ActionRequiredParams(st.actionId);
+      for (var i = 0; i < req.length; i++) {
+        if (params[req[i]] === undefined || params[req[i]] === '') { bad = '缺少必填参数「' + req[i] + '」：' + st.actionId; }
+      }
+      steps.push({ actionId: st.actionId, params: params, targetDeviceId: st.targetDeviceId || '', needsConfirm: v2StepNeedsConfirm(st) });
+    });
+    if (bad) { toast(bad, 'warn', 5200); return; }
+    v2Post('/api/v2/scenes', { name: name, steps: steps }, '保存场景').then(function (data) {
+      if (!data) return;
+      V2.data.sceneFormOpen = false;
+      V2.data.sceneDraftSteps = [];
+      v2RefreshPage('scenes').then(function () { render(); });
+    });
+  }
+  function v2SceneFind(id) {
+    for (var i = 0; i < V2.data.scenes.length; i++) {
+      if (String(V2.data.scenes[i].id || V2.data.scenes[i].sceneId) === String(id)) return V2.data.scenes[i];
+    }
+    return null;
+  }
+  function v2PushSceneRun(rec) {
+    var ts = new Date(rec.at).getTime() || Date.now();
+    for (var i = 0; i < V2.data.sceneRuns.length; i++) {
+      var r = V2.data.sceneRuns[i];
+      if (String(r.sceneId) === String(rec.sceneId) &&
+          Math.abs((new Date(r.at).getTime() || 0) - ts) < 8000 &&
+          String(r.summary || '') === String(rec.summary || '')) return;
+    }
+    V2.data.sceneRuns.unshift(rec);
+    if (V2.data.sceneRuns.length > 20) V2.data.sceneRuns.length = 20;
+  }
+  function v2SceneRecordRun(scene, data) {
+    data = data || {};
+    v2PushSceneRun({
+      sceneId: data.sceneId || (scene && scene.id),
+      name: data.name || (scene && scene.name) || '',
+      by: data.by || V2.data.actor,
+      at: data.finishedAt || data.startedAt || nowIso(),
+      ok: data.ok !== false,
+      summary: data.summary || (listOf(data.steps).filter(function (s) { return s.ok; }).length + ' 步完成'),
+      taskIds: data.taskIds || []
+    });
+  }
+  function v2SceneRun(sceneId) {
+    var scene = v2SceneFind(sceneId);
+    if (!scene) { toast('场景不存在', 'bad'); return; }
+    function doRun() {
+      return v2Post('/api/v2/scenes/' + encodeURIComponent(sceneId) + '/run', { confirmed: true, by: V2.data.actor }, '执行场景').then(function (data) {
+        if (!data) return;
+        if (data.ok === false && data.needsConfirm && listOf(data.confirmReasons).length) {
+          v2ShowConfirmThenRun(scene, data);
+          return;
+        }
+        if (data.ok === false && (data.approvalRequired || data.approval_required || data.approvalId)) {
+          toast('该场景需要审批：已提交审批请求，等待管理员通过', 'warn', 5200);
+          v2RefreshPage('enterprise').then(function () { render(); });
+          return;
+        }
+        v2SceneRecordRun(scene, data);
+        v2RefreshPage('scenes').then(function () { render(); });
+      });
+    }
+    api('/api/v2/scenes/' + encodeURIComponent(sceneId) + '/preview', { method: 'POST', body: {} }).then(function (res) {
+      var p = (res && res.ok && res.data) ? res.data : null;
+      var preview = p ? (p.preview || p) : null;
+      if (preview && preview.needsConfirm) { v2ShowConfirmThenRun(scene, preview); return; }
+      if (preview && preview.blocked) { toast('场景不可执行：' + listOf(preview.confirmReasons).join('；'), 'warn'); return; }
+      if (!p && res && res.status && res.status !== 200) { toast('场景预览失败：HTTP ' + res.status, 'bad'); return; }
+      doRun();
+    });
+  }
+  function v2ShowConfirmThenRun(scene, preview) {
+    var steps = listOf(preview && preview.steps);
+    var reasons = listOf(preview && preview.confirmReasons);
+    var body = '<div class="stack"><div>场景：<strong>' + esc(scene.name || scene.id) + '</strong></div>' +
+      '<div>步骤：' + (steps.length || listOf(scene.steps).length) + ' 步，其中不可逆 ' + steps.filter(function (s) { return s.risk === 'irreversible'; }).length + ' 步</div>' +
+      '<ul class="items">' + (steps.length ? steps.map(function (st, i) {
+        return '<li><span class="mono dim tiny">' + (i + 1) + '</span><span>' + esc(st.actionName || st.actionId) + ' · ' + esc(st.targetDeviceName || st.targetDeviceId || '自动选择') + '</span><span class="tag amber">' + (st.risk === 'irreversible' ? '不可逆' : '可逆') + '</span></li>';
+      }).join('') : listOf(scene.steps).map(function (st, i) {
+        return '<li><span class="mono dim tiny">' + (i + 1) + '</span><span>' + esc(st.actionId) + '</span></li>';
+      }).join('')) + '</ul>' +
+      (reasons.length ? '<div class="alert alert-warn">' + reasons.map(function (r) { return esc(r); }).join('<br>') + '</div>' : '') +
+      '<div class="hint-note">不可逆动作执行后不能自动撤销；取消则什么都不做。</div></div>';
+    v2ConfirmOpen('执行场景 · 含不可逆动作', '将发生什么、影响谁、能否撤销——确认后才会执行。', body, function () {
+      return v2Post('/api/v2/scenes/' + encodeURIComponent(scene.id) + '/run', { confirmed: true, by: V2.data.actor }, '执行场景（已确认）').then(function (data) {
+        if (!data) return;
+        v2SceneRecordRun(scene, data);
+        v2RefreshPage('scenes').then(function () { render(); });
+      });
+    });
+  }
+
+  /* ---------- 企业控制台 ---------- */
+  function v2PolicyObj() {
+    if (!V2.data.policy) V2.data.policy = { approvalRequiredForIrreversible: true, auditRetentionDays: 30, retentionOptions: [7, 30, 180] };
+    var p = V2.data.policy;
+    if (!listOf(p.retentionOptions).length) p.retentionOptions = [7, 30, 180];
+    return p;
+  }
+  function v2RoleName(id) {
+    for (var i = 0; i < V2.data.orgRoles.length; i++) if (V2.data.orgRoles[i].role === id) return V2.data.orgRoles[i].label || id;
+    for (var j = 0; j < V2_ROLES.length; j++) if (V2_ROLES[j].id === id) return V2_ROLES[j].name;
+    return id || '成员';
+  }
+  function v2PermActions() {
+    var ids = [], seen = {};
+    var add = function (id, name, risk) {
+      if (!id || seen[id]) return;
+      seen[id] = 1;
+      ids.push({ id: id, name: name || id, risk: risk || 'reversible' });
+    };
+    V2.data.actions.forEach(function (a) { add(a.id, a.name, a.risk); });
+    V2_EXTRA_ACTIONS.forEach(function (id) { add(id, id, 'reversible'); });
+    if (V2.data.orgRoles.length) {
+      V2.data.orgRoles.forEach(function (r) { listOf(r.defaultActions).forEach(function (id) { if (id !== '*') add(id, id, 'reversible'); }); });
+    }
+    return ids;
+  }
+  function v2UserAllowed(user, actionId) {
+    if (!user) return false;
+    var aa = user.allowedActions;
+    if (!aa) {
+      for (var i = 0; i < V2.data.orgRoles.length; i++) {
+        if (V2.data.orgRoles[i].role === user.role) {
+          var defs = listOf(V2.data.orgRoles[i].defaultActions);
+          return defs.indexOf('*') >= 0 || defs.indexOf(actionId) >= 0;
+        }
+      }
+      return user.role === 'admin';
+    }
+    if (Array.isArray(aa)) return aa.indexOf('*') >= 0 || aa.indexOf(actionId) >= 0;
+    var allow = listOf(aa.allow);
+    return allow.indexOf('*') >= 0 || allow.indexOf(actionId) >= 0;
+  }
+  function v2OrgAddUser() {
+    var nameEl = $('#org-user-name');
+    var roleEl = $('#org-user-role');
+    var name = nameEl ? String(nameEl.value || '').trim() : '';
+    var role = roleEl ? roleEl.value : 'member';
+    if (!name) { toast('先输入成员名称', 'warn'); return; }
+    v2Post('/api/v2/org/users', { name: name, role: role }, '新增成员').then(function (data) {
+      if (!data) return;
+      if (nameEl) nameEl.value = '';
+      v2RefreshPage('enterprise').then(function () { render(); });
+    });
+  }
+  function v2OrgSelectUser(userId) {
+    V2.data.editUserId = (V2.data.editUserId === userId) ? '' : userId;
+    render(true);
+  }
+  function v2OrgSaveUser() {
+    var uid = V2.data.editUserId;
+    if (!uid) return;
+    var roleEl = $('#org-edit-role');
+    var role = roleEl ? roleEl.value : 'member';
+    var allowed = [];
+    var boxes = $$('[data-v2-perm]');
+    for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) allowed.push(boxes[i].getAttribute('data-action-id'));
+    var payload = { role: role };
+    if (role !== 'admin') payload.allowedActions = allowed;
+    v2Patch('/api/v2/org/users/' + encodeURIComponent(uid), payload, '保存成员权限').then(function (data) {
+      if (!data) { v2RefreshPage('enterprise').then(function () { render(); }); return; }
+      if (data.user) {
+        for (var j = 0; j < V2.data.orgUsers.length; j++) if (V2.data.orgUsers[j].userId === uid) V2.data.orgUsers[j] = data.user;
+      }
+      v2RefreshPage('enterprise').then(function () { render(); });
+    });
+  }
+  function v2OrgActivateUser() {
+    var uid = V2.data.editUserId;
+    if (!uid) return;
+    v2Patch('/api/v2/org/users/' + encodeURIComponent(uid), { status: 'active' }, '启用成员').then(function (data) {
+      if (data) v2RefreshPage('enterprise').then(function () { render(); });
+    });
+  }
+  function v2SavePolicy() {
+    var p = v2PolicyObj();
+    var retentionEl = $('#org-policy-retention');
+    var approvalEl = $('#org-approval-toggle');
+    var payload = {
+      approvalRequiredForIrreversible: approvalEl ? !!approvalEl.checked : !!p.approvalRequiredForIrreversible,
+      auditRetentionDays: retentionEl ? Number(retentionEl.value) || p.auditRetentionDays || 30 : p.auditRetentionDays || 30
+    };
+    v2Patch('/api/v2/org/policy', payload, '保存企业策略').then(function (data) {
+      if (!data) return;
+      v2LoadPolicy().then(function () { render(); });
+    });
+  }
+  function v2ApprovalDecide(id, ok) {
+    if (!id) return;
+    v2Post('/api/v2/approvals/' + encodeURIComponent(id) + '/decide', { ok: !!ok, reason: ok ? '前端通过' : '前端拒绝' }, ok ? '通过审批' : '拒绝审批').then(function (data) {
+      if (!data) return;
+      v2RefreshPage('enterprise').then(function () { render(); });
+    });
+  }
+  function v2ExportAudit(format) {
+    download('/api/v2/org/audit/export?format=' + encodeURIComponent(format || 'csv'), 'tenon-v2-audit.' + (format || 'csv'));
+  }
+
+  /* ---------- 通用确认弹窗 ---------- */
+  function v2ConfirmOpen(title, sub, bodyHtml, onOk) {
+    V2.confirm = { onOk: onOk };
+    setText('#v2-confirm-title', title || '确认执行');
+    setText('#v2-confirm-sub', sub || '');
+    var body = $('#v2-confirm-body');
+    if (body) body.innerHTML = bodyHtml || '';
+    var m = $('#v2-confirm-modal');
+    if (m) m.classList.remove('hidden');
+  }
+  function v2ConfirmClose() {
+    V2.confirm = null;
+    var m = $('#v2-confirm-modal');
+    if (m) m.classList.add('hidden');
+    flushPendingRender();
+  }
+  function v2ConfirmOk() {
+    var cb = V2.confirm && V2.confirm.onOk;
+    v2ConfirmClose();
+    if (typeof cb === 'function') {
+      var p = cb();
+      if (p && p.catch) p.catch(function () {});
+    }
+  }
+
+  /* ---------- 表单状态保留（重绘不丢输入） ---------- */
+  function v2CaptureForm() {
+    var out = { values: {}, checks: {}, focus: null, selStart: 0, selEnd: 0 };
+    var els = $$('[data-keep]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var key = el.getAttribute('data-keep') || el.id;
+      if (!key) continue;
+      if (el.type === 'checkbox') out.checks[key] = !!el.checked;
+      else out.values[key] = el.value;
+    }
+    var active = document.activeElement;
+    if (active && active.getAttribute && active.getAttribute('data-keep')) {
+      out.focus = active.getAttribute('data-keep') || active.id;
+      try { out.selStart = active.selectionStart; out.selEnd = active.selectionEnd; } catch (_) {}
+    }
+    return out;
+  }
+  function v2RestoreForm(saved) {
+    if (!saved) return;
+    $$('[data-keep]').forEach(function (el) {
+      var key = el.getAttribute('data-keep') || el.id;
+      if (!key) return;
+      if (el.type === 'checkbox' && Object.prototype.hasOwnProperty.call(saved.checks, key)) el.checked = saved.checks[key];
+      else if (Object.prototype.hasOwnProperty.call(saved.values, key)) el.value = saved.values[key];
+    });
+    if (saved.focus) {
+      var target = document.querySelector('[data-keep="' + saved.focus + '"]');
+      if (target) {
+        try {
+          target.focus();
+          if (target.setSelectionRange) target.setSelectionRange(saved.selStart || 0, saved.selEnd || 0);
+        } catch (_) {}
+      }
+    }
+  }
+
+  /* ---------- 渲染：互联 ---------- */
+  function v2PeerId(p) { return p.id || p.peerId || p.deviceId || ''; }
+  function v2PeerTrusted(p) {
+    if (p.trusted !== undefined) return !!p.trusted;
+    if (p.paired !== undefined) return !!p.paired;
+    return p.status === 'trusted' || p.status === 'paired';
+  }
+  function v2PeerRow(p) {
+    var id = v2PeerId(p);
+    var trusted = v2PeerTrusted(p);
+    var online = p.online !== false;
+    var name = p.name || p.deviceName || id || '未命名设备';
+    var meta = [p.platform || '未知平台', (p.host || p.ip || '') + (p.port ? ':' + p.port : ''), p.fingerprint ? '指纹 ' + String(p.fingerprint).slice(0, 12) : ''].filter(Boolean).join(' · ');
+    return '<div class="peer-row" data-testid="link-peer" data-peer-id="' + attr(id) + '">' +
+      '<span class="online-dot ' + (online ? 'on' : 'off') + '"></span>' +
+      '<div class="peer-main"><div class="peer-name" data-testid="link-peer-name">' + esc(name) + '</div><div class="peer-meta">' + esc(meta) + '</div></div>' +
+      '<div class="peer-badges">' +
+      (trusted ? '<span class="badge no-dot b-ok">已信任</span>' : '<span class="badge no-dot b-warn">未配对</span>') +
+      (online ? '<span class="badge no-dot b-ok">在线</span>' : '<span class="badge no-dot b-muted">离线</span>') +
+      '</div>' +
+      '<div class="peer-actions">' +
+      (trusted ? '<button class="btn btn-sm" data-v2="revoke" data-peer-id="' + attr(id) + '" data-testid="btn-revoke">撤销信任</button>' : '') +
+      '</div></div>';
+  }
+  function v2RenderLink() {
+    var keys = ['peers', 'pairQr', 'clipboard', 'transfers'];
+    var peers = V2.data.peers;
+    var trusted = peers.filter(v2PeerTrusted);
+    var info = v2PairingInfo();
+    var self = V2.data.self;
+    var html = pageHead('互联', '同一 WiFi 自动发现、扫码/配对码配对、文件互传（分块 + SHA-256）、剪贴板与通知镜像；零外网依赖。', v2RefreshBtn('link', 'btn-refresh-link'));
+    html += v2Degrade(keys, '互联接口') + v2LoadingNote(keys);
+    html += '<div class="v2-grid-2">';
+    html += '<div class="card v2-card"><div class="card-title">配对 <span class="tiny dim">配对码 2 分钟内有效</span></div>' +
+      '<div class="pair-panel"><div class="qr-box"><canvas id="pair-qr" data-testid="pair-qr" class="qr-canvas"></canvas>' +
+      '<div class="tiny dim" style="margin-top:6px">手机扫码或输入配对码</div></div>' +
+      '<div class="pair-side"><div class="q-index">本机配对码</div>' +
+      '<div class="pair-code num" data-testid="pair-code">' + (info.code ? esc(info.code.replace(/(\d{3})(\d{3})/, '$1 $2')) : '— — —') + '</div>' +
+      '<div class="hint-note" data-testid="pair-status">' + (info.code
+        ? 'host ' + esc(info.host) + (info.expiresAt ? ' · 有效期至 ' + esc(fullTime(info.expiresAt)) : '') + ' · 刷新后旧码失效'
+        : '配对码接口未就绪（GET /api/v2/link/pair/qr）') + '</div>' +
+      '<div class="form-row" style="margin-top:8px">' +
+      '<input type="text" id="pair-code-input" data-testid="pair-code-input" data-keep="pair-code-input" placeholder="输入对方 6 位配对码" inputmode="numeric" maxlength="8" style="max-width:170px">' +
+      '<button class="btn btn-primary btn-sm" data-v2="pair" data-testid="btn-pair">配对</button>' +
+      '<button class="btn btn-sm" data-v2="pair-regenerate" data-testid="btn-pair-regenerate">刷新配对码</button>' +
+      '</div>' +
+      '<div class="mini-kv" style="margin-top:10px">' +
+      '<span class="k">本机</span><span class="v">' + esc((self && self.name) || info.name || '未知') + ' <span class="mono dim">' + esc((self && self.deviceId) || info.deviceId || '') + '</span></span>' +
+      '<span class="k">平台</span><span class="v">' + esc((self && self.platform) || info.platform || '未知') + '</span>' +
+      '<span class="k">地址</span><span class="v mono">' + esc((self && self.host ? self.host + ':' + self.port : info.host || '未知')) + '</span>' +
+      '<span class="k">发现</span><span class="v">' + ((V2.data.discovery && V2.data.discovery.enabled) ? 'UDP 已开启（端口 ' + esc(V2.data.discovery.port) + '）' : '未开启') + '</span>' +
+      '</div></div></div></div>';
+    html += '<div class="card v2-card"><div class="card-title">已发现设备 <span class="count mono">' + peers.length + '</span> <span class="tiny dim">已信任 ' + trusted.length + '</span></div>' +
+      '<div class="v2-list" data-testid="link-peer-list">' +
+      (peers.length ? peers.map(v2PeerRow).join('') : emptyBlock('未发现设备', '同一 WiFi 下的手机会自动出现；也可用配对码手动配对。')) +
+      '</div><div class="hint-note" style="margin-top:8px">发现接口：<code>GET /api/v2/link/peers</code> · 配对：<code>POST /api/v2/link/pair</code> · 撤销：<code>POST /api/v2/link/revoke</code></div></div>';
+    html += '</div>';
+    html += '<div class="section"><div class="section-head"><h2>文件传输</h2><span class="hint">分块 PUT / 断点续传 / SHA-256 校验 · 列表来自 GET /api/v2/link/transfers</span></div>' +
+      '<div class="card v2-card"><div class="form-row">' +
+      '<div class="field" style="max-width:220px"><label>目标设备</label><select id="transfer-peer" data-testid="transfer-peer" data-keep="transfer-peer"><option value="">选择已配对设备</option>' +
+      peers.map(function (p) { return '<option value="' + attr(v2PeerId(p)) + '">' + esc(p.name || v2PeerId(p)) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field" style="min-width:240px"><label>选择文件（可多选）</label><input type="file" id="transfer-files" data-testid="transfer-file-input" multiple></div>' +
+      '<button class="btn btn-primary btn-sm" data-v2="transfer-send" data-testid="btn-transfer-send">发送到设备</button>' +
+      '</div>' +
+      '<div class="v2-list" data-testid="transfer-list" style="margin-top:10px">' +
+      (V2.data.transfers.length ? V2.data.transfers.map(function (t) {
+        var pct = Math.max(0, Math.min(100, t.progress || 0));
+        return '<div class="transfer-row" data-testid="transfer-row" data-transfer-id="' + attr(t.transferId) + '">' +
+          '<div class="transfer-main"><div class="transfer-name">' + esc(v2TransferFilesText(t)) + '</div>' +
+          '<div class="tiny dim">' + esc(t.direction === 'receive' ? '接收 ← ' + (t.peerName || t.peerId) : '发送 → ' + (t.peerName || t.peerId)) + ' · ' + v2Bytes(t.totalBytes || 0) + '</div></div>' +
+          '<div class="progress" data-testid="transfer-progress"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="transfer-status tiny" data-role="transfer-status" data-testid="transfer-status">' + esc(v2TransferStatusText(t)) + '</div>' +
+          '</div>';
+      }).join('') : emptyBlock('还没有传输记录', '选择文件并发送后显示进度、速度与 SHA-256 校验结果；对端发起的接收记录也会出现。')) +
+      '</div></div></div>';
+    var clip = V2.data.clipboard;
+    html += '<div class="section"><div class="section-head"><h2>剪贴板与通知</h2><span class="hint">Android 前台场景 ≤2s；桌面复制 → 手机通知</span></div>' +
+      '<div class="v2-grid-2">';
+    html += '<div class="card v2-card"><div class="card-title">剪贴板互传</div>' +
+      '<div class="form-row"><div class="field" style="flex:2"><label>要发送的文本 / 链接</label><textarea id="clipboard-input" data-testid="clipboard-input" data-keep="clipboard-input" rows="2" placeholder="复制一段文本或链接，发给已配对手机"></textarea></div>' +
+      '<div class="field" style="max-width:120px"><label>类型</label><select id="clipboard-kind" data-testid="clipboard-kind" data-keep="clipboard-kind"><option value="text">文本</option><option value="link">链接</option></select></div>' +
+      '<button class="btn btn-primary btn-sm" data-v2="clipboard-send" data-testid="btn-clipboard-send">发送</button></div>' +
+      '<div class="clip-latest" data-testid="clipboard-latest" style="margin-top:10px">' +
+      '<div class="q-index">最近接收</div>' + (clip ? '<div class="clip-text">' + esc(clip.preview || clip.text || '（空内容）') + '</div><div class="tiny dim">' + esc(clip.from ? '来自 ' + clip.from + ' · ' : '') + esc(dateOf(clip.at)) + '</div>' : '<div class="tiny dim">暂无接收记录</div>') + '</div>' +
+      '<div class="v2-list" data-testid="clipboard-history" style="margin-top:10px">' +
+      (V2.data.clipHistory.length ? V2.data.clipHistory.map(function (c) {
+        return '<div class="clip-row" data-testid="clipboard-item"><span class="tag">' + esc(c.kind === 'link' ? '链接' : '文本') + '</span><span class="clip-text">' + esc(String(c.text || '').slice(0, 120)) + '</span><span class="dim tiny">' + esc(dateOf(c.at)) + '</span></div>';
+      }).join('') : '<div class="tiny dim">本会话发送记录会出现在这里</div>') + '</div></div>';
+    html += '<div class="card v2-card"><div class="card-title">通知镜像 <span class="count mono">' + V2.data.notifications.length + '</span></div>' +
+      '<div class="v2-list" data-testid="notification-list">' +
+      (V2.data.notifications.length ? V2.data.notifications.map(function (n) {
+        return '<div class="notif-row" data-testid="notification-row"><span class="tag">' + esc(n.app || n.from || '通知') + '</span><div class="notif-main"><div>' + esc(n.title || '（无标题）') + '</div><div class="tiny dim">' + esc(String(n.preview || '').slice(0, 80)) + '</div></div><span class="dim tiny">' + esc(dateOf(n.at)) + '</span></div>';
+      }).join('') : emptyBlock('暂无通知', '手机通知镜像会通过事件流与 POST /api/v2/link/notification 进来。')) + '</div></div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  /* ---------- 渲染：素材库 ---------- */
+  function v2AssetCard(a) {
+    var id = a.id || a.assetId;
+    var selected = v2AssetSelected(id);
+    var tags = v2AssetTags(a).slice(0, 3);
+    var hasThumb = v2AssetHasThumb(a);
+    return '<div class="asset-card' + (selected ? ' selected' : '') + '" data-testid="asset-card" data-asset-id="' + attr(id) + '">' +
+      '<div class="asset-thumb" data-v2="asset-open" data-asset-id="' + attr(id) + '">' +
+      (hasThumb ? '<img data-testid="asset-thumb" loading="lazy" alt="' + attr(a.name || '素材') + '" src="' + attr(v2AssetThumbUrl(a, 320)) + '" onerror="this.style.opacity=0">' : '<div class="tiny dim" style="padding:18px">无缩略图</div>') +
+      '<span class="badge no-dot b-muted asset-kind">' + esc(v2AssetKind(a.kind)) + '</span></div>' +
+      '<div class="asset-meta"><div class="asset-name" title="' + attr(a.name || '') + '">' + esc(a.name || id) + '</div>' +
+      '<div class="asset-sub tiny dim">' + v2Bytes(a.size) + (a.createdAt ? ' · ' + esc(dateOf(a.createdAt)) : '') + (v2AssetOcrText(a) ? ' · OCR' : '') + '</div>' +
+      (tags.length ? '<div class="asset-tags">' + tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
+      '</div>' +
+      '<label class="asset-check" title="选择加入中转站"><input type="checkbox" data-testid="asset-select" data-asset-id="' + attr(id) + '"' + (selected ? ' checked' : '') + '></label>' +
+      '</div>';
+  }
+  function v2RenderAssets() {
+    var keys = ['assets', 'assetStats'];
+    var f = V2.data.assetFilters;
+    var detail = V2.data.assetDetail;
+    var lineage = V2.data.assetLineage;
+    var stats = objOf(V2.data.assetStats);
+    var devices = v2AssetDeviceOptions();
+    var html = pageHead('素材库', '自动归集、哈希去重、OCR 搜索、标签与谱系；批量选中加入中转站，手机可一次取用。', v2RefreshBtn('assets', 'btn-refresh-assets'));
+    html += v2Degrade(keys, '素材接口') + v2LoadingNote(keys);
+    html += '<div class="card v2-card"><div class="form-row">' +
+      '<div class="field" style="flex:2;min-width:220px"><label>搜索（文件名 / OCR 文本 / 标签 / SHA-256）</label>' +
+      '<input type="text" id="asset-search" data-testid="asset-search" data-keep="asset-search" placeholder="例：样品 或 发票 或 周报" value="' + attr(f.q) + '"></div>' +
+      '<div class="field" style="max-width:130px"><label>类型</label><select id="asset-filter-kind" data-testid="asset-filter-kind" data-keep="asset-filter-kind">' +
+      ['', 'image', 'video', 'audio', 'doc', 'pdf', 'other'].map(function (k) { return '<option value="' + k + '"' + (f.kind === k ? ' selected' : '') + '>' + (k ? v2AssetKind(k) : '全部类型') + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field" style="max-width:170px"><label>设备</label><select id="asset-filter-device" data-testid="asset-filter-device" data-keep="asset-filter-device">' +
+      '<option value="">全部设备</option>' + devices.map(function (d) { return '<option value="' + attr(d.id) + '"' + (f.device === d.id ? ' selected' : '') + '>' + esc(d.label) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field" style="max-width:140px"><label>起始日期</label><input type="date" id="asset-filter-from" data-testid="asset-filter-from" data-keep="asset-filter-from" value="' + attr(f.from) + '"></div>' +
+      '<div class="field" style="max-width:140px"><label>结束日期</label><input type="date" id="asset-filter-to" data-testid="asset-filter-to" data-keep="asset-filter-to" value="' + attr(f.to) + '"></div>' +
+      '<button class="btn btn-sm" data-v2="refresh-page" data-page="assets" data-testid="btn-asset-search">搜索</button>' +
+      '</div>' +
+      '<div class="row-wrap" style="margin-top:8px"><span class="tag" data-testid="asset-stats">共 ' + (V2.data.assetTotal || 0) + ' 项素材</span>' +
+      (stats.byKind ? '<span class="tag">按类型 ' + Object.keys(stats.byKind).map(function (k) { return v2AssetKind(k) + ' ' + stats.byKind[k]; }).join(' / ') + '</span>' : '') +
+      (stats.basket ? '<span class="tag">中转站 待取 ' + (stats.basket.staged || 0) + ' / 已取 ' + (stats.basket.taken || 0) + '</span>' : '') +
+      '<span class="tag">已选 ' + V2.data.assetSelection.length + ' 项</span>' +
+      '<span class="spacer"></span><span class="tiny dim">检索：GET /api/v2/assets?q=&kind=&device=&from=&to=</span></div></div>';
+    html += '<div class="split" style="margin-top:12px">';
+    html += '<div><div class="asset-grid" data-testid="asset-grid">' +
+      (V2.data.assets.length ? V2.data.assets.map(v2AssetCard).join('') : emptyBlock('暂无素材', '电脑端文件扫描或手机分享上传后，素材会出现在这里。')) +
+      '</div>' +
+      '<div class="card v2-card" style="margin-top:12px"><div class="row-wrap">' +
+      '<span class="tiny muted">批量操作：</span>' +
+      '<div class="field" style="max-width:210px"><select id="asset-basket-target" data-testid="asset-basket-target" data-keep="asset-basket-target"><option value="">选择目标设备（可选）</option>' +
+      devices.map(function (d) { return '<option value="' + attr(d.id) + '">' + esc(d.label) + '</option>'; }).join('') + '</select></div>' +
+      '<button class="btn btn-primary btn-sm" data-v2="asset-basket" data-testid="btn-asset-basket">加入中转站（' + V2.data.assetSelection.length + '）</button>' +
+      '<a class="btn btn-ghost btn-sm" href="#/basket" data-testid="btn-goto-basket">去中转站 →</a>' +
+      '</div></div></div>';
+    html += '<div class="asset-detail-wrap" data-testid="asset-detail">';
+    if (!detail) {
+      html += '<div class="card v2-card"><div class="empty"><strong>选择一张素材</strong>点击左侧素材卡查看大图、元数据、OCR 文本、标签、来源与谱系。</div></div>';
+    } else {
+      var did = detail.id || detail.assetId;
+      var tags = v2AssetTags(detail);
+      var ocrText = v2AssetOcrText(detail);
+      html += '<div class="card v2-card"><div class="detail-head"><div><div class="detail-title" data-testid="asset-detail-name">' + esc(detail.name || did) + '</div>' +
+        '<div class="task-meta"><span class="mono">' + esc(did) + '</span><span class="tag">' + esc(v2AssetKind(detail.kind)) + '</span><span class="tag">' + v2Bytes(detail.size) + '</span><span class="tag' + (detail.removed ? ' red' : '') + '">' + (detail.removed ? '已移除' : '在库') + '</span></div></div>' +
+        '<button class="modal-close" data-v2="asset-close" aria-label="关闭">×</button></div>' +
+        '<div class="asset-big">' + (v2AssetHasThumb(detail) ? '<img data-testid="asset-detail-img" alt="' + attr(detail.name || '素材') + '" src="' + attr(v2AssetThumbUrl(detail, 640)) + '" onerror="this.style.display=\'none\'">' : '<div class="tiny dim" style="padding:24px">无缩略图（非图片或解析失败）</div>') + '</div>' +
+        '<div class="mini-kv" style="margin-top:8px">' +
+        '<span class="k">来源</span><span class="v" style="word-break:break-all">' + esc(v2AssetSource(detail)) + '</span>' +
+        '<span class="k">SHA-256</span><span class="v mono" style="font-size:10.5px;word-break:break-all">' + esc(detail.sha256 || '无记录') + '</span>' +
+        '<span class="k">MIME / 尺寸</span><span class="v">' + esc(detail.mime || '—') + (detail.image ? ' · ' + detail.image.width + '×' + detail.image.height : '') + '</span>' +
+        '<span class="k">入库时间</span><span class="v">' + esc(fullTime(detail.createdAt)) + '</span>' +
+        '<span class="k">出现次数</span><span class="v">' + (listOf(detail.occurrences).length || 1) + ' 处（跨设备溯源）</span>' +
+        (detail.ocr ? '<span class="k">OCR</span><span class="v">' + esc(detail.ocr.status || '—') + (detail.ocr.confidence ? ' · 置信度 ' + detail.ocr.confidence : '') + '</span>' : '') +
+        '</div>' +
+        '<div class="draft-sec" style="margin-top:10px"><h4>OCR 文本 <span class="seg">tesseract chi_sim+eng</span></h4><div class="val" data-testid="asset-detail-ocr">' + (ocrText ? esc(ocrText) : '<span class="dim">（无 OCR 文本：非图片、未识别或识别中）</span>') + '</div></div>' +
+        '<div class="draft-sec" style="margin-top:8px"><h4>标签</h4><div class="val" data-testid="asset-detail-tags">' + (tags.length ? tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join(' ') : '<span class="dim">暂无标签</span>') + '</div>' +
+        '<div class="form-row" style="margin-top:8px"><input type="text" id="asset-tag-input" data-testid="asset-tag-input" data-keep="asset-tag-input" placeholder="添加标签，逗号分隔" style="max-width:220px">' +
+        '<button class="btn btn-sm" data-v2="asset-tag" data-testid="btn-asset-tag">添加标签</button>' +
+        '<button class="btn btn-primary btn-sm" data-v2="asset-basket-add" data-asset-id="' + attr(did) + '" data-testid="btn-asset-basket-single">加入中转站</button></div></div>' +
+        (lineage ? '<div class="draft-sec" style="margin-top:8px"><h4>谱系 <span class="seg">lineage</span></h4><div class="val">' +
+          '<div class="tiny dim">事件 ' + listOf(lineage.events).length + ' 条 · 引用 ' + (listOf(lineage.refs).length || listOf(lineage.references).length || 0) + ' 处</div>' +
+          '<ul class="items" style="margin-top:4px">' + listOf(lineage.events).slice(0, 6).map(function (ev) {
+            return '<li><span class="mono dim tiny">' + esc(dateOf(ev.at)) + '</span><span>' + esc(ev.type || '') + '</span></li>';
+          }).join('') + '</ul></div></div>' : '') +
+        '<div class="tiny dim" style="margin-top:8px">详情：GET /api/v2/assets/:id（含 lineage）· 标签：POST /api/v2/assets/:id/tags</div></div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  /* ---------- 渲染：中转站 ---------- */
+  function v2RenderBasket() {
+    var keys = ['basketList'];
+    var stages = V2.data.basket;
+    var staged = v2BasketStaged(stages);
+    var taken = stages.filter(function (b) { return b.status === 'taken'; });
+    var peers = V2.data.peers;
+    var html = pageHead('中转站', '手机暂存、电脑一次取用；跨设备流转的「超级中转站」。',
+      '<div class="btn-row">' + v2RefreshBtn('basket', 'btn-refresh-basket') + '</div>');
+    html += v2Degrade(keys, '中转站接口') + v2LoadingNote(keys);
+    html += '<div class="split" style="margin-top:12px"><div>';
+    html += '<div class="card v2-card"><div class="card-title">暂存列表 <span class="count mono">' + staged.length + '</span> <span class="tiny dim">已取用 ' + taken.length + '</span></div>' +
+      '<div class="v2-list" data-testid="basket-list" style="margin-top:8px">' +
+      (stages.length ? stages.map(function (b) {
+        var stat = b.status || 'staged';
+        return '<div class="basket-item" data-testid="basket-item" data-item-id="' + attr(v2BasketId(b)) + '">' +
+          '<span class="badge no-dot ' + (stat === 'taken' ? 'b-ok' : 'b-warn') + '">' + (stat === 'taken' ? '已取用' : '待取用') + '</span>' +
+          '<div class="basket-main"><div class="basket-name">' + esc(b.name || b.assetId || b.id) + '</div><div class="tiny dim">' + v2Bytes(b.size) + (b.kind ? ' · ' + esc(v2AssetKind(b.kind)) : '') + (b.to ? ' · 目标 ' + esc(b.to) : '') + ' · ' + esc(dateOf(b.createdAt || b.at)) + '</div></div>' +
+          (stat !== 'taken' ? '<button class="btn btn-sm" data-v2="basket-take-item" data-item-id="' + attr(v2BasketId(b)) + '">取用</button>' : '') +
+          '</div>';
+      }).join('') : emptyBlock('中转站是空的', '在素材库勾选素材 →「加入中转站」，手机等设备可一次取用。')) +
+      '</div></div>';
+    html += '</div><div>';
+    html += '<div class="card v2-card"><div class="card-title">取用</div>' +
+      '<div class="field"><label>取用目标设备（可选）</label><select id="basket-target" data-testid="basket-target" data-keep="basket-target"><option value="">不指定（本机中转站）</option>' +
+      peers.map(function (p) { return '<option value="' + attr(v2PeerId(p)) + '">' + esc(p.name || v2PeerId(p)) + '</option>'; }).join('') +
+      nodesList().map(function (n) { return '<option value="' + attr(n.id) + '">' + esc(n.name) + '（' + esc(n.id) + '）</option>'; }).join('') + '</select></div>' +
+      '<div class="btn-row" style="margin-top:10px">' +
+      '<button class="btn btn-primary" data-v2="basket-take" data-testid="btn-basket-take">全部取用（' + staged.length + '）</button>' +
+      '<button class="btn btn-sm" data-v2="basket-refresh" data-testid="btn-refresh-basket2">刷新</button>' +
+      '<button class="btn btn-danger btn-sm" data-v2="basket-clear" data-testid="btn-basket-clear">清空待取用</button></div>' +
+      '<div class="hint-note" style="margin-top:8px">暂存：<code>POST /api/v2/assets/basket {items:[{assetId}],to}</code> · 取用：<code>POST /api/v2/assets/basket/take {ids,to}</code></div></div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  /* ---------- 渲染：场景 ---------- */
+  function v2ActionOptions(selected) {
+    var acts = V2.data.actions.length ? V2.data.actions : V2_LOCAL_ACTIONS;
+    return acts.map(function (a) {
+      var id = a.id || a.actionId;
+      return '<option value="' + attr(id) + '"' + (selected === id ? ' selected' : '') + '>' + esc(a.name || id) + ((a.risk === 'irreversible' || a.requiresConfirmation) ? '（不可逆）' : '') + '</option>';
+    }).join('');
+  }
+  function v2DeviceOptions(selected) {
+    return '<option value="">自动选择设备</option>' + nodesList().map(function (n) {
+      return '<option value="' + attr(n.id) + '"' + (selected === n.id ? ' selected' : '') + '>' + esc(n.name) + '</option>';
+    }).join('');
+  }
+  function v2ActionHint(actionId) {
+    var act = v2ActionById(actionId);
+    if (!act) return '';
+    var req = listOf(act.params && act.params.required);
+    return '必填参数：' + (req.length ? req.join(', ') : '无') + (act.available === false ? ' · 当前不可用（会降级/模拟）' : '') + (act.targetDevices ? ' · 目标设备 ' + listOf(act.targetDevices).map(function (d) { return d.name || d.deviceId; }).join('/') : '');
+  }
+  function v2RenderScenes() {
+    var keys = ['scenes', 'model'];
+    if (!V2.data.actions.length) V2.data.actions = V2_LOCAL_ACTIONS.slice();
+    var scenes = V2.data.scenes;
+    var html = pageHead('场景', '打印素材 / 投屏照片到电脑 / 备份到 NAS 或文件夹；不可逆动作需确认，执行记审计。',
+      '<div class="btn-row">' + v2RefreshBtn('scenes', 'btn-refresh-scenes') +
+      '<button class="btn btn-primary btn-sm" data-v2="scene-new" data-testid="btn-scene-new">新建场景</button></div>');
+    html += v2Degrade(keys, '场景接口') + v2LoadingNote(keys);
+    if (V2.data.sceneFormOpen) {
+      if (!V2.data.sceneDraftSteps.length) V2.data.sceneDraftSteps.push({ actionId: (V2.data.actions[0] && V2.data.actions[0].id) || 'asset.backup', targetDeviceId: '', params: '{}' });
+      html += '<div class="card v2-card" data-testid="scene-form"><div class="card-title">新建场景</div>' +
+        '<div class="field" style="margin-top:8px"><label>场景名称</label><input type="text" id="scene-name" data-testid="scene-name" data-keep="scene-name" placeholder="例：下班后打印样品并备份"></div>' +
+        '<div class="v2-list" style="margin-top:10px">' + V2.data.sceneDraftSteps.map(function (st, i) {
+          var act = v2ActionById(st.actionId);
+          return '<div class="scene-step-row" data-testid="scene-step">' +
+            '<span class="mono dim tiny">' + (i + 1) + '</span>' +
+            '<select data-testid="scene-step-action" data-v2-change="step-action" data-index="' + i + '">' + v2ActionOptions(st.actionId) + '</select>' +
+            '<select data-testid="scene-step-device" data-v2-change="step-device" data-index="' + i + '">' + v2DeviceOptions(st.targetDeviceId) + '</select>' +
+            '<textarea data-testid="scene-step-params" data-keep="step-params-' + i + '" data-v2-input="step-params" data-index="' + i + '" rows="1" placeholder=\'{"file":"示例空间/样品图/样品01.png"}\'>' + esc(st.params || '{}') + '</textarea>' +
+            '<span class="tag ' + ((act && (act.risk === 'irreversible' || act.requiresConfirmation)) ? 'amber' : 'cyan') + '">' + esc((act && act.name) || st.actionId) + '</span>' +
+            '<button class="btn btn-sm" data-v2="scene-del-step" data-index="' + i + '">删除</button>' +
+            '<div class="tiny dim" style="grid-column:1/-1">' + esc(v2ActionHint(st.actionId)) + '</div>' +
+            '</div>';
+        }).join('') + '</div>' +
+        '<div class="btn-row" style="margin-top:10px">' +
+        '<button class="btn btn-sm" data-v2="scene-add-step" data-testid="btn-scene-add-step">+ 添加步骤</button>' +
+        '<button class="btn btn-primary" data-v2="scene-save" data-testid="btn-scene-save">保存场景</button>' +
+        '<span class="tiny dim">动作清单来自 <code>GET /api/v2/things/model</code>（含参数 schema 与风险）</span></div></div>';
+    }
+    html += '<div class="scene-grid" data-testid="scene-list" style="margin-top:12px">' +
+      (scenes.length ? scenes.map(function (sc) {
+        var id = sc.id || sc.sceneId;
+        var steps = listOf(sc.steps);
+        var irr = steps.filter(v2StepNeedsConfirm).length;
+        return '<div class="card v2-card scene-card" data-testid="scene-card" data-scene-id="' + attr(id) + '">' +
+          '<div class="detail-head"><div class="scene-name">' + esc(sc.name || id) + '</div>' +
+          '<div class="badge-row">' + (irr ? '<span class="badge no-dot b-warn">含不可逆 ' + irr + '</span>' : '<span class="badge no-dot b-ok">全可逆</span>') + '</div></div>' +
+          '<div class="tiny muted" style="margin-top:4px">' + steps.length + ' 步 · 更新 ' + esc(relTime(sc.updatedAt || sc.createdAt)) + ' · by ' + esc(sc.createdBy || '你') + '</div>' +
+          '<ul class="items" style="margin-top:6px">' + steps.map(function (st) {
+            var act = v2ActionById(st.actionId || st.action);
+            return '<li><span class="mono dim tiny">·</span><span>' + esc((act && act.name) || st.actionId || st.action) + '</span><span class="dim tiny">' + esc(st.targetDeviceId || '自动') + '</span><span class="' + (v2StepNeedsConfirm(st) ? 'warn' : 'dim') + ' tiny">' + (v2StepNeedsConfirm(st) ? '需确认' : '可逆') + '</span></li>';
+          }).join('') + '</ul>' +
+          '<div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" data-v2="scene-run" data-scene-id="' + attr(id) + '" data-testid="scene-run">一键执行</button>' +
+          '<a class="btn btn-ghost btn-sm" href="#/assets">去素材库选素材 →</a></div></div>';
+      }).join('') : emptyBlock('还没有场景', '点右上角「新建场景」：例如 打印素材 → 备份到 NAS（不可逆步骤会先确认）。')) +
+      '</div>';
+    html += '<div class="section"><div class="section-head"><h2>最近执行</h2><span class="hint">执行结果 + 事件流 scene.ran（审计可导出）</span></div>' +
+      '<div class="card v2-card"><div class="v2-list" data-testid="scene-last-runs">' +
+      (V2.data.sceneRuns.length ? V2.data.sceneRuns.map(function (r) {
+        return '<div class="run-row" data-testid="scene-run-row"><span class="mono dim tiny">' + esc(dateOf(r.at)) + '</span><span>' + esc(r.name || r.sceneId || '场景') + '</span><span class="tag' + (r.ok === false ? ' red' : ' cyan') + '">' + (r.ok === false ? '失败' : '已执行') + '</span><span class="dim tiny">' + esc(r.by || '你') + '</span><span class="dim tiny">' + esc(String(r.summary || '').slice(0, 80)) + '</span></div>';
+      }).join('') : '<div class="tiny dim">还没有执行记录（执行后显示结果，并经 SSE 推送 scene.ran）</div>') + '</div></div></div>';
+    return html;
+  }
+
+  /* ---------- 渲染：企业控制台 ---------- */
+  function v2RenderEnterprise() {
+    var keys = ['orgUsers', 'policy', 'approvals'];
+    var p = v2PolicyObj();
+    var tab = V2.data.entTab || 'users';
+    var users = V2.data.orgUsers;
+    var html = pageHead('企业控制台', '成员与角色、按角色限制动作、不可逆动作审批开关、审计保留期与导出；私有化部署 + 审计合规。', v2RefreshBtn('enterprise', 'btn-refresh-enterprise'));
+    html += v2Degrade(keys, '企业接口') + v2LoadingNote(keys);
+    html += '<div class="tabs" style="margin-bottom:12px">' +
+      [['users', '成员与角色'], ['policy', '策略与权限'], ['approvals', '审批'], ['audit', '审计导出']].map(function (t) {
+        return '<button class="filter-chip' + (tab === t[0] ? ' active' : '') + '" data-v2="ent-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
+      }).join('') + '</div>';
+    if (tab === 'users') {
+      var editUser = null;
+      for (var i = 0; i < users.length; i++) if (users[i].userId === V2.data.editUserId) { editUser = users[i]; break; }
+      html += '<div class="split"><div><div class="card v2-card"><div class="card-title">成员 <span class="count mono">' + users.length + '</span></div>' +
+        '<div class="v2-list" data-testid="org-user-list">' +
+        (users.length ? users.map(function (u) {
+          var uid = u.id || u.userId;
+          return '<div class="org-user' + (uid === V2.data.editUserId ? ' active' : '') + '" data-testid="org-user" data-user-id="' + attr(uid) + '">' +
+            '<span class="role-pill role-' + esc(u.role || 'member') + '">' + esc(u.roleLabel || v2RoleName(u.role)) + '</span>' +
+            '<div class="org-main"><div class="org-name">' + esc(u.name || uid) + '</div><div class="tiny dim">' + esc(u.status || 'active') + (u.inviteCode ? ' · 邀请码 ' + esc(u.inviteCode) : '') + (u.email ? ' · ' + esc(u.email) : '') + '</div></div>' +
+            '<span class="tag">' + (u.role === 'admin' ? '全部动作' : '动作 ' + listOf(u.effectiveActions).length) + '</span>' +
+            '<button class="btn btn-sm" data-v2="org-select-user" data-user-id="' + attr(uid) + '" data-testid="btn-org-edit-user">编辑</button></div>';
+        }).join('') : emptyBlock('还没有成员', '新增成员并分配角色（管理员 / 成员 / 访客）。')) +
+        '</div></div></div>' +
+        '<div class="card v2-card"><div class="card-title">新增成员</div>' +
+        '<div class="field" style="margin-top:8px"><label>成员名称</label><input type="text" id="org-user-name" data-testid="org-user-name" data-keep="org-user-name" placeholder="例：张三"></div>' +
+        '<div class="field" style="margin-top:8px"><label>角色</label><select id="org-user-role" data-testid="org-user-role" data-keep="org-user-role">' +
+        V2_ROLES.map(function (r) { return '<option value="' + r.id + '">' + r.name + '</option>'; }).join('') + '</select></div>' +
+        '<button class="btn btn-primary btn-block" style="margin-top:10px" data-v2="org-add-user" data-testid="btn-org-add-user">创建成员</button>' +
+        '<div class="hint-note" style="margin-top:8px">POST /api/v2/org/users · 新成员状态为 invited（需激活）；越权留痕 enterprise.denied。</div></div>' +
+        (editUser ? '<div class="card v2-card" style="margin-top:12px" data-testid="org-edit-panel"><div class="card-title">编辑成员 · ' + esc(editUser.name || editUser.userId) + '</div>' +
+          '<div class="field" style="margin-top:8px"><label>角色</label><select id="org-edit-role" data-testid="org-user-role-edit" data-keep="org-edit-role">' +
+          V2_ROLES.map(function (r) { return '<option value="' + r.id + '"' + (editUser.role === r.id ? ' selected' : '') + '>' + r.name + '</option>'; }).join('') + '</select></div>' +
+          '<div class="field" style="margin-top:8px"><label>动作权限（勾选 = 允许）</label><div class="perm-grid" data-testid="org-actions">' +
+          v2PermActions().map(function (a) {
+            return '<div class="perm-row"><span class="perm-name">' + esc(a.name) + (a.risk === 'irreversible' ? '<span class="tag amber">不可逆</span>' : '') + '<span class="mono dim" style="font-size:10px">' + esc(a.id) + '</span></span>' +
+              '<label class="perm-check"><input type="checkbox" data-testid="org-action-perm" data-v2-perm="1" data-action-id="' + attr(a.id) + '"' + (v2UserAllowed(editUser, a.id) ? ' checked' : '') + '></label></div>';
+          }).join('') + '</div></div>' +
+          '<div class="btn-row" style="margin-top:10px"><button class="btn btn-primary" data-v2="org-save-user" data-testid="btn-save-user">保存成员权限</button>' +
+          (editUser.status !== 'active' ? '<button class="btn" data-v2="org-activate-user" data-testid="btn-org-activate-user">启用成员</button>' : '') +
+          '<button class="btn btn-ghost" data-v2="org-select-user" data-user-id="">收起</button></div>' +
+          '<div class="hint-note" style="margin-top:8px">PATCH /api/v2/org/users/:id {role, allowedActions, status} · 只读实例下写操作返回 423。</div></div>' : '') +
+        '</div>';
+    } else if (tab === 'policy') {
+      var retentionOpts = listOf(p.retentionOptions).length ? p.retentionOptions : [7, 30, 180];
+      html += '<div class="v2-grid-2"><div class="card v2-card"><div class="card-title">安全策略</div>' +
+        '<div class="setting-row"><span class="k">不可逆动作需审批</span><span class="v"><label class="switch"><input type="checkbox" id="org-approval-toggle" data-testid="org-approval-toggle" data-keep="org-approval-toggle"' + (p.approvalRequiredForIrreversible !== false ? ' checked' : '') + '> 开启（打印 / 发送 / 删除需审批）</label></span></div>' +
+        '<div class="setting-row"><span class="k">审计保留期</span><span class="v"><select id="org-policy-retention" data-testid="org-policy-retention" data-keep="org-policy-retention">' +
+        retentionOpts.map(function (d) { return '<option value="' + d + '"' + (Number(p.auditRetentionDays) === Number(d) ? ' selected' : '') + '>' + d + ' 天</option>'; }).join('') + '</select></span></div>' +
+        '<div class="setting-row"><span class="k">数据域</span><span class="v">' + esc(p.dataDomain || (snap() && snap().domainLabel) || '默认数据域') + '</span></div>' +
+        '<div class="setting-row"><span class="k">跨域引用需审批</span><span class="v">' + (p.crossDomainRequiresApproval ? '<span class="tag amber">是</span>' : '<span class="tag">否</span>') + '</span></div>' +
+        '<div class="setting-row"><span class="k">审批有效期</span><span class="v">' + esc(String(p.approvalTtlHours || 24)) + ' 小时</span></div>' +
+        '<button class="btn btn-primary" style="margin-top:10px" data-v2="save-policy" data-testid="btn-save-policy">保存策略</button>' +
+        '<div class="hint-note" style="margin-top:8px">PATCH /api/v2/org/policy · 保留期 7 / 30 / 180 天对应单机 / 团队 / 企业。</div></div>' +
+        '<div class="card v2-card"><div class="card-title">审计与合规要点</div><div class="license">' +
+        '<p>全量事件写入本地账本（哈希链），审计导出按保留期过滤；导出本身也记账。</p>' +
+        '<p>角色越权尝试写入 <code>enterprise.denied</code>；审批流写入 <code>approval.requested</code> / <code>approval.decided</code>。</p>' +
+        '<p>SSO / 企业微信 / 钉钉适配器接口由后端提供（凭据企业自备），未配置时使用 mock。</p>' +
+        '<p>私有化部署：数据、日志、模型调用记录都在自己的服务器上；默认零外联。</p></div></div></div>';
+    } else if (tab === 'approvals') {
+      var pendingCount = V2.data.approvals.filter(function (a) { return a.status === 'pending'; }).length;
+      html += '<div class="card v2-card"><div class="card-title">审批列表 <span class="count mono">' + V2.data.approvals.length + '</span> <span class="tiny dim">待审批 ' + pendingCount + '</span></div>' +
+        '<div class="v2-list" data-testid="approval-list">' +
+        (V2.data.approvals.length ? V2.data.approvals.map(function (ap) {
+          var apid = ap.id || ap.requestId;
+          var status = ap.status || 'pending';
+          var stCls = status === 'approved' ? 'b-ok' : status === 'rejected' ? 'b-bad' : 'b-warn';
+          return '<div class="approval-row" data-testid="approval-row" data-approval-id="' + attr(apid) + '">' +
+            '<span class="badge no-dot ' + stCls + '">' + esc(status === 'approved' ? '已通过' : status === 'rejected' ? '已拒绝' : '待审批') + '</span>' +
+            '<div class="approval-main"><div>' + esc(ap.actionName || ap.action || '不可逆动作') + ' <span class="tag' + (ap.risk === 'irreversible' ? ' amber' : '') + '">' + esc(ap.risk || '') + '</span></div><div class="tiny dim">发起人 ' + esc(ap.byName || ap.by || '你') + ' · ' + esc(dateOf(ap.createdAt || ap.at)) + (ap.decidedByName ? ' · 审批人 ' + esc(ap.decidedByName) : '') + (ap.reason ? ' · ' + esc(ap.reason) : '') + '</div></div>' +
+            (status === 'pending' ? '<div class="btn-row"><button class="btn btn-primary btn-sm" data-v2="approval-decide" data-approval-id="' + attr(apid) + '" data-ok="1" data-testid="btn-approval-approve">通过</button>' +
+              '<button class="btn btn-danger btn-sm" data-v2="approval-decide" data-approval-id="' + attr(apid) + '" data-ok="0" data-testid="btn-approval-reject">拒绝</button></div>' : '') +
+            '</div>';
+        }).join('') : emptyBlock('暂无审批请求', '开启「不可逆动作需审批」后，打印 / 发送等动作会出现在这里。')) +
+        '</div><div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" data-v2="refresh-page" data-page="enterprise" data-testid="btn-refresh-approvals">刷新审批列表</button></div>' +
+        '<div class="hint-note" style="margin-top:8px">GET /api/v2/approvals · POST /api/v2/approvals/:id/decide {ok,reason}（只有管理员可审批、不能自批）</div></div>';
+    } else {
+      html += '<div class="v2-grid-2"><div class="card v2-card"><div class="card-title">审计导出</div>' +
+        '<div class="license"><p>复用事件账本，按保留期过滤；导出动作本身也记账。</p><p>当前保留期：<strong>' + esc(String(p.auditRetentionDays || 30)) + ' 天</strong>（可在「策略」页调整）。</p></div>' +
+        '<div class="btn-row" style="margin-top:10px">' +
+        '<button class="btn btn-primary btn-sm" data-v2="v2-export" data-format="csv" data-testid="btn-export-v2-audit-csv">导出 CSV</button>' +
+        '<button class="btn btn-sm" data-v2="v2-export" data-format="json" data-testid="btn-export-v2-audit-json">导出 JSON</button>' +
+        '<button class="btn btn-sm" data-v2="v2-export" data-format="md" data-testid="btn-export-v2-audit-md">导出 Markdown</button></div>' +
+        '<div class="hint-note" style="margin-top:8px">GET /api/v2/org/audit/export?format=csv|json|md（需令牌）</div></div>' +
+        '<div class="card v2-card"><div class="card-title">动作审计</div>' +
+        '<div class="v2-list">' + (V2.data.actions.length ? V2.data.actions.map(function (a) {
+          return '<div class="drill-item"><span>' + esc(a.name || a.id) + '</span><span class="tag ' + (a.risk === 'irreversible' ? 'amber' : 'cyan') + '">' + esc(a.risk || 'reversible') + '</span><span class="dim tiny" style="margin-left:auto">' + esc(a.id) + '</span></div>';
+        }).join('') : '<div class="tiny dim">动作清单：GET /api/v2/things/model</div>') + '</div></div></div>';
+    }
+    return html;
+  }
+
+  /* ---------- v2 事件流（SSE 推送的新事件类型） ---------- */
+  function v2IsRealtimeEvent(type) {
+    return /^(link|transfer|clipboard|notification|asset|basket|scene|org|enterprise|approval|super)\./.test(String(type || ''));
+  }
+  function v2OnRealtimeEvent(ev) {
+    var type = String((ev && ev.type) || '');
+    var d = (ev && ev.data) || {};
+    var at = (ev && ev.at) || nowIso();
+    try {
+      if (type === 'link.peer.seen') {
+        var id = d.deviceId || d.peerId;
+        var found = null;
+        for (var i = 0; i < V2.data.peers.length; i++) if (v2PeerId(V2.data.peers[i]) === id) { found = V2.data.peers[i]; break; }
+        if (!found) { found = { deviceId: id }; V2.data.peers.push(found); }
+        found.name = d.name || found.name;
+        found.platform = d.platform || found.platform;
+        found.host = d.ip || d.host || found.host;
+        found.port = d.port || found.port;
+        found.online = true;
+        found.lastSeen = at;
+      } else if (type === 'link.paired') {
+        var pid = d.peerId || d.deviceId;
+        var peer = null;
+        for (var j = 0; j < V2.data.peers.length; j++) if (v2PeerId(V2.data.peers[j]) === pid) { peer = V2.data.peers[j]; break; }
+        if (!peer) { peer = { deviceId: pid }; V2.data.peers.push(peer); }
+        peer.name = d.name || peer.name;
+        peer.platform = d.platform || peer.platform;
+        peer.trusted = true;
+      } else if (type === 'link.revoked') {
+        for (var k = 0; k < V2.data.peers.length; k++) if (v2PeerId(V2.data.peers[k]) === (d.peerId || d.deviceId)) { V2.data.peers[k].trusted = false; }
+      } else if (type === 'transfer.started') {
+        v2UpsertTransfer({ transferId: d.transferId, peerId: d.peerId, direction: d.direction, files: d.files, totalBytes: d.totalBytes, status: d.direction === 'receive' ? 'receiving' : 'started', at: at });
+      } else if (type === 'transfer.completed') {
+        v2UpsertTransfer({ transferId: d.transferId, peerId: d.peerId, direction: d.direction, files: d.files, status: 'completed', progress: 100, totalBytes: d.bytes, sha256: d.sha256, speedBps: d.speedBps, at: at });
+      } else if (type === 'transfer.failed') {
+        v2UpsertTransfer({ transferId: d.transferId, status: 'failed', reason: d.reason, at: at });
+      } else if (type === 'clipboard.shared') {
+        V2.data.clipHistory.unshift({ kind: d.kind || 'text', text: d.preview || d.text || '', at: at, direction: d.from === 'local' ? 'send' : 'receive', from: d.from });
+        if (V2.data.clipHistory.length > 20) V2.data.clipHistory.length = 20;
+        if (d.from !== 'local' || d.to) V2.data.clipboard = { kind: d.kind, preview: d.preview || d.text, text: d.text, from: d.from, at: at };
+      } else if (type === 'notification.relayed') {
+        V2.data.notifications.unshift({ app: d.app, title: d.title, preview: d.preview, from: d.from, at: at });
+        if (V2.data.notifications.length > 20) V2.data.notifications.length = 20;
+      } else if (type === 'asset.ingested' || type === 'asset.tagged' || type === 'asset.shared' || type === 'asset.removed') {
+        V2.loaded.assets = 0;
+        if (V2.data.assetDetail && (V2.data.assetDetail.id === d.assetId)) v2LoadAssetDetail(d.assetId);
+      } else if (type === 'scene.ran') {
+        v2PushSceneRun({ sceneId: d.sceneId, name: v2SceneName(d.sceneId), by: d.by, result: d.result, at: at, ok: !(d.result && d.result.ok === false), summary: (d.result && d.result.summary) || '' });
+        V2.loaded.scenes = 0;
+      } else if (type === 'scene.defined' || type === 'org.user.created' || type === 'enterprise.role.changed' || type === 'approval.requested' || type === 'approval.decided') {
+        if (type.indexOf('scene') === 0) V2.loaded.scenes = 0; else V2.loaded.enterprise = 0;
+      } else if (type === 'super.handoff') {
+        superOnHandoffEvent(d, at);
+      } else if (type === 'super.asked') {
+        SUPER.asks.unshift({ text: d.text, reply: d.reply, at: at });
+        if (SUPER.asks.length > 20) SUPER.asks.length = 20;
+      } else if (type === 'basket.staged' || type === 'basket.taken') {
+        V2.loaded.basket = 0;
+      }
+    } catch (err) {
+      window.__tenonErrors.push('v2OnEvent: ' + String((err && err.message) || err));
+    }
+    if (v2IsRoute(S.route)) scheduleV2Refresh();
+  }
+  function v2SceneName(id) {
+    for (var i = 0; i < V2.data.scenes.length; i++) if (String(V2.data.scenes[i].id || V2.data.scenes[i].sceneId) === String(id)) return V2.data.scenes[i].name;
+    return id || '场景';
+  }
+  var v2RefreshTimer = null;
+  function scheduleV2Refresh() {
+    if (v2RefreshTimer) return;
+    v2RefreshTimer = setTimeout(function () {
+      v2RefreshTimer = null;
+      if (!v2IsRoute(S.route)) return;
+      V2.loaded[S.route] = 0;
+      v2EnsureLoaded(S.route);
+    }, 800);
+  }
+
+  /* ---------- v2 签名（参与重绘判定，避免无变化重绘） ---------- */
+  function v2Sig() {
+    var d = V2.data;
+    var st = [];
+    for (var k in V2.status) if (Object.prototype.hasOwnProperty.call(V2.status, k)) st.push(k + ':' + (V2.status[k].ok ? 'ok' : V2.status[k].kind));
+    switch (S.route) {
+      case 'link':
+        return 'L' + d.peers.map(function (p) { return [v2PeerId(p), p.name || '', v2PeerTrusted(p) ? 1 : 0, p.online ? 1 : 0].join(':').slice(0, 80); }).join('|') +
+          'Q' + (d.pairQr ? d.pairQr.code + '@' + d.pairQr.expiresAt : '') +
+          'T' + d.transfers.map(function (t) { return [t.transferId, t.status, Math.round(t.progress || 0)].join(':'); }).join('|') +
+          'C' + d.clipHistory.length + 'N' + d.notifications.length + 'S' + st.join(',');
+      case 'assets':
+        return 'A' + d.assets.map(function (a) { return (a.id || a.assetId) + ':' + (a.name || ''); }).join('|') + 'T' + d.assetTotal +
+          'D' + (d.assetDetail ? (d.assetDetail.id || d.assetDetail.assetId) : '') + 'L' + (d.assetLineage ? listOf(d.assetLineage.events).length : '') +
+          'X' + d.assetSelection.join(',') + 'F' + JSON.stringify(d.assetFilters) + 'S' + st.join(',');
+      case 'basket':
+        return 'B' + d.basket.map(function (b) { return v2BasketId(b) + ':' + (b.status || '') + ':' + (b.to || ''); }).join('|') + 'S' + st.join(',');
+      case 'scenes':
+        return 'C' + d.scenes.map(function (s) { return (s.id || s.sceneId) + ':' + (s.name || '') + ':' + listOf(s.steps).length; }).join('|') +
+          'R' + d.sceneRuns.length + 'D' + d.sceneDraftSteps.map(function (st2) { return st2.actionId + ':' + st2.targetDeviceId + ':' + st2.params; }).join('|') + 'O' + (d.sceneFormOpen ? 1 : 0) + 'S' + st.join(',');
+      case 'enterprise':
+        return 'U' + d.orgUsers.map(function (u) { return (u.userId || u.id) + ':' + (u.role || '') + ':' + (u.status || '') + ':' + JSON.stringify(u.allowedActions || ''); }).join('|').slice(0, 900) +
+          'P' + JSON.stringify(d.policy || {}) + 'A' + d.approvals.map(function (a) { return (a.requestId || a.id) + ':' + (a.status || 'pending'); }).join('|') +
+          'T' + d.entTab + 'E' + (d.editUserId || '') + 'S' + st.join(',');
+      case 'super': return 'S' + superSig();
+      case 'handoff': return 'H' + superSig();
+      default: return '';
+    }
+  }
+
+  /* ---------- v2 交互入口 ---------- */
+  function v2OnClick(ev) {
+    var el = ev.target && ev.target.closest ? ev.target.closest('[data-v2]') : null;
+    if (!el) return;
+    if (el.disabled) return;
+    var act = el.getAttribute('data-v2');
+    var ds = el.dataset || {};
+    ev.preventDefault();
+    ev.stopPropagation();
+    S.lastUserActionAt = Date.now();
+    switch (act) {
+      case 'refresh-page': v2RefreshPage(ds.page || S.route).then(function () { render(); }); break;
+      case 'pair': v2DoPair(); break;
+      case 'pair-regenerate': v2DoRegenerate(); break;
+      case 'revoke': v2DoRevoke(ds.peerId); break;
+      case 'transfer-send': v2StartUpload(); break;
+      case 'clipboard-send': v2SendClipboard(); break;
+      case 'asset-open': v2OpenAsset(ds.assetId); break;
+      case 'asset-close': V2.data.assetDetail = null; V2.data.assetLineage = null; render(true); break;
+      case 'asset-basket': v2AddSelectedToBasket(); break;
+      case 'asset-basket-add': v2AddAssetToBasket(ds.assetId); break;
+      case 'asset-tag': v2AddTag(); break;
+      case 'basket-take': v2BasketTake([]); break;
+      case 'basket-take-item': v2BasketTake([ds.itemId]); break;
+      case 'basket-refresh': v2LoadBasket().then(function () { render(); }); break;
+      case 'basket-clear': v2BasketClear(); break;
+      case 'scene-new': V2.data.sceneFormOpen = !V2.data.sceneFormOpen; if (V2.data.sceneFormOpen && !V2.data.sceneDraftSteps.length) v2SceneAddStep(); else render(true); break;
+      case 'scene-add-step': v2SceneAddStep(); break;
+      case 'scene-del-step': v2SceneDelStep(ds.index); break;
+      case 'scene-save': v2SceneSave(); break;
+      case 'scene-run': v2SceneRun(ds.sceneId); break;
+      case 'org-add-user': v2OrgAddUser(); break;
+      case 'org-select-user': v2OrgSelectUser(ds.userId || ''); break;
+      case 'org-save-user': v2OrgSaveUser(); break;
+      case 'org-activate-user': v2OrgActivateUser(); break;
+      case 'ent-tab': V2.data.entTab = ds.tab || 'users'; render(true); break;
+      case 'save-policy': v2SavePolicy(); break;
+      case 'approval-decide': v2ApprovalDecide(ds.approvalId, ds.ok === '1'); break;
+      case 'v2-export': v2ExportAudit(ds.format || 'csv'); break;
+      case 'confirm-ok': v2ConfirmOk(); break;
+      case 'confirm-cancel': v2ConfirmClose(); break;
+      default: break;
+    }
+  }
+  function v2OnChange(ev) {
+    var t = ev.target;
+    if (!t) return;
+    S.lastUserActionAt = Date.now();
+    var testid = t.getAttribute ? t.getAttribute('data-testid') : '';
+    if (testid === 'asset-select') {
+      v2ToggleAssetSelect(t.getAttribute('data-asset-id'));
+      var card = t.closest ? t.closest('[data-testid="asset-card"]') : null;
+      if (card) card.classList.toggle('selected', !!t.checked);
+      var batch = $('[data-testid="btn-asset-basket"]');
+      if (batch) batch.textContent = '加入中转站（' + V2.data.assetSelection.length + '）';
+      return;
+    }
+    if (testid === 'asset-filter-kind') { V2.data.assetFilters.kind = t.value; v2LoadAssets().then(function () { render(); }); return; }
+    if (testid === 'asset-filter-device') { V2.data.assetFilters.device = t.value; v2LoadAssets().then(function () { render(); }); return; }
+    if (testid === 'asset-filter-from') { V2.data.assetFilters.from = t.value; v2LoadAssets().then(function () { render(); }); return; }
+    if (testid === 'asset-filter-to') { V2.data.assetFilters.to = t.value; v2LoadAssets().then(function () { render(); }); return; }
+    if (testid === 'basket-target') { V2.data.basketTarget = t.value; return; }
+    var change = t.getAttribute ? t.getAttribute('data-v2-change') : '';
+    if (change === 'step-action' || change === 'step-device') {
+      var idx = Number(t.getAttribute('data-index')) || 0;
+      var stp = V2.data.sceneDraftSteps[idx];
+      if (stp) {
+        if (change === 'step-action') {
+          stp.actionId = t.value;
+          stp.params = JSON.stringify(v2ActionDefaultParams(t.value));
+        } else stp.targetDeviceId = t.value;
+      }
+      render(true);
+    }
+  }
+  function v2OnInput(ev) {
+    var t = ev.target;
+    if (!t) return;
+    var testid = t.getAttribute ? t.getAttribute('data-testid') : '';
+    if (testid === 'asset-search') {
+      V2.data.assetFilters.q = String(t.value || '');
+      if (S.searchTimer) clearTimeout(S.searchTimer);
+      S.searchTimer = setTimeout(function () { v2LoadAssets().then(function () { render(); }); }, 420);
+      return;
+    }
+    var inputKind = t.getAttribute ? t.getAttribute('data-v2-input') : '';
+    if (inputKind === 'step-params') {
+      var idx = Number(t.getAttribute('data-index')) || 0;
+      if (V2.data.sceneDraftSteps[idx]) V2.data.sceneDraftSteps[idx].params = t.value;
+    }
+  }
+  function v2Attach() {
+    document.addEventListener('click', v2OnClick);
+    document.addEventListener('change', v2OnChange);
+    document.addEventListener('input', v2OnInput);
+    setInterval(function () {
+      if (v2IsRoute(S.route) && !modalOpen() && !S.stale) v2EnsureLoaded(S.route);
+    }, 12000);
+  }
+
+  /* ======================================================================
+   * v2.1 消费级「超级终端」：默认首页 #/super + 流转接收页 #/handoff
+   * 一句话/语音调动家里设备与程序；手机一倾内容滑到电脑。
+   * 后端 /api/v2/super/* 未就绪时全部降级提示，不崩、不假装成功。
+   * ====================================================================== */
+  var SUPER_SUGGESTIONS = ['打开微信', '把这张照片甩到电脑', '回家模式', '放首歌'];
+  var SUPER_PROGRAMS_FALLBACK = [
+    { id: 'wechat', name: '微信', icon: '💬', ask: '打开微信', available: true },
+    { id: 'chrome', name: 'Chrome', icon: '🌐', ask: '打开 Chrome', available: true },
+    { id: 'notepad', name: '记事本', icon: '📝', ask: '打开记事本', available: true },
+    { id: 'explorer', name: '文件', icon: '📁', ask: '打开资源管理器', available: true },
+    { id: 'calc', name: '计算器', icon: '🧮', ask: '打开计算器', available: true },
+    { id: 'music', name: '音乐', icon: '🎵', ask: '放首歌', available: true },
+    { id: 'photos', name: '照片', icon: '🖼️', ask: '打开照片', available: true },
+    { id: 'print', name: '打印', icon: '🖨️', ask: '打印这张照片', available: true }
+  ];
+  var SUPER = {
+    status: null,
+    home: null,
+    state: null,
+    devices: [],
+    programs: [],
+    handoffs: [],
+    asks: [],
+    lastAsk: null,
+    listening: false,
+    rec: null,
+    busy: false,
+    loadingAll: false,
+    backendMissing: false,
+    catalog: null,
+    suggestions: [],
+    loadedAt: 0
+  };
+
+  function superIsRoute(route) { return (route || S.route) === 'super' || (route || S.route) === 'handoff'; }
+  function superKindIcon(kind, name) {
+    var k = String(kind || '').toLowerCase();
+    var map = { computer: '💻', pc: '💻', windows: '💻', laptop: '💻', phone: '📱', android: '📱', ios: '📱', tv: '📺', speaker: '🔊', printer: '🖨️', nas: '🗄️', light: '💡', hub: '🏠', server: '🗄️', tablet: '📱' };
+    if (map[k]) return map[k];
+    var n = String(name || '');
+    if (/电脑|工作台|中枢|windows|mac/i.test(n)) return '💻';
+    if (/手机|android|iphone/i.test(n)) return '📱';
+    if (/电视|tv/i.test(n)) return '📺';
+    if (/音箱|speaker|音响/i.test(n)) return '🔊';
+    if (/打印|printer/i.test(n)) return '🖨️';
+    if (/nas|群晖|存储/i.test(n)) return '🗄️';
+    return '📦';
+  }
+  function superProgIcon(p) {
+    if (p && p.icon) return p.icon;
+    var n = String((p && (p.name || p.id)) || '');
+    if (/微信|wechat/i.test(n)) return '💬';
+    if (/chrome|浏览器|edge/i.test(n)) return '🌐';
+    if (/记事本|notepad|文本/i.test(n)) return '📝';
+    if (/文件|explorer/i.test(n)) return '📁';
+    if (/计算器|calc/i.test(n)) return '🧮';
+    if (/音乐|music|歌/i.test(n)) return '🎵';
+    if (/照片|photo|相册/i.test(n)) return '🖼️';
+    if (/打印|print/i.test(n)) return '🖨️';
+    return '▶️';
+  }
+  function superDeviceSentence(d) {
+    if (d.sentence) return d.sentence;
+    if (d.note) return d.note;
+    var caps = listOf(d.capabilities).map(function (c) { return (c && (c.name || c.id)) || String(c); }).filter(Boolean);
+    if (caps.length) return '能' + caps.slice(0, 3).join('、') + (caps.length > 3 ? ' 等 ' + caps.length + ' 项能力' : '');
+    return '可被超级终端调用';
+  }
+  function superNormDevice(d) {
+    d = d || {};
+    var id = d.id || d.deviceId || d.nodeId || '';
+    var name = d.name || d.deviceName || id || '未知设备';
+    var kind = d.kind || d.type || d.platform || '';
+    var online = d.online !== undefined ? !!d.online : (d.connected !== undefined ? !!d.connected : true);
+    var simulated = !!d.simulated || d.mode === 'simulate';
+    return { id: id, name: name, kind: kind, platform: d.platform || '', online: online, simulated: simulated, capabilities: listOf(d.capabilities || d.actions), sentence: d.oneLine || d.sentence || '', note: d.note || d.reason || '', evidence: d.evidence || '', raw: d };
+  }
+  function superDevices() {
+    var list = [];
+    var seen = {};
+    var push = function (d) {
+      var nd = superNormDevice(d);
+      if (!nd.id || seen[nd.id]) return;
+      seen[nd.id] = 1;
+      list.push(nd);
+    };
+    var catalogDevices = listOf(SUPER.catalog && SUPER.catalog.devices);
+    catalogDevices.forEach(push);
+    if (!catalogDevices.length) {
+      nodesList().forEach(function (n) {
+        push({ id: n.id, name: n.name, kind: n.platform || n.kind || '', online: !!(n.online && !n.disconnected), capabilities: listOf(n.capabilities), note: n.disconnected ? '已断开 · 引用关系保留' : (n.online ? '' : '离线 · 唤醒后可用'), simulated: n.kind === 'imported' });
+      });
+      // 消费级家庭目录：手机/电视/音箱即使暂未接入也展示为「可用位置」，明确标注模拟
+      push({ id: 'phone-mine', name: '我的手机', kind: 'phone', online: false, note: '手机页打开 /m 即可连接；倾一下就把内容甩过来' });
+      push({ id: 'tv-living', name: '客厅电视', kind: 'tv', online: false, simulated: true, note: '模拟设备 · 后端接入后可用' });
+      push({ id: 'speaker-living', name: '客厅音箱', kind: 'speaker', online: false, simulated: true, note: '模拟设备 · 后端接入后可用' });
+    }
+    // 确保六类家庭设备都出现（电脑/手机/电视/音箱/打印机/NAS）
+    var has = function (re) { return list.some(function (d) { return re.test(d.name) || re.test(d.kind); }); };
+    if (!has(/电脑|工作台|中枢|hub|windows|mac/i)) push({ id: 'pc-this', name: '这台电脑', kind: 'computer', online: true, note: '本机中枢所在电脑' });
+    if (!has(/手机|phone|android/i)) push({ id: 'phone-mine', name: '我的手机', kind: 'phone', online: false, note: '手机页打开 /m 即可连接' });
+    if (!has(/电视|tv/i)) push({ id: 'tv-living', name: '客厅电视', kind: 'tv', online: false, simulated: true, note: '模拟设备' });
+    if (!has(/音箱|speaker/i)) push({ id: 'speaker-living', name: '客厅音箱', kind: 'speaker', online: false, simulated: true, note: '模拟设备' });
+    if (!has(/打印|printer/i)) push({ id: 'printer-home', name: '打印机', kind: 'printer', online: false, note: '未连接' });
+    if (!has(/nas|群晖|存储/i)) push({ id: 'nas-home', name: 'NAS', kind: 'nas', online: false, note: '未连接' });
+    return list;
+  }
+  function superPrograms() {
+    var fromHome = listOf(SUPER.catalog && SUPER.catalog.programs);
+    if (fromHome.length) {
+      return fromHome.map(function (p) {
+        return {
+          id: p.id || p.programId || p.name,
+          name: p.name || p.id,
+          icon: p.emoji || p.icon || superProgIcon(p),
+          ask: p.ask || ('打开' + (p.name || p.id)),
+          available: p.available !== false,
+          reason: p.reason || p.note || (p.availableAs === 'node' && listOf(p.targetDevices).length ? '' : ''),
+          actionId: p.actionId || '',
+          raw: p
+        };
+      });
+    }
+    return SUPER_PROGRAMS_FALLBACK.map(function (p) {
+      var copy = {};
+      for (var k in p) if (Object.prototype.hasOwnProperty.call(p, k)) copy[k] = p[k];
+      if (SUPER.backendMissing) {
+        copy.available = false;
+        copy.reason = '超级终端服务未就绪（POST /api/v2/super/ask），暂时点不了';
+      }
+      return copy;
+    });
+  }
+  function superLoadState() {
+    if (SUPER.loadingAll) return Promise.resolve();
+    SUPER.loadingAll = true;
+    return Promise.all([
+      v2Fetch('superState', '/api/v2/super/state'),
+      v2Fetch('superHome', '/api/v2/super/home')
+    ]).then(function (res) {
+      SUPER.loadingAll = false;
+      var st = res[0], home = res[1];
+      if (st) {
+        SUPER.state = st;
+        SUPER.handoffs = listOf(st.handoffs).map(superNormHandoff);
+        SUPER.asks = listOf(st.asks);
+      }
+      if (home) {
+        SUPER.home = home;
+        SUPER.catalog = home.catalog || home;
+        SUPER.suggestions = listOf(home.suggestions).map(function (x) { return typeof x === 'string' ? x : (x.text || x.label || x.say || ''); }).filter(Boolean);
+        if (!SUPER.suggestions.length) SUPER.suggestions = SUPER_SUGGESTIONS;
+        var recent = home.recent || {};
+        if (!st) {
+          SUPER.asks = listOf(recent.asks);
+          SUPER.handoffs = listOf(recent.handoffs).map(superNormHandoff);
+        }
+        if (!SUPER.asks.length) SUPER.asks = listOf(recent.asks);
+        if (!SUPER.handoffs.length) SUPER.handoffs = listOf(recent.handoffs).map(superNormHandoff);
+      }
+      if (!SUPER.lastAsk && SUPER.asks.length) {
+        var last = SUPER.asks[0] || {};
+        var r = last.result || {};
+        SUPER.lastAsk = {
+          text: last.text || '',
+          reply: last.reply || last.say || '',
+          plan: listOf(last.plan),
+          steps: listOf(r.steps),
+          needsConfirm: !!last.needsConfirm,
+          ai: r.ai || null,
+          at: last.at || nowIso(),
+          status: 'done'
+        };
+      }
+      SUPER.backendMissing = !st && !home;
+      SUPER.loadedAt = Date.now();
+      render();
+    });
+  }
+  function superStepList(ask) {
+    return listOf(ask && (ask.plan || ask.steps || ask.actions));
+  }
+  function superStepState(st) {
+    var s = String((st && (st.status || st.state)) || '');
+    if (st && st.ok === true) return { icon: '✅', cls: 'ok', label: '已完成' };
+    if (s === 'succeeded' || s === 'ok' || s === 'done' || s === 'completed') return { icon: '✅', cls: 'ok', label: '已完成' };
+    if (s === 'running') return { icon: '⏳', cls: 'run', label: '进行中' };
+    if (st && st.ok === false) return { icon: '❌', cls: 'bad', label: '失败' };
+    if (s === 'failed' || s === 'error' || s === 'timeout') return { icon: '❌', cls: 'bad', label: '失败' };
+    if (s === 'pending' || s === 'queued' || s === 'drafted') return { icon: '⏳', cls: 'wait', label: '排队中' };
+    if (s === 'dispatched') return { icon: '⏳', cls: 'wait', label: '已派发' };
+    if (s === 'degraded') return { icon: '⚠️', cls: 'wait', label: '降级执行' };
+    return { icon: '⏳', cls: 'wait', label: s || '准备中' };
+  }
+  function superStepLabel(st) {
+    return st.label || st.actionName || st.say || st.capabilityId || st.action || st.capability || st.targetDeviceName || '执行一步';
+  }
+  function superAsk(text) {
+    text = String(text || '').trim();
+    if (!text) { toast('先说一句要做什么', 'warn'); return; }
+    if (SUPER.busy) return;
+    SUPER.busy = true;
+    SUPER.lastAsk = { text: text, reply: '正在理解这句话…', plan: [], at: nowIso(), status: 'asking' };
+    render(true);
+    v2Post('/api/v2/super/ask', { text: text, source: 'desktop' }, '超级终端').then(function (data) {
+      SUPER.busy = false;
+      if (data && (data.reply || data.say)) {
+        SUPER.backendMissing = false;
+        SUPER.lastAsk = {
+          text: text,
+          reply: data.reply || data.say,
+          plan: listOf(data.plan),
+          steps: listOf(data.steps),
+          at: nowIso(),
+          status: 'done',
+          needsConfirm: !!(data.needsConfirm),
+          ai: data.ai || (data.intent && data.intent.ai) || null,
+          result: data
+        };
+        if (listOf(data.handoffs).length) SUPER.handoffs = listOf(data.handoffs).map(superNormHandoff).concat(SUPER.handoffs);
+      } else {
+        SUPER.backendMissing = true;
+        SUPER.lastAsk = {
+          text: text,
+          reply: '超级终端服务还没接上（/api/v2/super/ask 未就绪）。这句话我已经记下：「' + text + '」。后端就绪后，同样的操作会真正调动家里的设备与程序。',
+          plan: [],
+          at: nowIso(),
+          status: 'degraded'
+        };
+      }
+      render(true);
+    });
+  }
+  function superVoice() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { superVoiceFallback('浏览器不支持麦克风（webkitSpeechRecognition），已切文字输入'); return; }
+    if (SUPER.listening && SUPER.rec) {
+      try { SUPER.rec.stop(); } catch (_) {}
+      SUPER.listening = false;
+      render(false);
+      return;
+    }
+    try {
+      var rec = new SR();
+      rec.lang = 'zh-CN';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      SUPER.rec = rec;
+      rec.onresult = function (e) {
+        var transcript = '';
+        try { transcript = e.results[0][0].transcript || ''; } catch (_) {}
+        SUPER.listening = false;
+        if (transcript) {
+          var input = $('#super-ask-input');
+          if (input) input.value = transcript;
+          toast('听到：' + transcript, 'ok');
+          superAsk(transcript);
+        } else superVoiceFallback('没听清，已切文字输入');
+        render(false);
+      };
+      rec.onerror = function (e) {
+        SUPER.listening = false;
+        var why = e && e.error;
+        if (why === 'not-allowed' || why === 'permission-denied') superVoiceFallback('麦克风权限被拒绝，已切文字输入');
+        else if (why === 'no-speech') superVoiceFallback('没听到声音，已切文字输入');
+        else superVoiceFallback('语音识别不可用（' + (why || '未知') + '），已切文字输入');
+        render(false);
+      };
+      rec.onend = function () { SUPER.listening = false; render(false); };
+      SUPER.listening = true;
+      rec.start();
+      toast('正在听…请说话', 'ok');
+      render(false);
+    } catch (err) {
+      SUPER.listening = false;
+      superVoiceFallback('语音识别启动失败，已切文字输入');
+    }
+  }
+  function superVoiceFallback(msg) {
+    SUPER.listening = false;
+    toast(msg, 'warn', 5200);
+    var input = $('#super-ask-input');
+    if (input) { try { input.focus(); } catch (_) {} }
+  }
+  function superOnHandoffEvent(d, at) {
+    var rec = superNormHandoff({
+      handoffId: d.handoffId || d.id,
+      kind: d.kind,
+      url: d.url,
+      assetId: d.assetId,
+      text: d.text,
+      fromDevice: d.fromDevice || d.from,
+      toDevice: d.toDevice,
+      at: at
+    });
+    if (!rec.at) rec.at = at;
+    var exists = false;
+    for (var i = 0; i < SUPER.handoffs.length; i++) if (SUPER.handoffs[i].id === rec.id || (rec.url && SUPER.handoffs[i].url === rec.url && SUPER.handoffs[i].at === rec.at)) { exists = true; break; }
+    if (!exists) SUPER.handoffs.unshift(rec);
+    if (SUPER.handoffs.length > 20) SUPER.handoffs.length = 20;
+    toast('📱 手机甩来一条内容：' + superHandoffLabel(rec), 'ok', 5600);
+    if (S.route === 'handoff') render(true);
+  }
+  function superNormHandoff(h) {
+    h = h || {};
+    var payload = h.payload || {};
+    return {
+      id: h.handoffId || h.id || ('ho_' + (h.at || Date.now())),
+      kind: h.kind || payload.kind || 'text',
+      url: h.url || payload.url || '',
+      assetId: h.assetId || payload.assetId || '',
+      text: h.text || payload.text || '',
+      from: h.fromDevice || h.from || payload.fromDevice || '手机',
+      to: h.toDevice || h.to || payload.toDevice || '',
+      at: h.at || payload.at || nowIso(),
+      dispatched: !!h.dispatched
+    };
+  }
+  function superHandoffLabel(h) {
+    if (!h) return '';
+    if (h.url) return h.url.length > 48 ? h.url.slice(0, 48) + '…' : h.url;
+    if (h.text) return h.text.slice(0, 40);
+    if (h.assetId) return '素材 ' + h.assetId;
+    return '一条内容';
+  }
+  function superHandoffIcon(h) {
+    var k = String((h && h.kind) || '');
+    if (k === 'page' || k === 'url' || (h && h.url)) return '🌐';
+    if (k === 'photo' || k === 'asset' || (h && h.assetId)) return '🖼️';
+    return '📝';
+  }
+  function superRecentHandoffs() {
+    var seen = {};
+    var out = [];
+    listOf(SUPER.handoffs).concat(SUPER.state && listOf(SUPER.state.handoffs) || []).forEach(function (h) {
+      var id = h.id || h.handoffId || ((h.url || '') + '|' + (h.at || ''));
+      if (!id || seen[id]) return;
+      seen[id] = 1;
+      out.push(h);
+    });
+    out.sort(function (a, b) { return String(b.at || '').localeCompare(String(a.at || '')); });
+    return out.slice(0, 8);
+  }
+  function superHandoffContent() {
+    var q = objOf(S.query);
+    if (q.url || q.text || q.kind || q.assetId) {
+      return { id: q.id || 'url-param', kind: q.kind || (q.url ? 'page' : 'text'), url: q.url || '', text: q.text || '', assetId: q.assetId || '', from: q.from || '手机', at: q.at || nowIso(), fromUrl: true };
+    }
+    return superRecentHandoffs()[0] || null;
+  }
+  function superContentHtml(c, big) {
+    if (!c) return '';
+    var kind = String(c.kind || '');
+    var html = '<div class="handoff-card' + (big ? ' handoff-slide' : '') + '">' +
+      '<div class="handoff-head"><span class="handoff-icon">' + superHandoffIcon(c) + '</span>' +
+      '<div><div class="handoff-title">' + (big ? '从手机流转过来' : superHandoffLabel(c)) + '</div>' +
+      '<div class="tiny dim">' + esc(c.from || '手机') + ' · ' + esc(dateOf(c.at)) + (c.fromUrl ? ' · 来自流转链接' : '') + '</div></div>' +
+      '<span class="tag">' + esc(kind === 'page' || kind === 'url' ? '网页' : kind === 'photo' || kind === 'asset' ? '照片/素材' : '文字') + '</span></div>';
+    if (c.url || kind === 'page' || kind === 'url') {
+      var isHttp = /^https?:\/\//i.test(c.url || '');
+      html += '<div class="handoff-body"><div class="handoff-url mono">' + esc(c.url || '（无网址）') + '</div>';
+      if (big) html += '<div class="handoff-preview">🔗 ' + (isHttp ? '网页会在电脑浏览器里打开；内容留在本机，不上传。' : '非网页链接（可能是手机页面），可在手机上重新打开。') + '</div>';
+      html += '</div><div class="handoff-actions">' +
+        '<button class="btn btn-primary" data-super="handoff-open" data-url="' + attr(c.url || '') + '" data-testid="btn-handoff-open">在电脑上打开</button>' +
+        '<button class="btn" data-super="handoff-fav" data-url="' + attr(c.url || '') + '" data-testid="btn-handoff-fav">收藏</button></div>';
+    } else if (c.assetId) {
+      html += '<div class="handoff-body handoff-photo"><img alt="流转素材" src="' + attr('/api/v2/assets/' + encodeURIComponent(c.assetId) + '/thumb?w=640') + '" onerror="this.style.display=\'none\'"></div>' +
+        '<div class="handoff-actions"><button class="btn btn-primary" data-super="handoff-open" data-asset-id="' + attr(c.assetId) + '" data-testid="btn-handoff-open">在电脑上打开大图</button>' +
+        '<a class="btn" href="#/assets" data-testid="btn-handoff-goto-assets">去素材库</a></div>';
+    } else {
+      html += '<div class="handoff-body"><div class="handoff-text">' + esc(c.text || '（空内容）') + '</div></div>' +
+        '<div class="handoff-actions"><button class="btn btn-primary" data-super="handoff-copy" data-text="' + attr(c.text || '') + '" data-testid="btn-handoff-copy">复制文字</button>' +
+        '<button class="btn" data-super="handoff-fav" data-text="' + attr(c.text || '') + '" data-testid="btn-handoff-fav">收藏</button></div>';
+    }
+    return html + '</div>';
+  }
+  function superOpenHandoff(ds) {
+    if (ds.url) {
+      if (/^https?:\/\//i.test(ds.url)) { try { window.open(ds.url, '_blank', 'noopener'); } catch (_) { location.href = ds.url; } toast('已在电脑浏览器打开', 'ok'); }
+      else toast('这条内容不是网页链接：' + ds.url, 'warn', 4800);
+      return;
+    }
+    if (ds.assetId) { try { window.open('/api/v2/assets/' + encodeURIComponent(ds.assetId) + '/thumb?w=640', '_blank', 'noopener'); } catch (_) {} toast('已打开素材大图', 'ok'); return; }
+    if (ds.text) { superCopyText(ds.text); return; }
+  }
+  function superCopyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { toast('已复制到本机剪贴板', 'ok'); }, function () { toast('复制失败，可手动选择文字', 'warn'); });
+        return;
+      }
+    } catch (_) {}
+    toast('浏览器不允许自动复制，可手动选择文字', 'warn');
+  }
+  function superFav(ds) {
+    try {
+      var key = 'tenon:fav-handoff';
+      var list = JSON.parse(localStorage.getItem(key) || '[]') || [];
+      list.unshift({ url: ds.url || '', text: ds.text || '', assetId: ds.assetId || '', at: nowIso() });
+      localStorage.setItem(key, JSON.stringify(list.slice(0, 30)));
+      toast('已收藏，之后在「流转」区还能找到', 'ok');
+    } catch (_) { toast('收藏失败（浏览器存储不可用）', 'warn'); }
+  }
+  function superSig() {
+    return 'D' + superDevices().map(function (d) { return d.id + ':' + (d.online ? 1 : 0) + ':' + (d.simulated ? 1 : 0); }).join('|') +
+      'P' + superPrograms().length + 'A' + JSON.stringify(SUPER.lastAsk || {}) + 'H' + superRecentHandoffs().length +
+      'Q' + JSON.stringify(S.query || {}) + 'T' + (SUPER.status && SUPER.status.kind ? SUPER.status.kind : '?') +
+      'B' + (SUPER.backendMissing ? 1 : 0) + 'L' + (SUPER.listening ? 1 : 0) + 'S' + (SUPER.busy ? 1 : 0);
+  }
+  function superDegradeBanner() {
+    if (!SUPER.backendMissing) return '';
+    return '<div class="super-degrade alert alert-warn" data-testid="super-degrade">' +
+      '<div><strong>超级终端的 AI 服务还没接上</strong>（<code>GET /api/v2/super/state</code> / <code>POST /api/v2/super/ask</code> 未就绪）：设备来自本机账本，语音与程序点击会先降级提示。<span class="tiny dim">后端就绪后自动生效，无需刷新。</span></div>' +
+      '<div class="hint-note" style="margin-top:6px"><button class="btn btn-sm" data-super="refresh" data-testid="btn-super-retry">重新检测</button></div></div>';
+  }
+  function superAskBlock() {
+    var ask = SUPER.lastAsk;
+    var steps = superStepList(ask);
+    var html = '<div class="super-ask-card card v2-card">' +
+      '<div class="super-ask-row"><div class="field" style="flex:1"><label>想让它做什么？直接说一句</label>' +
+      '<textarea id="super-ask-input" data-testid="super-ask-input" data-keep="super-ask-input" rows="2" class="super-ask-input" placeholder="例：把昨天拍的样品图裁成方图发到工作群 / 打开微信 / 放首歌 / 回家模式"></textarea></div>' +
+      '<button class="btn btn-primary super-send" id="super-send" data-testid="super-send">发送</button>' +
+      '<button class="btn super-voice' + (SUPER.listening ? ' listening' : '') + '" id="super-voice" data-testid="super-voice" title="按住说话（浏览器支持时可用）">🎤<span>' + (SUPER.listening ? '正在听…' : '按住说话') + '</span></button>' +
+      '</div>' +
+      '<div class="super-chips" style="margin-top:10px">' + (SUPER.suggestions.length ? SUPER.suggestions : SUPER_SUGGESTIONS).slice(0, 8).map(function (s) {
+        return '<button class="super-chip" data-super="ask" data-text="' + attr(s) + '" data-testid="super-suggestion">' + esc(s) + '</button>';
+      }).join('') + '</div>';
+    if (ask) {
+      var execSteps = listOf(ask.steps);
+      var showSteps = execSteps.length ? execSteps : steps;
+      html += '<div class="super-reply" data-testid="super-reply">' +
+        '<div class="super-reply-text"><span class="super-ai-mark">✦</span><span>' + esc(ask.reply || '') + '</span>' +
+        (ask.ai && ask.ai.fallback ? '<span class="tag">规则引擎</span>' : '') + '</div>' +
+        (ask.needsConfirm ? '<div class="alert alert-warn" style="margin-top:8px">这一步会改动外部内容（打印 / 发送 / 删除），需要你确认后才会执行。</div>' : '') +
+        (showSteps.length ? '<div class="super-steps">' + showSteps.map(function (st) {
+          var state = superStepState(st);
+          var risk = st.risk || (v2ActionById(st.capabilityId) && v2ActionById(st.capabilityId).risk) || '';
+          return '<div class="super-step" data-testid="super-step" data-status="' + attr(state.cls) + '" title="' + attr(st.summary || st.degradedReason || '') + '">' +
+            '<span class="super-step-icon">' + state.icon + '</span>' +
+            '<span class="super-step-label">' + esc(superStepLabel(st)) + (risk === 'irreversible' ? ' <span class="tag amber">不可逆</span>' : '') + '</span>' +
+            (st.deviceName || st.targetDeviceName ? '<span class="tag">' + esc(st.deviceName || st.targetDeviceName) + '</span>' : '') +
+            '<span class="super-step-state ' + state.cls + '">' + state.label + '</span></div>';
+        }).join('') + '</div>' : '') +
+        (listOf(ask.result && ask.result.taskIds).length ? '<div class="tiny dim" style="margin-top:6px">任务：' + ask.result.taskIds.map(function (t) { return '<a href="#/tasks/' + attr(t) + '">' + esc(t) + '</a>'; }).join('、') + ' · 去「任务」看执行进度</div>' : '') +
+        '</div>';
+    }
+    return html + '</div>';
+  }
+  function superRenderSuper() {
+    var devices = superDevices();
+    var programs = superPrograms();
+    var handoffs = superRecentHandoffs();
+    var html = '<section class="super-hero">' +
+      '<div class="super-eyebrow">TENON · 超级终端</div>' +
+      '<h2 class="super-title" data-testid="super-title">榫卯 · 超级终端</h2>' +
+      '<p class="super-sub">一台小软件，调动家里所有设备与程序。说一句话，或者把手机往前一倾，内容就滑到电脑上。</p>' +
+      '<div class="super-hero-tags"><span class="tag cyan">本机运行 · 私有</span><span class="tag">语音 + AI 识别</span><span class="tag">手机一倾就流转</span></div>' +
+      '</section>';
+    html += superDegradeBanner();
+    /* 设备横排 */
+    html += '<section class="super-section"><div class="super-section-head"><h3>我的设备</h3><span class="hint">' + devices.filter(function (d) { return d.online; }).length + ' 台在线 · 共 ' + devices.length + ' 台</span></div>' +
+      '<div class="super-devices" data-testid="super-devices">' + devices.map(function (d) {
+        return '<div class="super-device' + (d.online ? ' online' : '') + (d.simulated ? ' simulated' : '') + '" data-testid="super-device" data-node-id="' + attr(d.id) + '">' +
+          '<div class="super-device-top"><span class="super-device-icon">' + superKindIcon(d.kind, d.name) + '</span>' +
+          '<span class="super-device-name">' + esc(d.name) + '</span>' +
+          '<span class="super-device-dot ' + (d.online ? 'on' : 'off') + '" title="' + (d.online ? '在线' : '离线') + '"></span></div>' +
+          '<div class="super-device-sentence">' + esc(superDeviceSentence(d)) + '</div>' +
+          '<div class="super-device-badges">' + (d.online ? '<span class="badge no-dot b-ok">在线</span>' : '<span class="badge no-dot b-muted">离线</span>') +
+          (d.simulated ? '<span class="badge no-dot b-warn">模拟设备</span>' : '') + '</div></div>';
+      }).join('') + '</div></section>';
+    /* AI 助手 */
+    html += '<section class="super-section"><div class="super-section-head"><h3>AI 语音助手</h3><span class="hint">说得越像人话越好；不确定时它会问，不会替你猜</span></div>' + superAskBlock() + '</section>';
+    /* 程序 tiles */
+    html += '<section class="super-section"><div class="super-section-head"><h3>程序</h3><span class="hint">点一下就让电脑打开；灰色表示当前不可用</span></div>' +
+      '<div class="super-programs" data-testid="super-programs">' + programs.map(function (p) {
+        return '<div class="super-program' + (p.available === false ? ' disabled' : '') + '" data-testid="super-program" data-program-id="' + attr(p.id) + '" title="' + attr(p.reason || '') + '">' +
+          '<button class="super-program-main" data-super="program" data-program-id="' + attr(p.id) + '" data-ask="' + attr(p.ask || ('打开' + p.name)) + '">' +
+          '<span class="super-program-icon">' + superProgIcon(p) + '</span><span class="super-program-name">' + esc(p.name) + '</span></button>' +
+          '<button class="super-program-aux" data-super="program-desktop" data-ask="' + attr('在电脑上打开' + p.name) + '" data-testid="super-program-open">在电脑上打开</button>' +
+          (p.available === false ? '<div class="super-program-why">' + esc(p.reason || '当前不可用') + '</div>' : '') +
+          '</div>';
+      }).join('') + '</div></section>';
+    /* 流转 */
+    html += '<section class="super-section"><div class="super-section-head"><h3>流转</h3><span class="hint">从手机流过来的内容 · 0.3 秒滑入</span>' +
+      '<a class="btn btn-sm" href="#/handoff" data-testid="btn-goto-handoff">打开发送页 →</a></div>' +
+      '<div class="super-handoffs" data-testid="super-handoffs">' +
+      (handoffs.length ? handoffs.slice(0, 6).map(function (h) {
+        return '<button class="super-handoff-card handoff-slide" data-testid="super-handoff-card" data-super="handoff-card" data-handoff-id="' + attr(h.id || '') + '" data-url="' + attr(h.url || '') + '" data-text="' + attr(h.text || '') + '" data-asset-id="' + attr(h.assetId || '') + '">' +
+          '<span class="super-handoff-icon">' + superHandoffIcon(h) + '</span>' +
+          '<span class="super-handoff-main"><b>' + esc(superHandoffLabel(h)) + '</b><span class="tiny dim">' + esc(h.from || '手机') + ' · ' + esc(dateOf(h.at)) + '</span></span>' +
+          '<span class="super-handoff-arrow">↗</span></button>';
+      }).join('') : '<div class="super-empty card"><strong>还没有流转内容</strong>在手机上打开 /m，点「甩到电脑」或把手机往前一倾，内容就会出现在这里。</div>') +
+      '</div></section>';
+    /* 快捷去别处 */
+    html += '<section class="super-section"><div class="super-section-head"><h3>更多</h3><span class="hint">素材、场景、设备细节都在这里</span></div>' +
+      '<div class="super-quick"><a class="btn" href="#/assets">素材库</a><a class="btn" href="#/scenes">场景</a><a class="btn" href="#/devices">我的设备</a><a class="btn" href="#/link">互联配对</a><a class="btn" href="#/messages">消息</a></div></section>';
+    return html;
+  }
+  function superRenderHandoff() {
+    var content = superHandoffContent();
+    var recent = superRecentHandoffs();
+    var html = pageHead('流转接收', '从手机流转过来的内容：网页 / 照片 / 文字。滑入电脑后可以打开、收藏，内容只在本机。',
+      '<div class="btn-row"><button class="btn btn-sm" data-super="refresh" data-testid="btn-handoff-refresh">刷新</button><a class="btn btn-sm" href="#/super" data-testid="btn-handoff-back">返回超级终端</a></div>');
+    if (SUPER.backendMissing) {
+      html += '<div class="super-degrade alert alert-warn" data-testid="super-degrade"><div>流转服务还没接上（<code>GET /api/v2/super/state</code> 未就绪）。当前显示的是页面链接里的内容；手机甩送会先降级提示。</div></div>';
+    }
+    html += '<div class="handoff-view" data-testid="handoff-view">' +
+      (content ? superContentHtml(content, true) : '<div class="super-empty card"><strong>还没有流转内容</strong>把手机往前一倾，或点手机页「甩到电脑」，内容会在这里滑入。</div>') +
+      '</div>';
+    html += '<section class="super-section"><div class="super-section-head"><h3>最近的流转</h3><span class="hint">' + recent.length + ' 条</span></div>' +
+      '<div class="super-handoffs">' + (recent.length ? recent.map(function (h) {
+        return '<button class="super-handoff-card" data-testid="super-handoff-card" data-super="handoff-card" data-handoff-id="' + attr(h.id || '') + '" data-url="' + attr(h.url || '') + '" data-text="' + attr(h.text || '') + '" data-asset-id="' + attr(h.assetId || '') + '">' +
+          '<span class="super-handoff-icon">' + superHandoffIcon(h) + '</span>' +
+          '<span class="super-handoff-main"><b>' + esc(superHandoffLabel(h)) + '</b><span class="tiny dim">' + esc(h.from || '手机') + ' · ' + esc(dateOf(h.at)) + '</span></span>' +
+          '<span class="super-handoff-arrow">↗</span></button>';
+      }).join('') : '<div class="tiny dim">暂无历史流转</div>') + '</div></section>';
+    return html;
+  }
+  function superOnClick(ev) {
+    var t0 = ev.target;
+    if (t0 && t0.closest) {
+      if (t0.closest('#super-send')) {
+        ev.preventDefault();
+        var askInput0 = $('#super-ask-input');
+        superAsk(askInput0 ? askInput0.value : '');
+        return;
+      }
+      if (t0.closest('#super-voice')) {
+        ev.preventDefault();
+        superVoice();
+        return;
+      }
+    }
+    var el = t0 && t0.closest ? t0.closest('[data-super]') : null;
+    if (!el) return;
+    ev.preventDefault();
+    S.lastUserActionAt = Date.now();
+    var act = el.getAttribute('data-super');
+    var ds = el.dataset || {};
+    if (act === 'ask') superAsk(ds.text || '');
+    else if (act === 'program' || act === 'program-desktop') superAsk(ds.ask || '');
+    else if (act === 'refresh') superLoadState();
+    else if (act === 'handoff-card') {
+      var target = ds.url ? { url: ds.url } : (ds.assetId ? { assetId: ds.assetId } : { text: ds.text || '' });
+      var c = { id: ds.handoffId, kind: target.url ? 'page' : (target.assetId ? 'photo' : 'text'), url: target.url || '', assetId: target.assetId || '', text: target.text || '', from: '手机', at: nowIso() };
+      S.handoffPreview = c;
+      location.hash = '#/handoff?kind=' + encodeURIComponent(c.kind) + (c.url ? '&url=' + encodeURIComponent(c.url) : '') + (c.text ? '&text=' + encodeURIComponent(c.text) : '') + (c.assetId ? '&assetId=' + encodeURIComponent(c.assetId) : '');
+    } else if (act === 'handoff-open') superOpenHandoff(ds);
+    else if (act === 'handoff-fav') superFav(ds);
+    else if (act === 'handoff-copy') superCopyText(ds.text || '');
+  }
+  function superAttach() {
+    /* 事件全部委托到 document：重绘替换 #view 后按钮依然可用（super 页面每 12s 会轻量刷新） */
+    document.addEventListener('click', superOnClick);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' && !ev.shiftKey && ev.target && ev.target.id === 'super-ask-input') {
+        ev.preventDefault();
+        if (SUPER.listening && SUPER.rec) { try { SUPER.rec.stop(); } catch (_) {} }
+        superAsk(ev.target.value);
+      }
+    });
+    setInterval(function () {
+      if (superIsRoute(S.route) && !modalOpen() && !S.stale) {
+        if (!SUPER.loadedAt || Date.now() - SUPER.loadedAt > 12000) superLoadState();
+      }
+    }, 6000);
+  }
+
   /* ---------- 初始化 ---------- */
   function init() {
     setToken(getToken());
+    if (!location.hash || location.hash === '#') { try { history.replaceState(null, '', '#/super'); } catch (_) {} }
     var cached = loadSnapshot();
     if (cached) { S.snapshot = cached.snapshot; S.cachedAt = cached.at; S.stale = true; }
     var r = parseRoute();
     S.route = r.name;
     S.param = r.param;
+    S.query = r.query || {};
     if (S.route === 'tasks' && S.param) S.selectedTaskId = S.param;
+    if (v2IsRoute(S.route)) v2EnsureLoaded(S.route);
     render(true);
     updateChrome();
     loadState({ force: true });
@@ -1596,6 +3779,8 @@
     document.addEventListener('submit', onDocumentSubmit);
     document.addEventListener('keydown', onDocumentKeydown);
     document.addEventListener('change', onDocumentChange);
+    v2Attach();
+    superAttach();
     window.addEventListener('hashchange', onRoute);
     setInterval(function () { if (!S.sseOpen) loadState(); }, 12000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) loadState(); });
