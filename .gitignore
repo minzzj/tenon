@@ -28,3 +28,6 @@ Thumbs.db
 # 本地验收/隔离实例数据（不提交）
 data-v2-e2e/
 data-super-e2e/
+
+# 提供给手机局域网下载的 APK（构建产物，不入库）
+public/download/
