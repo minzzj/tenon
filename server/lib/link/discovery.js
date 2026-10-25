@@ -27,6 +27,11 @@ export function createDiscovery({
   let sweepTimer = null;
   let running = false;
   let disabledReason = '';
+  let startedAt = 0;
+  let sendCount = 0;
+  let helloCount = 0;
+  let lastHelloAt = '';
+  let lastHelloFrom = '';
 
   function parseUnicastTargets() {
     const out = [];
@@ -92,13 +97,16 @@ export function createDiscovery({
     } catch {
       return;
     }
+    let sent = 0;
     for (const target of broadcastTargets()) {
       try {
         sock.send(buf, 0, buf.length, target.port, target.host, () => {});
+        sent += 1;
       } catch {
         /* 单个地址不可达不影响其它地址 */
       }
     }
+    if (sent > 0) sendCount += 1;
   }
 
   function handleMessage(buf, rinfo) {
@@ -126,6 +134,9 @@ export function createDiscovery({
       helloCount: prev && prev.helloCount ? prev.helloCount + 1 : 1,
     };
     peers.set(peer.deviceId, peer);
+    helloCount += 1;
+    lastHelloAt = new Date().toISOString();
+    lastHelloFrom = peer.ip + ':' + peer.port;
     if (!prev) {
       try {
         onPeer(peer, { isNew: true, gone: false });
@@ -177,6 +188,7 @@ export function createDiscovery({
     try {
       sock.bind(discoveryPort, () => {
         running = true;
+        startedAt = Date.now();
         try {
           sock.setBroadcast(true);
         } catch {
@@ -237,11 +249,29 @@ export function createDiscovery({
     peers.clear();
   }
 
+  function stats() {
+    return {
+      enabled: !!enabled,
+      running: !!running,
+      port: discoveryPort,
+      httpPort,
+      disabledReason: disabledReason || '',
+      startedAt: startedAt ? new Date(startedAt).toISOString() : null,
+      sendCount,
+      helloCount,
+      peers: peers.size,
+      lastHelloAt,
+      lastHelloFrom,
+      broadcastTargets: running ? broadcastTargets().length : 0,
+    };
+  }
+
   return {
     start,
     close,
     list,
     sendHello,
+    stats,
     getPort: () => discoveryPort,
     getHttpPort: () => httpPort,
     isRunning: () => running,

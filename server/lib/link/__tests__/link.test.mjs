@@ -182,7 +182,7 @@ test('配对码：6 位数字 + QR payload 格式 + 需登录 + 过期失效', a
   const qr = await api(d, 'GET', '/api/v2/link/pair/qr');
   assert.equal(qr.status, 200);
   assert.match(qr.data.code, /^\d{6}$/);
-  assert.match(qr.data.qr, /^tenon:\/\/pair\?host=127\.0\.0\.1:\d+&code=\d{6}&fp=/);
+  assert.match(qr.data.qr, /^tenon:\/\/pair\?host=127\.0\.0\.1:\d+&code=\d{6}(?:&v=\d+&exp=\d+&oneTime=[01])?&fp=/);
   assert.ok(Date.parse(qr.data.expiresAt) > Date.now(), '过期时间应在未来');
   const regen = await api(d, 'POST', '/api/v2/link/pair/regenerate', { body: {} });
   assert.equal(regen.status, 200);
@@ -263,7 +263,7 @@ test('撤销信任：link.revoked 事件 + 对端同步移除 + 旧 peerToken �
     token: oldToken,
     body: { peerId: a.service.identity.deviceId, direction: 'from-desktop', files: [{ name: 'x.bin', size: 1 }] },
   });
-  assert.equal(rejected.status, 401, '撤销后旧 peerToken 应失效');
+  assert.equal(rejected.status, 403, '撤销后旧 peerToken 应失效');
 });
 test('from-desktop 传输：分块 + SHA-256 + 速度 + transfer.completed 事件', async () => {
   const a = await startDaemon({ name: 'fx-a' });

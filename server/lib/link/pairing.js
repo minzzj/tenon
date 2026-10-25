@@ -5,6 +5,14 @@ import { readJson, atomicWriteJson, sha256Hex, nowIso, httpError, localIPv4 } fr
 
 export const PAIR_CODE_TTL_MS = 120000;
 
+/** P0-3 配对成功页的 3 个一键动作（移动端/桌面端共用，随配对响应下发） */
+export const PAIR_ACTIONS = [
+  { id: 'send-file', label: '发一个文件', detail: '从本机选文件，分块传到对方，SHA-256 校验后落盘；数据只走局域网。', endpoint: '/api/v2/link/transfers' },
+  { id: 'clipboard-sync', label: '同步剪贴板', detail: '把当前剪贴板文本/链接发给对方，对方点一下即可粘贴；不经过公网。', endpoint: '/api/v2/link/clipboard' },
+  { id: 'handoff-page', label: '把当前页面甩过去', detail: '把正在看的网页地址流转到对方屏幕打开（只传摘要与链接）。', endpoint: '/api/v2/super/handoff' },
+];
+export const PAIR_CAPABILITIES = ['files', 'clipboard', 'notify', 'handoff'];
+
 function constantEqual(a, b) {
   const ba = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
@@ -33,12 +41,19 @@ export function createPairing({
   const saved = readJson(trustFile, null);
   const peers = saved && saved.peers && typeof saved.peers === 'object' ? saved.peers : {};
   let currentCode = null;
+  let lastPairedAt = '';
 
   function ensureCode(force = false) {
-    if (!force && currentCode && Date.now() < currentCode.expiresAt) return currentCode;
+    // 一次性码：被成功配对消费或过期后自动换新码（P0-2）
+    if (!force && currentCode && !currentCode.used && Date.now() < currentCode.expiresAt) return currentCode;
     const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-    currentCode = { code, expiresAt: Date.now() + Math.max(1, Number(codeTtlMs) || PAIR_CODE_TTL_MS), createdAt: Date.now() };
+    currentCode = { code, expiresAt: Date.now() + Math.max(1, Number(codeTtlMs) || PAIR_CODE_TTL_MS), createdAt: Date.now(), used: false };
     return currentCode;
+  }
+
+  /** 标记当前码已使用（一次性） */
+  function consumeCode() {
+    if (currentCode) currentCode.used = true;
   }
 
   function saveTrust() {
@@ -52,7 +67,7 @@ export function createPairing({
 
   function qrPayload() {
     const code = ensureCode();
-    return 'tenon://pair?host=' + qrHost() + ':' + getHttpPort() + '&code=' + code.code + '&fp=' + encodeURIComponent(identity.fingerprint);
+    return 'tenon://pair?host=' + qrHost() + ':' + getHttpPort() + '&code=' + code.code + '&v=2&exp=' + code.expiresAt + '&oneTime=1&fp=' + encodeURIComponent(identity.fingerprint);
   }
 
   function pairingInfo() {
@@ -65,7 +80,10 @@ export function createPairing({
       port: getHttpPort(),
       version: 2,
       code: code.code,
+      v: 2,
+      exp: code.expiresAt,
       expiresAt: new Date(code.expiresAt).toISOString(),
+      oneTime: true,
       qr: qrPayload(),
       ttlMs: codeTtlMs,
     };
@@ -73,12 +91,13 @@ export function createPairing({
 
   function regenerateCode() {
     const code = ensureCode(true);
-    return { code: code.code, expiresAt: new Date(code.expiresAt).toISOString(), qr: qrPayload() };
+    return { code: code.code, v: 2, exp: code.expiresAt, expiresAt: new Date(code.expiresAt).toISOString(), oneTime: true, qr: qrPayload() };
   }
 
   function verifyCode(code) {
-    // 校验的是「当前展示过的码」，过期或从未展示过一律拒绝（不能在这里静默重新生成）
+    // 校验的是「当前展示过的码」，过期/已用/从未展示过一律拒绝（不能在这里静默重新生成）
     if (!currentCode) return false;
+    if (currentCode.used) return false;
     if (Date.now() > currentCode.expiresAt) return false;
     const given = String(code == null ? '' : code).trim();
     if (!/^\d{6}$/.test(given)) return false;
@@ -95,6 +114,8 @@ export function createPairing({
       port: Number(rec.port) || 0,
       pairedAt: rec.pairedAt,
       lastSeen: rec.lastSeen,
+      by: rec.by || 'code',
+      version: 2,
     };
   }
 
@@ -135,6 +156,7 @@ export function createPairing({
       by: by || (old && old.by) || 'code',
     };
     peers[id] = rec;
+    lastPairedAt = nowIso();
     saveTrust();
     appendEvent('link.paired', {
       peerId: rec.peerId,
@@ -156,6 +178,7 @@ export function createPairing({
     if (!from || !from.deviceId) return { ok: false, status: 400, error: '缺少配对发起方信息 from.deviceId' };
     if (String(from.deviceId) === identity.deviceId) return { ok: false, status: 400, error: '不能与自己配对' };
     if (!verifyCode(code)) return { ok: false, status: 403, error: '配对码不正确或已过期' };
+    consumeCode(); // 一次性码：配对成功后立即失效，需要重新展示新码
     // 双向 token：
     // - callerToken：发起方（手机/Android）调本机时带的 token（未提供则本机生成并返回）
     // - tokenOut：本机回调发起方时用的 token（正常双向配对时由 initiate 写回对方）
@@ -182,6 +205,9 @@ export function createPairing({
       peerToken: tokenOut,
       peer: { peerId: rec.peerId, name: rec.name, platform: rec.platform, fingerprint: rec.fingerprint },
       self: { deviceId: identity.deviceId, name: identity.name, platform: identity.platform, fingerprint: identity.fingerprint, port: getHttpPort() },
+      // P0-3 配对成功页：能力清单 + 3 个一键动作（UI 直接渲染，移动端/桌面端共用）
+      actions: PAIR_ACTIONS,
+      capabilities: PAIR_CAPABILITIES,
     };
   }
 
@@ -313,6 +339,13 @@ export function createPairing({
     revoke,
     touchPeer,
     trustFile,
-    stats: () => ({ trusted: Object.keys(peers).length, codeExpiresAt: currentCode ? new Date(currentCode.expiresAt).toISOString() : null }),
+    consumeCode,
+    stats: () => ({
+      trusted: Object.keys(peers).length,
+      codeExpiresAt: currentCode ? new Date(currentCode.expiresAt).toISOString() : null,
+      codeUsed: currentCode ? !!currentCode.used : false,
+      oneTime: true,
+      lastPairedAt: lastPairedAt || null,
+    }),
   };
 }

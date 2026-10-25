@@ -960,9 +960,18 @@
     var nodes = nodesList();
     var hidden = nodes.filter(function (n) { return n.hidden; }).length;
     var gone = nodes.filter(function (n) { return n.disconnected; }).length;
-    var html = pageHead('设备', 'L0 设备卡：它是谁、能做什么、谁在用。离线保留上次状态；断开前必出影响预览，点取消后能力、任务、设备状态全部不变。',
-      '<span class="tag">' + nodes.length + ' 台设备</span>' + (hidden ? '<span class="tag">隐身 ' + hidden + '</span>' : '') + (gone ? '<span class="tag red">已断开 ' + gone + '</span>' : ''));
+    var boundCount = (V2.data.deviceCounts && V2.data.deviceCounts.bound) || (V2.data.devices || []).filter(function (d) { return d.bound; }).length;
+    var html = pageHead('我的设备', '把手机、电脑、第二台设备接进同一个超级终端：先「一键安装」把节点装到设备上，再回来点「一键绑定」。离线保留上次状态，断开前必出影响预览。',
+      '<span class="tag">' + (nodes.length) + ' 台 L0 设备</span><span class="tag cyan">已绑定 ' + boundCount + '</span>' + (hidden ? '<span class="tag">隐身 ' + hidden + '</span>' : '') + (gone ? '<span class="tag red">已断开 ' + gone + '</span>' : ''));
+    /* v2.2 Round1：绑定列表 + 一键安装区块（即使中枢离线也显示安装入口） */
+    html += v2DevicesBindSection();
+    html += v2InstallSection();
+    if (V2.data.repairHint) {
+      html += '<div class="alert alert-info repair-hint" data-testid="repair-hint"><span>' + esc(V2.data.repairHint) + '</span>' +
+        '<button class="btn btn-primary btn-sm" data-v2="repair-pair" data-testid="btn-repair-pair">重新配对</button></div>';
+    }
     if (!nodes.length) return html + offlineEmpty();
+    html += '<div class="v2-block-head" style="margin-top:18px"><h3>设备能力与影响预览（L0 设备卡）</h3><span class="hint">断开前先看影响：确定 / 可能 / 未知</span></div>';
     html += '<div class="grid grid-auto">' + nodes.map(deviceCard).join('') + '</div>';
     html += '<div class="hint-note" style="margin-top:14px">可补扫、可隐身、可只读接入；失败时说明卡在哪一步。断开只留墓碑：名字、最后状态与引用关系保留 30 天。无证据的关系显式标「无记录」，不推断。</div>';
     return html;
@@ -1634,7 +1643,7 @@
    * 只追加，不改动 v0.1 已验收的 9 页与 testid；接口异常时降级不崩。
    * ====================================================================== */
 
-  var V2_ROUTES = { link: 1, assets: 1, basket: 1, scenes: 1, enterprise: 1, super: 1, handoff: 1 };
+  var V2_ROUTES = { link: 1, assets: 1, basket: 1, scenes: 1, enterprise: 1, super: 1, handoff: 1, devices: 1 };
   var V2_LOCAL_ACTIONS = [
     { id: 'asset.print', name: '打印素材', risk: 'irreversible', requiresConfirmation: true },
     { id: 'asset.showOnDesktop', name: '投屏到电脑', risk: 'reversible' },
@@ -1654,6 +1663,13 @@
     status: {},
     data: {
       peers: [],
+      devices: [],
+      deviceCounts: null,
+      install: null,
+      preflight: null,
+      pairSuccess: null,
+      revokedPeer: '',
+      repairHint: '',
       self: null,
       discovery: null,
       pairQr: null,
@@ -1944,7 +1960,7 @@
   }
   function v2RefreshPage(page) {
     page = page || S.route;
-    if (page === 'link') return Promise.all([v2LoadPeers(), v2LoadPairQr(), v2LoadClipboardLatest(), v2LoadTransfers(), v2LoadNotifications()]);
+    if (page === 'link') return Promise.all([v2LoadPeers(), v2LoadPairQr(), v2LoadPreflight(), v2LoadClipboardLatest(), v2LoadTransfers(), v2LoadNotifications()]);
     if (page === 'assets') return Promise.all([v2LoadAssets(), v2LoadAssetStats()]);
     if (page === 'basket') return Promise.all([v2LoadBasket(), v2LoadAssets(), v2LoadPeers()]);
     if (page === 'scenes') return Promise.all([v2LoadScenes(), v2LoadActions()]);
@@ -1954,6 +1970,7 @@
       });
     }
     if (page === 'super' || page === 'handoff') return superLoadState();
+    if (page === 'devices') return v2LoadDevices();
     return Promise.resolve();
   }
   function v2EnsureLoaded(route) {
@@ -1970,7 +1987,326 @@
     });
   }
 
-  /* ---------- 配对 / 二维码 ---------- */
+  /* ======================================================================
+   * v2.2 Round 1：设备绑定 + 一键安装（#/devices 页增强）
+   * 接口：GET /api/v2/devices、POST /api/v2/devices/:id/bind|unbind|action
+   * 安装包：/download/tenon-node-win.zip（scripts/build-install-package.js 生成）
+   * ====================================================================== */
+  function v2LoadDevices() {
+    return v2Fetch('devices', '/api/v2/devices').then(function (data) {
+      if (!data) return null;
+      V2.data.devices = v2Arr(data, ['devices', 'items', 'list']);
+      V2.data.deviceCounts = data.counts || null;
+      if (data.install) V2.data.install = data.install;
+      return data;
+    });
+  }
+  function v2LoadPreflight() {
+    return v2Fetch('preflight', '/api/v2/link/preflight').then(function (data) {
+      if (data && listOf(data.items).length) V2.data.preflight = data;
+      return data;
+    });
+  }
+  function v2PreflightAllPass() {
+    var pf = V2.data.preflight;
+    if (!pf || !listOf(pf.items).length) return false;
+    return !!pf.allPass || listOf(pf.items).every(function (i) { return !!i.ok; });
+  }
+  function v2PreflightCard() {
+    var pf = V2.data.preflight;
+    var html = '<div class="card v2-card v2-preflight" data-testid="preflight-card"><div class="card-title">配对前置自检 <span class="tiny dim">6 项 · 全绿才显示二维码；红项就地给下一步</span>' +
+      '<button class="btn btn-sm" data-v2="preflight-refresh" data-testid="btn-preflight-refresh" style="margin-left:auto">重新自检</button></div>';
+    if (!pf) return html + '<div class="tiny dim" data-testid="preflight-loading">正在检测中枢/网段/端口/发现/版本/数据目录…</div></div>';
+    var items = listOf(pf.items);
+    var bad = items.filter(function (i) { return !i.ok; });
+    html += '<div class="preflight-head">' + (bad.length
+      ? '<span class="badge no-dot b-warn" data-testid="preflight-fail">' + bad.length + ' 项待修复（手输码仍可用）</span>'
+      : '<span class="badge no-dot b-ok" data-testid="preflight-ok">全部通过 · 可以扫码配对</span>') +
+      '<span class="tiny dim">' + esc(pf.hub ? (pf.hub.address + ':' + pf.hub.port) : '') + '</span>' +
+      '<button class="btn btn-ghost btn-sm" data-v2="preflight-copy" data-testid="btn-preflight-copy">复制诊断</button></div>';
+    html += '<div class="preflight-list">' + items.map(function (i) {
+      var fix = '';
+      if (!i.ok) {
+        fix = '<div class="preflight-fix" data-testid="preflight-fix"><div class="tiny">下一步：</div><ol>' +
+          listOf(i.fix).map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ol></div>';
+      }
+      return '<div class="preflight-row ' + (i.ok ? 'ok' : 'bad') + '" data-testid="preflight-item" data-item-id="' + attr(i.id) + '">' +
+        '<span class="preflight-icon">' + (i.ok ? '✓' : '✗') + '</span>' +
+        '<div style="min-width:0"><div class="preflight-label">' + esc(i.label) + '</div>' +
+        '<div class="tiny dim preflight-detail">' + esc(i.detail) + '</div>' + fix + '</div></div>';
+    }).join('') + '</div></div>';
+    return html;
+  }
+  function v2PairSuccessCard() {
+    var r = V2.data.pairSuccess;
+    if (!r) return '';
+    var capMap = { files: '文件', clipboard: '剪贴板', notify: '通知', handoff: '流转' };
+    var caps = listOf(r.capabilities).length
+      ? listOf(r.capabilities).map(function (cp) { return '<span class="tag">' + esc(capMap[cp] || cp) + '</span>'; }).join('')
+      : '<span class="tag">文件</span><span class="tag">剪贴板</span><span class="tag">流转</span>';
+    var actions = listOf(r.actions);
+    if (!actions.length) actions = [
+      { id: 'send-file', label: '发一个文件', detail: '从本机选文件，分块传到对方，SHA-256 校验后落盘；数据只走局域网。', action: 'pair-action-send-file' },
+      { id: 'clipboard-sync', label: '同步剪贴板', detail: '把剪贴板文本/链接发给对方，对方点一下即可粘贴；不经过公网。', action: 'pair-action-clipboard' },
+      { id: 'handoff-page', label: '把当前页面甩过去', detail: '把正在看的网页地址流转到对方屏幕打开（只传摘要与链接）。', action: 'pair-action-handoff' }
+    ];
+    var btnMap = { 'send-file': 'pair-action-send-file', 'clipboard-sync': 'pair-action-clipboard', 'handoff-page': 'pair-action-handoff' };
+    return '<div class="card v2-card v2-pair-success" data-testid="pair-success"><div class="card-title">✓ 已连接到 ' + esc(r.name || r.peerId || '设备') + ' <span class="tiny dim">现在可以：</span></div>' +
+      '<div class="badge-row" data-testid="pair-success-caps">' + caps + '</div>' +
+      '<div class="pair-actions" data-testid="pair-actions">' + actions.map(function (a) {
+        var act = btnMap[a.id] || ('pair-action-' + a.id);
+        return '<button class="pair-action" data-v2="' + attr(act) + '" data-testid="' + attr(act) + '">' +
+          '<span class="pa-name">' + esc(a.label) + '</span><span class="pa-detail">' + esc(a.detail || '') + '</span></button>';
+      }).join('') + '</div>' +
+      '<div class="row-wrap" style="margin-top:8px"><button class="btn btn-sm" data-v2="pair-success-dismiss" data-testid="btn-pair-success-dismiss">稍后再说</button>' +
+      '<a class="btn btn-ghost btn-sm" href="#/devices" data-testid="btn-pair-success-devices">查看我的设备 →</a>' +
+      '<span class="tiny dim">动作失败会停留本页并提示下一步</span></div></div>';
+  }
+  function v2ApplyPairSuccess(data) {
+    if (!data) return;
+    V2.data.pairSuccess = {
+      name: (data.peer && data.peer.name) || data.name || data.peerId || '设备',
+      peerId: (data.peer && data.peer.peerId) || data.peerId || '',
+      capabilities: listOf(data.capabilities),
+      actions: listOf(data.actions),
+      at: new Date().toISOString()
+    };
+    V2.loaded.link = 0;
+    render(true);
+  }
+  function v2PairAction(kind) {
+    var r = V2.data.pairSuccess;
+    if (kind === 'send-file') {
+      var sel = $('#transfer-peer');
+      if (sel && r && r.peerId) sel.value = r.peerId;
+      var input = $('#transfer-files');
+      if (input) { try { input.click(); } catch (_) {} }
+      toast('选择文件后点「发送到设备」，即可完成首次传文件', 'ok');
+      return;
+    }
+    if (kind === 'clipboard-sync') {
+      var area = $('#clipboard-input');
+      if (area) {
+        if (!String(area.value || '').trim()) area.value = location.href;
+        try { area.focus(); area.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+      }
+      var sel2 = $('#transfer-peer');
+      if (sel2 && r && r.peerId) sel2.value = r.peerId;
+      toast('已填好当前页面链接（可改成任意文本），点「发送」即可', 'ok');
+      return;
+    }
+    if (kind === 'handoff') {
+      v2Post('/api/v2/link/handoff', { kind: 'url', url: location.href }, '把当前页面甩过去').then(function (data) {
+        if (data) toast('已把当前页面甩到 ' + (r && r.name ? r.name : '设备'), 'ok');
+      });
+      return;
+    }
+  }
+  function v2ImpactSummaryHtml(impact) {
+    if (!impact || !impact.counts) return '<div class="tiny dim">影响预览暂不可用，可按「确定」继续</div>';
+    var buckets = [['certain', '确定', 'b-bad'], ['possible', '可能', 'b-warn'], ['unknown', '未知', 'b-muted']];
+    var html = '<div class="impact-counts" data-testid="impact-counts">' + buckets.map(function (b) {
+      return '<span class="badge no-dot ' + b[2] + '">' + b[1] + ' ' + Number(impact.counts[b[0]] || 0) + '</span>';
+    }).join('') + '</div>';
+    html += '<div class="impact-lists" data-testid="impact-lists">';
+    buckets.forEach(function (b) {
+      var items = listOf(impact.items && impact.items[b[0]]);
+      if (!items.length) return;
+      html += '<div class="impact-group"><div class="tiny dim">' + b[1] + '</div><ul>' + items.slice(0, 6).map(function (it) {
+        return '<li><strong>' + esc(it.title || it.type || '') + '</strong>：' + esc(it.detail || '') + '</li>';
+      }).join('') + '</ul></div>';
+    });
+    html += '</div>';
+    if (impact.cancelHint) html += '<div class="hint-note" data-testid="impact-cancel-hint">' + esc(impact.cancelHint) + '</div>';
+    if (impact.rePairHint) html += '<div class="tiny dim" style="margin-top:6px">' + esc(impact.rePairHint) + '</div>';
+    return html;
+  }
+  function v2FetchImpact(deviceId) {
+    return api('/api/v2/devices/' + encodeURIComponent(deviceId) + '/impact').then(function (res) {
+      return res.ok && res.data ? res.data : null;
+    });
+  }
+  function v2InstallQrUrl() {
+    var m = (V2.data.install && V2.data.install.mUrl) || '/m';
+    if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin + m;
+    return 'http://127.0.0.1:7410' + m;
+  }
+  function v2RenderInstallQr() {
+    var canvas = $('#install-qr');
+    if (!canvas) return;
+    var payload = v2InstallQrUrl();
+    try {
+      if (window.TenonQR && typeof window.TenonQR.render === 'function') {
+        window.TenonQR.render(canvas, payload, { size: 148, margin: 3 });
+        canvas.setAttribute('data-ok', '1');
+        return;
+      }
+    } catch (err) {
+      window.__tenonErrors.push('install qr: ' + String((err && err.message) || err));
+    }
+    try {
+      var ctx = canvas.getContext && canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = 148;
+        canvas.height = 148;
+        ctx.fillStyle = '#0c1524';
+        ctx.fillRect(0, 0, 148, 148);
+        ctx.fillStyle = '#8fa3bd';
+        ctx.font = '11px ui-monospace, monospace';
+        ctx.fillText('扫码打开手机页：', 14, 56);
+        ctx.fillText(payload, 8, 78);
+      }
+    } catch (_) { /* ignore */ }
+    canvas.setAttribute('data-ok', '0');
+  }
+  function v2DeviceKindLabel(kind) {
+    var map = { hub: '中枢', computer: '电脑', phone: '手机', device: '模拟设备' };
+    return map[kind] || kind || '设备';
+  }
+  function v2DeviceActionLabel(action) {
+    var map = { hello: '打个招呼', check: '体检摘要', 'open-console': '打开终端' };
+    return map[action] || action;
+  }
+  function v2DeviceActionBtn(d, action) {
+    return '<button class="btn btn-ghost btn-sm" data-v2="device-action" data-device-id="' + attr(d.id) + '" data-act="' + attr(action) + '" data-testid="btn-device-' + attr(action) + '">' + esc(v2DeviceActionLabel(action)) + '</button>';
+  }
+  function v2DeviceCardHtml(d) {
+    var online = !!d.online;
+    var bound = !!d.bound;
+    var kind = v2DeviceKindLabel(d.kind);
+    var actions = listOf(d.actions);
+    var icon = d.platformIcon || '🖥️';
+    var lastActive = d.lastActiveText || d.lastSeenText || (d.lastSeen ? shortDate(d.lastSeen) : '暂无记录');
+    var capTags = listOf(d.capabilityTags);
+    var capText = d.capabilitiesCount ? (d.capabilitiesCount + ' 项能力') : (d.kind === 'phone' ? '手机端（文件/剪贴板/通知）' : '暂无能力登记');
+    var sourceText = d.sourceText || (d.source === 'link' ? '手输' : '自动发现');
+    var boundAtText = d.boundAt ? shortDate(d.boundAt) : '';
+    var bindBtn = bound
+      ? '<button class="btn btn-danger btn-sm" data-v2="device-unbind" data-device-id="' + attr(d.id) + '" data-testid="btn-device-unbind">一键解绑</button>'
+      : '<button class="btn btn-primary btn-sm" data-v2="device-bind" data-device-id="' + attr(d.id) + '" data-testid="btn-device-bind">一键绑定</button>';
+    return '<article class="card v2-device-card fade" data-testid="v2-device-card" data-device-id="' + attr(d.id) + '">' +
+      '<div class="v2d-head"><div><div class="v2d-title"><span class="v2d-icon" data-testid="v2-device-icon">' + esc(icon) + '</span> ' + esc(d.name || d.id) +
+      ' <button class="btn btn-ghost btn-sm v2d-rename" data-v2="device-rename" data-device-id="' + attr(d.id) + '" data-name="' + attr(d.name || '') + '" data-testid="btn-device-rename" title="重命名">✎</button></div>' +
+      '<div class="v2d-meta"><code>' + esc(d.id) + '</code> · ' + esc(kind) + ' · 来源：<span data-testid="v2-device-source">' + esc(sourceText) + '</span></div></div>' +
+      '<div class="badge-row"><span class="badge no-dot ' + (online ? 'b-ok' : 'b-bad') + '" data-testid="v2-device-online">' + (online ? '在线' : '离线') + '</span>' +
+      (bound ? '<span class="tag cyan" data-testid="v2-device-bound">已绑定</span>' : '<span class="tag" data-testid="v2-device-unbound">未绑定</span>') +
+      (d.installed ? '<span class="tag" data-testid="v2-device-installed">已安装</span>' : '') + '</div></div>' +
+      '<div class="v2d-kv"><span class="k">平台</span><span class="v">' + esc(d.platform || '未知') + '</span>' +
+      '<span class="k">可用能力</span><span class="v">' + esc(capText) + (capTags.length ? ' <span class="v2d-caps" data-testid="v2-device-caps">' + capTags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</span>' : '') + '</span>' +
+      '<span class="k">最后活跃</span><span class="v" data-testid="v2-device-last-active">' + esc(lastActive) + '</span>' +
+      '<span class="k">绑定时间</span><span class="v" data-testid="v2-device-bound-at">' + esc(boundAtText || '未绑定') + '</span></div>' +
+      '<div class="btn-row">' + bindBtn + actions.slice(0, 3).map(function (a) { return v2DeviceActionBtn(d, a); }).join('') + '</div>' +
+      '</article>';
+  }
+  function v2DevicesBindSection() {
+    var list = V2.data.devices || [];
+    var counts = V2.data.deviceCounts || null;
+    var head = '<div class="v2-block-head"><h3>我的设备 · 一键绑定</h3><span class="hint">' +
+      (counts ? (counts.bound + ' 台已绑定 / ' + counts.total + ' 台发现 · ' + counts.online + ' 台在线') : (list.length + ' 台设备')) +
+      '</span>' + v2RefreshBtn('devices', 'btn-devices-refresh') + '</div>';
+    var body;
+    if (!list.length) {
+      body = '<div class="empty" data-testid="v2-devices-empty"><strong>还没有可绑定设备</strong>用下方「一键安装」把电脑/手机接进来：新设备连上中枢后会自动出现在这里，再点「一键绑定」。</div>';
+    } else {
+      body = '<div class="grid grid-auto v2-device-grid">' + list.map(v2DeviceCardHtml).join('') + '</div>';
+    }
+    return '<section class="v2-block" data-testid="v2-devices-bind">' + head + body +
+      v2LoadingNote(['devices']) + v2Degrade(['devices'], '设备绑定接口') + '</section>';
+  }
+  function v2InstallStepHtml(step) {
+    return '<div class="install-step" data-testid="install-step"><span class="install-step-n">' + esc(step.n) + '</span><div><div class="install-step-title">' + esc(step.title) + '</div><div class="install-step-detail">' + esc(step.detail) + '</div></div></div>';
+  }
+  function v2InstallSection() {
+    var inst = V2.data.install || {};
+    var win = inst.winZip || {};
+    var apk = inst.androidApk || {};
+    var steps = listOf(inst.steps);
+    if (!steps.length) {
+      steps = [
+        { n: 1, title: '下载并安装', detail: '下载 Windows 节点安装包，解压后用 PowerShell 运行 install-node.ps1；手机下载 APK 安装。' },
+        { n: 2, title: '打开并连上中枢', detail: '安装脚本自动写入中枢地址并启动节点；手机 App 扫码或输入 6 位配对码。' },
+        { n: 3, title: '回来点绑定', detail: '刷新本页，新设备出现在「我的设备」里，点「一键绑定」加入超级终端。' }
+      ];
+    }
+    var winActions = win.available
+      ? '<a class="btn btn-primary" data-testid="btn-download-node" href="' + attr(win.url || '/download/tenon-node-win.zip') + '" download>下载 Windows 节点安装包（' + esc(v2Bytes(win.size)) + '）</a>'
+      : '<span class="tag amber" data-testid="btn-download-node-missing">安装包尚未生成（运行 node scripts/build-install-package.js）</span>';
+    var apkActions = apk.available
+      ? '<a class="btn" data-testid="btn-download-apk" href="' + attr(apk.url) + '" download>下载手机 APK（' + esc(v2Bytes(apk.size)) + '）</a>'
+      : '<span class="tag amber" data-testid="btn-download-apk-missing">APK 尚未构建</span>';
+    var cmd = inst.installCommand || 'powershell -ExecutionPolicy Bypass -File .\\install-node.ps1 -HubUrl http://<本机IP>:7410';
+    return '<section class="v2-block install-block" data-testid="v2-install-block">' +
+      '<div class="v2-block-head"><h3>一键安装 · 新设备加入（3 步）</h3><span class="hint">v' + esc(inst.version || '—') + ' · 安装包含本机令牌，勿外传</span></div>' +
+      '<div class="install-grid">' +
+      '<div class="card install-card" data-testid="install-windows"><div class="install-title">Windows 电脑</div>' +
+      '<div class="install-meta">节点安装包 · v' + esc(win.version || inst.version || '—') + ' · ' + (win.available ? esc(v2Bytes(win.size)) : '未生成') + '</div>' + winActions +
+      '<div class="tiny dim" style="margin-top:8px">解压 → 右键 install-node.ps1 用 PowerShell 运行 → 自动连上本中枢</div></div>' +
+      '<div class="card install-card" data-testid="install-android"><div class="install-title">Android 手机</div>' +
+      '<div class="install-meta">原生 App · 配对 / 传文件 / 剪贴板 / 通知</div>' + apkActions +
+      '<div class="tiny dim" style="margin-top:8px">或手机浏览器打开 <code data-testid="install-murl">' + esc(v2InstallQrUrl()) + '</code> 用 6 位码配对</div>' +
+      '<canvas id="install-qr" class="install-qr" width="148" height="148" data-testid="install-qr"></canvas></div>' +
+      '</div>' +
+      '<div class="install-steps" data-testid="install-steps">' + steps.map(v2InstallStepHtml).join('') + '</div>' +
+      '<div class="tiny dim">命令行安装：<code data-testid="install-command">' + esc(cmd) + '</code></div>' +
+      '</section>';
+  }
+  function v2ReloadDevices() {
+    return v2LoadDevices().then(function () { render(true); });
+  }
+  function v2DoBindDevice(deviceId) {
+    if (!deviceId) return;
+    v2ConfirmOpen('一键绑定设备', '绑定后可在这台设备上执行任务、传文件与场景动作；不会改动设备本身。',
+      '<div class="tiny muted">设备：<code>' + esc(deviceId) + '</code></div>', function () {
+        return v2Post('/api/v2/devices/' + encodeURIComponent(deviceId) + '/bind', {}, '绑定设备').then(function (data) {
+          if (data) {
+            toast(data.already ? '该设备已绑定（幂等）' : '绑定成功：已加入我的设备', 'ok');
+            v2LoadDevices().then(function () { render(true); });
+          }
+        });
+      });
+  }
+  function v2DoUnbindDevice(deviceId) {
+    if (!deviceId) return;
+    v2FetchImpact(deviceId).then(function (impact) {
+      v2ConfirmOpen('解绑前影响预览', '解绑后这台设备不再参与任务/场景/传输；取消不会产生任何变化。',
+        '<div class="impact-target">设备：<code>' + esc((impact && impact.target && impact.target.name) || deviceId) + '</code></div>' + v2ImpactSummaryHtml(impact),
+        function () {
+          return v2Post('/api/v2/devices/' + encodeURIComponent(deviceId) + '/unbind', {}, '解绑设备').then(function (data) {
+            if (data) {
+              V2.data.repairHint = '已解绑「' + ((impact && impact.target && impact.target.name) || deviceId) + '」：需要时点「重新配对」重新加入。';
+              toast(data.already ? '该设备未绑定（幂等）' : '已解绑', 'ok');
+              v2LoadDevices().then(function () { render(true); });
+            }
+          });
+        });
+    });
+  }
+  function v2DoRenameDevice(deviceId, currentName) {
+    if (!deviceId) return;
+    v2ConfirmOpen('重命名设备', '新名字只在本机显示，会写一条 device.renamed 账本事件；不影响设备本身。',
+      '<div class="form-row" style="margin-top:6px"><div class="field" style="flex:1"><label>设备名称</label>' +
+      '<input type="text" id="device-rename-input" data-testid="device-rename-input" maxlength="40" value="' + attr(currentName || '') + '" placeholder="例如：书房小主机"></div></div>',
+      function () {
+        var el = $('#device-rename-input');
+        var name = el ? String(el.value || '').trim() : '';
+        if (!name) { toast('名称不能为空', 'warn'); return Promise.resolve(null); }
+        return v2Post('/api/v2/devices/' + encodeURIComponent(deviceId) + '/rename', { name: name }, '重命名设备').then(function (data) {
+          if (data) {
+            toast('已重命名为「' + name + '」', 'ok');
+            v2LoadDevices().then(function () { render(true); });
+          }
+        });
+      });
+  }
+  function v2DoDeviceAction(deviceId, action) {
+    if (!deviceId || !action) return;
+    v2Post('/api/v2/devices/' + encodeURIComponent(deviceId) + '/action', { action: action }, '设备操作').then(function (data) {
+      if (!data) return;
+      if (data.summary && data.summary.sentence) toast(data.summary.sentence, 'ok');
+      else if (data.detail) toast(data.detail, 'ok');
+      else toast('操作完成', 'ok');
+    });
+  }  /* ---------- 配对 / 二维码 ---------- */
   function v2PairingInfo() {
     var q = V2.data.pairQr;
     if (q && q.code) {
@@ -1996,6 +2332,7 @@
     return info.qr ? String(info.qr) : '';
   }
   function v2AfterRender() {
+    if (S.route === 'devices') { v2RenderInstallQr(); return; }
     if (S.route !== 'link') return;
     var canvas = $('#pair-qr');
     if (!canvas) return;
@@ -2028,6 +2365,7 @@
     v2Post('/api/v2/link/pair', { code: code }, '配对设备').then(function (data) {
       if (!data) return;
       if (input) input.value = '';
+      if (data.paired || data.peerId || data.peer) v2ApplyPairSuccess(data);
       v2RefreshPage('link').then(function () { render(); });
     });
   }
@@ -2039,11 +2377,25 @@
   }
   function v2DoRevoke(peerId) {
     if (!peerId) return;
-    v2ConfirmOpen('撤销信任设备', '撤销后该设备不能再向本机发起任务或传输。', '<div class="tiny muted">设备：<code>' + esc(peerId) + '</code></div>', function () {
-      return v2Post('/api/v2/link/revoke', { peerId: peerId }, '撤销信任').then(function (data) {
-        if (data) v2RefreshPage('link').then(function () { render(); });
-      });
+    v2FetchImpact(peerId).then(function (impact) {
+      v2ConfirmOpen('撤销前影响预览', '撤销后该设备请求会立即被拒绝（≤1s），已建立的会话失效；取消不会产生任何变化。',
+        '<div class="impact-target">设备：<code>' + esc((impact && impact.target && impact.target.name) || peerId) + '</code></div>' + v2ImpactSummaryHtml(impact),
+        function () {
+          return v2Post('/api/v2/link/revoke', { peerId: peerId }, '撤销信任').then(function (data) {
+            if (data) {
+              V2.data.revokedPeer = peerId;
+              V2.data.repairHint = '已撤销「' + ((impact && impact.target && impact.target.name) || peerId) + '」：该设备请求已立即失效；需要时可在下方重新配对。';
+              v2RefreshPage('link').then(function () { render(true); });
+            }
+          });
+        });
     });
+  }
+  function v2DoRepairPair() {
+    V2.data.repairHint = '';
+    var input = $('#pair-code-input');
+    if (input) { try { input.focus(); input.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {} }
+    toast('请输入对方 6 位配对码，或让手机扫码重新配对', 'ok');
   }
 
   /* ---------- 文件传输 ---------- */
@@ -2622,10 +2974,22 @@
     var self = V2.data.self;
     var html = pageHead('互联', '同一 WiFi 自动发现、扫码/配对码配对、文件互传（分块 + SHA-256）、剪贴板与通知镜像；零外网依赖。', v2RefreshBtn('link', 'btn-refresh-link'));
     html += v2Degrade(keys, '互联接口') + v2LoadingNote(keys);
+    /* Round2 P0-1/P0-3：自检第一屏 + 配对成功页（能力清单 + 3 动作） */
+    html += v2PreflightCard();
+    html += v2PairSuccessCard();
+    if (V2.data.repairHint) {
+      html += '<div class="alert alert-info repair-hint" data-testid="repair-hint"><span>' + esc(V2.data.repairHint) + '</span>' +
+        '<button class="btn btn-primary btn-sm" data-v2="repair-pair" data-testid="btn-repair-pair">重新配对</button></div>';
+    }
+    var pfPass = v2PreflightAllPass();
     html += '<div class="v2-grid-2">';
-    html += '<div class="card v2-card"><div class="card-title">配对 <span class="tiny dim">配对码 2 分钟内有效</span></div>' +
-      '<div class="pair-panel"><div class="qr-box"><canvas id="pair-qr" data-testid="pair-qr" class="qr-canvas"></canvas>' +
-      '<div class="tiny dim" style="margin-top:6px">手机扫码或输入配对码</div></div>' +
+    html += '<div class="card v2-card"><div class="card-title">配对 <span class="tiny dim">扫码自动配对 · 配对码 2 分钟内有效 · 一次性</span></div>' +
+      '<div class="pair-panel"><div class="qr-box">' +
+      (pfPass
+        ? '<canvas id="pair-qr" data-testid="pair-qr" class="qr-canvas"></canvas>' +
+          '<div class="tiny dim" style="margin-top:6px">手机扫码自动配对（含版本/有效期）</div>'
+        : '<div class="pair-gated" data-testid="pair-gated"><strong>二维码暂不显示</strong><div class="tiny dim">先修复上方红项，再回来扫码；也可以直接输入配对码。</div></div>') +
+      '</div>' +
       '<div class="pair-side"><div class="q-index">本机配对码</div>' +
       '<div class="pair-code num" data-testid="pair-code">' + (info.code ? esc(info.code.replace(/(\d{3})(\d{3})/, '$1 $2')) : '— — —') + '</div>' +
       '<div class="hint-note" data-testid="pair-status">' + (info.code
@@ -3006,6 +3370,13 @@
         peer.name = d.name || peer.name;
         peer.platform = d.platform || peer.platform;
         peer.trusted = true;
+        V2.data.pairSuccess = {
+          name: peer.name || pid || '设备',
+          peerId: pid || '',
+          capabilities: ['files', 'clipboard', 'handoff'],
+          actions: [],
+          at: at
+        };
       } else if (type === 'link.revoked') {
         for (var k = 0; k < V2.data.peers.length; k++) if (v2PeerId(V2.data.peers[k]) === (d.peerId || d.deviceId)) { V2.data.peers[k].trusted = false; }
       } else if (type === 'transfer.started') {
@@ -3064,7 +3435,9 @@
     for (var k in V2.status) if (Object.prototype.hasOwnProperty.call(V2.status, k)) st.push(k + ':' + (V2.status[k].ok ? 'ok' : V2.status[k].kind));
     switch (S.route) {
       case 'link':
+        var pfSig = d.preflight && listOf(d.preflight.items) ? d.preflight.items.map(function (i) { return i.id + ':' + (i.ok ? 1 : 0); }).join(',') : '-';
         return 'L' + d.peers.map(function (p) { return [v2PeerId(p), p.name || '', v2PeerTrusted(p) ? 1 : 0, p.online ? 1 : 0].join(':').slice(0, 80); }).join('|') +
+          'F' + pfSig + 'P' + (d.pairSuccess ? d.pairSuccess.name : '') + 'R' + (d.repairHint || '') +
           'Q' + (d.pairQr ? d.pairQr.code + '@' + d.pairQr.expiresAt : '') +
           'T' + d.transfers.map(function (t) { return [t.transferId, t.status, Math.round(t.progress || 0)].join(':'); }).join('|') +
           'C' + d.clipHistory.length + 'N' + d.notifications.length + 'S' + st.join(',');
@@ -3102,6 +3475,28 @@
       case 'pair': v2DoPair(); break;
       case 'pair-regenerate': v2DoRegenerate(); break;
       case 'revoke': v2DoRevoke(ds.peerId); break;
+      case 'device-bind': v2DoBindDevice(ds.deviceId); break;
+      case 'device-unbind': v2DoUnbindDevice(ds.deviceId); break;
+      case 'device-action': v2DoDeviceAction(ds.deviceId, ds.act); break;
+      case 'device-rename': v2DoRenameDevice(ds.deviceId, ds.name); break;
+      case 'devices-refresh': v2ReloadDevices(); break;
+      case 'preflight-refresh':
+        V2.data.preflight = null;
+        render(true);
+        v2RefreshPage('link').then(function () { render(true); });
+        break;
+      case 'preflight-copy':
+        try {
+          var diag = (V2.data.preflight && V2.data.preflight.diagnostics) || '无诊断信息';
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(diag).then(function () { toast('诊断信息已复制', 'ok'); }, function () { toast('复制失败，请手动选择文本', 'warn'); });
+          else toast('当前浏览器不支持剪贴板，请截图诊断信息', 'warn');
+        } catch (_) { toast('复制失败', 'warn'); }
+        break;
+      case 'pair-success-dismiss': V2.data.pairSuccess = null; render(true); break;
+      case 'pair-action-send-file': v2PairAction('send-file'); break;
+      case 'pair-action-clipboard': v2PairAction('clipboard'); break;
+      case 'pair-action-handoff': v2PairAction('handoff'); break;
+      case 'repair-pair': v2DoRepairPair(); break;
       case 'transfer-send': v2StartUpload(); break;
       case 'clipboard-send': v2SendClipboard(); break;
       case 'asset-open': v2OpenAsset(ds.assetId); break;

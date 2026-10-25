@@ -1,6 +1,7 @@
 // 榫卯 Tenon v2 · 连接层服务入口
 // 导出：createLinkService({ledger,state,root,dataDir}) + routes（{method,path,handler(req,res,ctx)} 数组）
 // 只 append 契约 §3 的 link.* / transfer.* / clipboard.shared / notification.relayed 事件；不改 state.js。
+import fs from 'node:fs';
 import path from 'node:path';
 import { loadOrCreateIdentity } from './identity.js';
 import { createDiscovery, DISCOVERY_PORT } from './discovery.js';
@@ -8,7 +9,16 @@ import { createPairing } from './pairing.js';
 import { createTransferManager, DEFAULT_CHUNK_SIZE } from './transfer.js';
 import { createClipboardStore } from './clipboard.js';
 import { createNotifier } from './notify.js';
+import { createPreflight } from './preflight.js';
 import { readJson, localIPv4, nowIso } from './util.js';
+
+function readPkgVersion(root) {
+  try {
+    return String((readJson(path.join(root, 'package.json'), {}) || {}).version || '0.0.0');
+  } catch {
+    return '0.0.0';
+  }
+}
 import { routeDefs, createBoundRoutes, getRouteList, routes } from './routes.js';
 import { matchRoutes, matchPath } from './router.js';
 
@@ -97,6 +107,18 @@ export function createLinkService(opts = {}) {
     },
   });
 
+  const appVersion = readPkgVersion(root);
+  // P0-1 配对前置自检：六项检查 + 三步修复 + 诊断文本（UI/移动端配对第一屏）
+  const preflight = createPreflight({
+    root,
+    dataDir,
+    port: httpPort,
+    advertiseHost,
+    discovery,
+    version: appVersion,
+    log,
+  });
+
   const transfer = createTransferManager({
     dataDir,
     identity,
@@ -124,6 +146,10 @@ export function createLinkService(opts = {}) {
     if (tokens.nodeToken && token === String(tokens.nodeToken)) return { ok: true, role: 'node' };
     const peer = pairing.authPeerToken(token);
     if (peer) return { ok: true, role: 'peer', peerId: peer.peerId };
+    // P0-5 撤销即失效：已被撤销设备的 peerToken 立即返回 403 可读错误码（≤1s）
+    if (String(token).startsWith('pt_')) {
+      return { ok: false, status: 403, error: '该设备已被撤销或令牌失效，请重新配对', code: 'PEER_REVOKED' };
+    }
     return { ok: false, status: 401, error: '令牌无效' };
   }
 
@@ -137,6 +163,7 @@ export function createLinkService(opts = {}) {
       port: httpPort,
       host: advertiseHost,
       version: 2,
+      appVersion,
       discovery: {
         enabled: discovery.isRunning(),
         port: discovery.getPort(),
@@ -157,6 +184,9 @@ export function createLinkService(opts = {}) {
         name: (record && record.name) || peer.name,
         paired: !!record,
         trusted: !!record,
+        pairedAt: record ? record.pairedAt : null,
+        by: record ? record.by : '',
+        lastSeen: peer.lastSeen || (record ? record.lastSeen : null),
         online: true,
       });
     }
@@ -171,6 +201,8 @@ export function createLinkService(opts = {}) {
         fingerprint: record.fingerprint,
         paired: true,
         trusted: true,
+        pairedAt: record.pairedAt,
+        by: record.by || '',
         online: false,
         lastSeen: record.lastSeen,
       });
@@ -204,6 +236,8 @@ export function createLinkService(opts = {}) {
     tokenOf,
     info,
     peersInfo,
+    preflight,
+    appVersion,
     pairingInfo: () => pairing.pairingInfo(),
     matchRoutes: (method, pathname) => matchRoutes(routeDefs, method, pathname),
     start: () => discovery.start(),

@@ -16,9 +16,15 @@
     try { window.__tenonErrors.push('unhandledrejection: ' + String((e && e.reason && e.reason.message) || (e && e.reason) || '')); } catch (_) {}
   });
 
+  var PAIR_TOKEN_KEY = 'tenon:pairToken';
   var S = {
     peers: [],
     pairing: null,
+    preflight: null,
+    pairResult: null,
+    pairExpired: false,
+    autoPairTried: false,
+    pairToken: (function () { try { return localStorage.getItem('tenon:pairToken') || ''; } catch (_) { return ''; } })(),
     nodes: [],
     localCode: '',
     transfers: [],
@@ -180,6 +186,10 @@
       }
       var jobs = [];
       if (online && PAGE === 'link') {
+        jobs.push(api('/api/v2/link/preflight').then(function (r) {
+          setStatus('preflight', r);
+          if (r.ok && r.data && listOf(r.data.items).length) S.preflight = r.data;
+        }));
         jobs.push(api('/api/v2/link/peers').then(function (r) {
           setStatus('peers', r);
           if (r.ok && r.data) S.peers = arrOf(r.data, ['peers', 'items', 'list']);
@@ -221,6 +231,7 @@
         S.loading = false;
         if (online) saveCache();
         render();
+        if (online && PAGE === 'link') maybeAutoPair();
       });
     });
   }
@@ -336,7 +347,208 @@
     }
     return S.localCode;
   }
+  /* ---------- Round2 P0-1：配对前置自检 ---------- */
+  function preflightAllPass() {
+    var pf = S.preflight;
+    if (!pf || !listOf(pf.items).length) return false;
+    return !!pf.allPass || listOf(pf.items).every(function (i) { return !!i.ok; });
+  }
+  function renderPreflight() {
+    var box = $('#m-preflight');
+    if (!box) return;
+    var pf = S.preflight;
+    if (!pf) {
+      box.innerHTML = '<div class="m-preflight-head">配对前置自检 <span class="tiny dim">正在检测…</span></div>' +
+        '<button class="btn btn-sm" data-mv2="preflight-refresh" data-testid="m-preflight-refresh">重新自检</button>';
+      return;
+    }
+    var items = listOf(pf.items);
+    var bad = items.filter(function (i) { return !i.ok; });
+    var head = '<div class="m-preflight-head"><strong>配对前置自检</strong> ' +
+      (bad.length ? '<span class="badge no-dot b-warn" data-testid="m-preflight-fail">' + bad.length + ' 项待修复</span>'
+                  : '<span class="badge no-dot b-ok" data-testid="m-preflight-ok">全部通过 · 可以扫码</span>') +
+      '<button class="btn btn-sm" data-mv2="preflight-refresh" data-testid="m-preflight-refresh" style="margin-left:auto">重新自检</button></div>';
+    var rows = items.map(function (i) {
+      var fix = '';
+      if (!i.ok) {
+        fix = '<div class="m-preflight-fix" data-testid="m-preflight-fix"><div class="tiny">下一步：</div><ol>' +
+          listOf(i.fix).map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') +
+          '</ol></div>';
+      }
+      return '<div class="m-preflight-row ' + (i.ok ? 'ok' : 'bad') + '" data-testid="m-preflight-item" data-item-id="' + esc(i.id) + '">' +
+        '<span class="m-preflight-icon">' + (i.ok ? '✓' : '✗') + '</span>' +
+        '<div style="min-width:0"><div class="m-preflight-label">' + esc(i.label) + '</div>' +
+        '<div class="tiny dim m-preflight-detail">' + esc(i.detail) + '</div>' + fix + '</div></div>';
+    }).join('');
+    var diag = '<div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">' +
+      '<button class="btn btn-sm" data-mv2="copy-preflight" data-testid="m-preflight-copy">复制诊断</button>' +
+      (bad.length ? '<span class="tiny dim">红项修复后点「重新自检」；手输码始终可用。</span>' : '') + '</div>';
+    box.innerHTML = head + '<div class="m-preflight-list">' + rows + '</div>' + diag;
+  }
+
+  /* ---------- Round2 P0-2：二维码带参一键配对 / 过期自动换码 ---------- */
+  function mobileDeviceId() {
+    try {
+      var id = localStorage.getItem('tenon:mobileDeviceId');
+      if (!id) {
+        id = 'dev_phone_' + Math.random().toString(16).slice(2, 10);
+        localStorage.setItem('tenon:mobileDeviceId', id);
+      }
+      return id;
+    } catch (_) { return 'dev_phone_web'; }
+  }
+  function parsePairParams() {
+    var out = {};
+    try {
+      var search = String(location.search || '');
+      var hash = String(location.hash || '');
+      var qs = search.replace(/^\?/, '');
+      if (hash.indexOf('?') >= 0) qs += '&' + hash.split('?').slice(1).join('?');
+      qs.split('&').forEach(function (seg) {
+        if (!seg) return;
+        var kv = seg.split('=');
+        var k = decodeURIComponent(kv[0] || '');
+        var v = decodeURIComponent((kv[1] || '').replace(/\+/g, ' '));
+        if (k) out[k] = v;
+      });
+    } catch (_) {}
+    return out;
+  }
+  function refreshPairQr() {
+    return api('/api/v2/link/pair/qr').then(function (r) {
+      if (r.ok && r.data && r.data.code) {
+        S.pairing = r.data;
+        renderLink();
+        return r.data;
+      }
+      return null;
+    });
+  }
+  function maybeAutoPair() {
+    if (PAGE !== 'link' || S.autoPairTried) return;
+    var params = parsePairParams();
+    var code = String(params.code || '').replace(/\D/g, '');
+    if (!code) return;
+    S.autoPairTried = true;
+    var exp = Number(params.exp || 0);
+    if (exp && Date.now() > exp) {
+      S.pairExpired = true;
+      renderLink();
+      refreshPairQr();
+      return;
+    }
+    var body = { code: code, deviceId: mobileDeviceId(), name: '手机' + (params.name ? '（' + params.name + '）' : ''), platform: 'android' };
+    api('/api/v2/link/pair', { method: 'POST', body: body }).then(function (r) {
+      if (r.ok && r.data && r.data.ok) {
+        applyPairResult(r.data);
+      } else if (r.status === 403 || (r.data && /过期|不正确/.test(String(r.data.error || '')))) {
+        S.pairExpired = true;
+        renderLink();
+        refreshPairQr();
+      } else {
+        toast('自动配对失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)) + '，可手输配对码', 'warn');
+      }
+    });
+  }
+  function applyPairResult(data) {
+    S.pairExpired = false;
+    S.pairResult = {
+      name: (data.peer && data.peer.name) || data.name || '电脑',
+      peerId: (data.peer && data.peer.peerId) || data.peerId || '',
+      actions: listOf(data.actions),
+      capabilities: listOf(data.capabilities),
+      at: new Date().toISOString()
+    };
+    if (data.token) {
+      S.pairToken = String(data.token);
+      try { localStorage.setItem(PAIR_TOKEN_KEY, S.pairToken); } catch (_) {}
+    }
+    renderLink();
+    toast('已连接到 ' + S.pairResult.name, 'ok');
+  }
+  function renderPairSuccess() {
+    var box = $('#m-pair-success');
+    if (!box) return;
+    var r = S.pairResult;
+    if (!r) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    var capMap = { files: '文件', clipboard: '剪贴板', notify: '通知', handoff: '流转' };
+    var caps = r.capabilities.length ? r.capabilities.map(function (cp) { return '<span class="tag">' + esc(capMap[cp] || cp) + '</span>'; }).join('') : '<span class="tag">文件</span><span class="tag">剪贴板</span><span class="tag">流转</span>';
+    var defaults = [
+      { id: 'send-file', label: '发一个文件', detail: '分块传到电脑，SHA-256 校验后落盘；只走局域网' },
+      { id: 'clipboard-sync', label: '同步剪贴板', detail: '把文本/链接发到电脑，点一下就能粘贴' },
+      { id: 'handoff-page', label: '把当前页面甩过去', detail: '手机正在看的网页地址，电脑直接打开' }
+    ];
+    var actions = (r.actions.length ? r.actions : defaults).map(function (a) {
+      return '<button class="m-pair-action" data-mv2="pair-action-' + esc(a.id) + '" data-testid="m-pair-action-' + esc(a.id) + '">' +
+        '<span class="act-name">' + esc(a.label) + '</span>' +
+        '<span class="act-detail">' + esc(a.detail || '') + '</span></button>';
+    }).join('');
+    box.innerHTML = '<div class="m-pair-success-head"><span class="ok-mark">✓</span><div><strong data-testid="m-pair-success-name">已连接到 ' + esc(r.name) + '</strong>' +
+      '<div class="tiny dim">现在可以：</div></div></div>' +
+      '<div class="m-pair-caps" data-testid="m-pair-capabilities">' + caps + '</div>' +
+      '<div class="m-pair-actions" data-testid="m-pair-actions">' + actions + '</div>';
+  }
+  function renderPairQr() {
+    var canvas = $('#m-pair-qr');
+    var hint = $('#m-pair-qr-hint');
+    if (!canvas) return;
+    var payload = S.pairing && S.pairing.qr ? String(S.pairing.qr) : '';
+    if (!preflightAllPass() || !payload) {
+      try {
+        var ctx0 = canvas.getContext && canvas.getContext('2d');
+        if (ctx0) { canvas.width = 150; canvas.height = 150; ctx0.fillStyle = '#0c1524'; ctx0.fillRect(0, 0, 150, 150); }
+      } catch (_) {}
+      if (hint) hint.textContent = preflightAllPass() ? '配对码接口未就绪' : '先修复上方红项，再显示二维码';
+      return;
+    }
+    try {
+      if (window.TenonQR && typeof window.TenonQR.render === 'function') {
+        window.TenonQR.render(canvas, payload, { size: 150, margin: 2 });
+        if (hint) hint.textContent = '扫码自动配对（含有效期，一次性）';
+        return;
+      }
+    } catch (_) {}
+    if (hint) hint.textContent = '二维码不可用，请手输配对码';
+  }
+  function pairAction(kind) {
+    if (kind === 'send-file') {
+      var fi = $('#m-file-input');
+      if (fi) { try { fi.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {} setTimeout(function () { try { fi.click(); } catch (_) {} }, 200); toast('选择文件后点「发送」', 'ok'); }
+      return;
+    }
+    if (kind === 'clipboard-sync') {
+      var ci = $('#m-clipboard-input');
+      if (ci) {
+        try { ci.scrollIntoView({ behavior: 'smooth', block: 'center' }); ci.focus(); } catch (_) {}
+        if (!ci.value) ci.value = location.href;
+        toast('已填好当前页面链接，可改成任意文本后点「发送到电脑」', 'ok');
+      }
+      return;
+    }
+    if (kind === 'handoff-page') {
+      var tok = S.pairToken || getToken();
+      api('/api/v2/link/handoff', { method: 'POST', body: { kind: 'url', url: location.href }, token: tok }).then(function (r) {
+        if (r.ok && r.data && r.data.ok !== false) toast('已把当前页面甩到电脑：' + location.href, 'ok');
+        else toast('甩页面失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)) + '，可先完成配对后重试', 'bad');
+      });
+      return;
+    }
+  }
   function renderLink() {
+    renderPreflight();
+    renderPairSuccess();
+    renderPairQr();
+    var expiredEl = $('#m-pair-expired');
+    if (expiredEl) {
+      if (S.pairExpired) {
+        expiredEl.classList.remove('hidden');
+        expiredEl.innerHTML = '<strong>码已过期，已换新码</strong>：请让电脑刷新配对码后重新扫码，或在下方手输电脑上显示的 6 位码。';
+      } else {
+        expiredEl.classList.add('hidden');
+        expiredEl.innerHTML = '';
+      }
+    }
     var codeEl = $('#m-pair-code');
     if (codeEl) codeEl.textContent = pairCode().replace(/(\d{3})(\d{3})/, '$1 $2');
     var peers = $('#m-peers');
@@ -471,20 +683,43 @@
       });
     });
   }
+  function linkWrite(path, body, label, after) {
+    if (S.stale) { toast(asOfLabel() + ' · 离线只读，写操作不可用', 'warn'); return Promise.resolve(null); }
+    var direct = S.pairToken || getToken();
+    var getTok = direct ? Promise.resolve(direct) : ensureToken();
+    return getTok.then(function (tok) {
+      if (!tok) return null;
+      return api(path, { method: 'POST', body: body || {}, token: tok }).then(function (r) {
+        if (r.network) { S.stale = true; render(); toast(label + '失败：无法连接中枢', 'bad'); return null; }
+        if (!r.ok || (r.data && r.data.ok === false)) {
+          toast(label + '失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)), 'bad');
+          return null;
+        }
+        toast(label + '：已完成', 'ok');
+        if (typeof after === 'function') after(r.data);
+        return r.data;
+      });
+    });
+  }
   function doPair() {
     var input = $('#m-link-code-input');
     var code = input ? String(input.value || '').replace(/\D/g, '') : '';
     if (!code) { toast('输入电脑上显示的配对码', 'warn'); return; }
-    mv2Write('/api/v2/link/pair', { code: code }, '配对', function () {
-      if (input) input.value = '';
-      load();
+    api('/api/v2/link/pair', { method: 'POST', body: { code: code, deviceId: mobileDeviceId(), name: '手机', platform: 'android' } }).then(function (r) {
+      if (r.ok && r.data && r.data.ok) {
+        if (input) input.value = '';
+        applyPairResult(r.data);
+        load();
+      } else {
+        toast('配对失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)), 'bad');
+      }
     });
   }
   function sendClipboard() {
     var input = $('#m-clipboard-input');
     var text = input ? String(input.value || '').trim() : '';
     if (!text) { toast('先说点要互传的内容', 'warn'); return; }
-    mv2Write('/api/v2/link/clipboard', { kind: /^https?:\/\//.test(text) ? 'link' : 'text', text: text }, '发送剪贴板', function () {
+    linkWrite('/api/v2/link/clipboard', { kind: /^https?:\/\//.test(text) ? 'link' : 'text', text: text }, '发送剪贴板', function () {
       if (input) input.value = '';
       S.clipHistory.unshift({ kind: 'text', text: text, at: new Date().toISOString() });
       render();
@@ -505,7 +740,7 @@
     if (!peerId) { toast('先配对一台电脑，再传文件', 'warn'); return; }
     var meta = files.map(function (f) { return { name: f.name, size: f.size }; });
     var total = files.reduce(function (a, f) { return a + f.size; }, 0);
-    ensureToken().then(function (tok) {
+    (S.pairToken ? Promise.resolve(S.pairToken) : ensureToken()).then(function (tok) {
       if (!tok) return;
       if (S.stale) { toast('离线只读：无法上传', 'warn'); return; }
       api('/api/v2/link/transfer/init', { method: 'POST', body: { peerId: peerId, direction: 'send', files: meta }, token: tok }).then(function (r) {
@@ -586,6 +821,18 @@
     switch (act) {
       case 'refresh': load(); break;
       case 'pair': doPair(); break;
+      case 'preflight-refresh': S.preflight = null; S.status.preflight = null; load(); break;
+      case 'copy-preflight':
+        try {
+          var text = (S.preflight && S.preflight.diagnostics) || '无诊断信息';
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { toast('诊断信息已复制', 'ok'); }, function () { toast('复制失败，请手动选择文本', 'warn'); });
+          else toast('当前浏览器不支持剪贴板，请截图诊断信息', 'warn');
+        } catch (_) { toast('复制失败', 'warn'); }
+        break;
+      case 'pair-action-send-file': pairAction('send-file'); break;
+      case 'pair-action-clipboard-sync': pairAction('clipboard-sync'); break;
+      case 'pair-action-handoff-page': pairAction('handoff-page'); break;
+      case 'link-rescan': load(); break;
       case 'clipboard-send': sendClipboard(); break;
       case 'upload': uploadFile(); break;
       case 'asset-open': openAsset(el.getAttribute('data-asset-id')); break;

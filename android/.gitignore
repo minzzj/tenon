@@ -7,3 +7,6 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+# 二维码等生成物
+安装二维码*.png
+tenon-android-*-debug.apk

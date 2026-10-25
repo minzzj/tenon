@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { readJsonBody, readBody, sendJson, httpError, sanitizeName } from './util.js';
+import { PAIR_ACTIONS, PAIR_CAPABILITIES } from './pairing.js';
 import { matchRoutes } from './router.js';
 
 const MIME = {
@@ -158,6 +159,75 @@ export const routeDefs = [
       sendJson(res, 200, { ok: true, ...link.peersInfo() });
     }),
   },
+  // ---- Round2 P0-1：配对前置自检（六项 + 三步修复 + 诊断文本；手输码兜底不阻塞） ----
+  {
+    method: 'GET',
+    path: '/api/v2/link/preflight',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      const headers = (req && req.headers) || {};
+      const query = (ctx && ctx.query) || null;
+      const queryClientIp = queryValue(ctx, req, 'clientIp') || queryValue(ctx, req, 'ip') || '';
+      const forwarded = String(headers['x-forwarded-for'] || headers['x-real-ip'] || '').split(',')[0].trim();
+      const socketIp = clientIp(req).replace(/^::ffff:/, '');
+      const effectiveIp = String(queryClientIp || forwarded || socketIp || '');
+      const queryVersion = queryValue(ctx, req, 'clientVersion') || queryValue(ctx, req, 'v') || '';
+      const headerVersion = String(headers['x-tenon-client-version'] || headers['x-client-version'] || headers['x-tenon-version'] || '');
+      const clientVersion = String(queryVersion || headerVersion || '');
+      let result;
+      try {
+        result = await link.preflight.run({ clientIp: effectiveIp, clientVersion });
+      } catch (err) {
+        result = { ok: false, allPass: false, items: [], diagnostics: '自检异常：' + String((err && err.message) || err), at: new Date().toISOString() };
+      }
+      sendJson(res, 200, { ok: true, ...result });
+    }),
+  },
+  // ---- Round2 P0-5：撤销前影响预览（确定/可能/未知，只读、可重复调用） ----
+  {
+    method: 'GET',
+    path: '/api/v2/link/revoke/preview',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      requireOperator(link, ctx, req);
+      const peerId = String(queryValue(ctx, req, 'peerId') || queryValue(ctx, req, 'deviceId') || '').trim();
+      if (!peerId) throw httpError(400, '缺少 peerId');
+      const devices = ctx.services && ctx.services.devices;
+      if (devices && typeof devices.impact === 'function') {
+        sendJson(res, 200, devices.impact(peerId, { linkService: link, things: ctx.services && ctx.services.things }));
+        return;
+      }
+      // 兜底：无 devices 模块时给出最小影响预览
+      const transfers = link.transfer && typeof link.transfer.listAll === 'function' ? link.transfer.listAll(100) : [];
+      const active = transfers.filter((t) => String(t.peerId || '') === peerId && ['active', 'ready', 'uploading', 'receiving', 'pending', 'queued'].includes(String(t.status))).length;
+      sendJson(res, 200, {
+        ok: true,
+        target: { id: peerId, name: peerId },
+        counts: { certain: active, possible: 0, unknown: 1 },
+        impact: { certain: active, possible: 0, unknown: 1 },
+        items: { certain: [], possible: [], unknown: [{ type: 'relation', id: 'unknown-relations', title: '无记录的间接引用', detail: '无记录不等于无引用，仅可人工确认' }] },
+        sentence: '确定影响 ' + active + ' 项 · 未知 1 项',
+        cancelHint: '取消不产生任何变化',
+        at: new Date().toISOString(),
+      });
+    }),
+  },
+  {
+    method: 'GET',
+    path: '/api/v2/link/revoke-preview',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      requireOperator(link, ctx, req);
+      const peerId = String(queryValue(ctx, req, 'peerId') || queryValue(ctx, req, 'deviceId') || '').trim();
+      if (!peerId) throw httpError(400, '缺少 peerId');
+      const devices = ctx.services && ctx.services.devices;
+      if (devices && typeof devices.impact === 'function') {
+        sendJson(res, 200, devices.impact(peerId, { linkService: link, things: ctx.services && ctx.services.things }));
+        return;
+      }
+      sendJson(res, 200, { ok: true, target: { id: peerId, name: peerId }, counts: { certain: 0, possible: 0, unknown: 1 }, impact: { certain: 0, possible: 0, unknown: 1 } });
+    }),
+  },
   // ---- 配对 ----
   {
     method: 'GET',
@@ -166,6 +236,26 @@ export const routeDefs = [
       const link = serviceOf(ctx);
       requireOperator(link, ctx, req);
       sendJson(res, 200, { ok: true, ...link.pairingInfo() });
+    }),
+  },
+  // ---- Round2 P0-3：配对成功页动作三「把当前页面甩过去」 ----
+  // 走 link 模块（http.js 对 link 放行 peerToken），内部转交 super.handoff，手机/桌面配对后无需 operator token。
+  {
+    method: 'POST',
+    path: '/api/v2/link/handoff',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      const auth = authenticate(link, ctx, req);
+      const body = await readJsonBody(req);
+      const superSvc = ctx.services && ctx.services.super;
+      if (!superSvc || typeof superSvc.handoff !== 'function') throw httpError(503, '流转服务未就绪');
+      const payload = {
+        ...body,
+        fromDevice: body.fromDevice || auth.peerId || 'phone',
+        by: body.by || (auth.role === 'peer' ? '手机' : '你'),
+      };
+      const result = superSvc.handoff(payload);
+      sendJson(res, 200, { ok: !!result.ok, ...result, via: 'link' });
     }),
   },
   {
@@ -210,6 +300,10 @@ export const routeDefs = [
           peerToken: result.peerToken,
           peer: result.peer,
           self: result.self,
+          // P0-3 配对成功页：能力清单 + 3 个一键动作
+          actions: result.actions || [],
+          nextActions: result.actions || [],
+          capabilities: result.capabilities || [],
         });
       }
       // 出站配对：我们的 UI 输入对端码 + host/port，由本机主动调对端（需要 operator token）
@@ -224,6 +318,9 @@ export const routeDefs = [
         name: (result.peer && result.peer.name) || '',
         platform: (result.peer && result.peer.platform) || '',
         peer: result.peer,
+        actions: PAIR_ACTIONS,
+        nextActions: PAIR_ACTIONS,
+        capabilities: PAIR_CAPABILITIES,
       });
     }),
   },

@@ -360,3 +360,149 @@ main .nav,
 .m-tilt-status { font-size: 11px; color: var(--dim); margin-top: 9px; line-height: 1.6; }
 .super-m-card h2 .count { color: var(--cyan); }
 #m-voice { border-color: var(--cyan-line); color: var(--cyan); background: var(--cyan-soft); }
+
+/* ===== v2.2 Round 1：我的设备（一键绑定）+ 一键安装 ===== */
+.v2-block {
+  margin: 14px 0 18px;
+  padding: 16px;
+  border: 1px solid rgba(102, 227, 210, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(13, 21, 36, 0.96), rgba(9, 15, 26, 0.96));
+}
+.v2-block-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.v2-block-head h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #e9f1fa;
+  letter-spacing: 0.02em;
+}
+.v2-block-head .hint {
+  color: #8fa3bd;
+  font-size: 11.5px;
+}
+.v2-block-head .btn { margin-left: auto; }
+.v2-device-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.v2-device-card { padding: 14px; border: 1px solid #1d2a3d; border-radius: 12px; background: #0c1524; }
+.v2-device-card:hover { border-color: rgba(102, 227, 210, 0.35); }
+.v2d-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.v2d-title { font-size: 14.5px; font-weight: 700; color: #e9f1fa; }
+.v2d-meta { font-size: 11px; color: #5f7592; margin-top: 3px; }
+.v2d-meta code { color: #ffb45c; }
+.v2d-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 12px;
+  font-size: 11.5px;
+}
+.v2d-kv .k { color: #5f7592; }
+.v2d-kv .v { color: #c7d5e6; }
+.v2-device-card .btn-row { gap: 6px; flex-wrap: wrap; }
+
+/* 一键安装区块 */
+.install-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.install-card { padding: 14px; border: 1px solid #1d2a3d; border-radius: 12px; background: #0c1524; }
+.install-title { font-size: 14px; font-weight: 700; color: #e9f1fa; }
+.install-meta { font-size: 11px; color: #8fa3bd; margin: 4px 0 10px; }
+.install-card .btn { width: 100%; justify-content: center; }
+.install-qr {
+  display: block;
+  margin: 10px auto 0;
+  width: 148px;
+  height: 148px;
+  border-radius: 10px;
+  background: #0c1524;
+  border: 1px solid #1d2a3d;
+}
+.install-card code { color: #66e3d2; font-size: 10.5px; word-break: break-all; }
+.install-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.install-step {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed #22324a;
+  border-radius: 10px;
+  background: rgba(7, 11, 20, 0.5);
+}
+.install-step-n {
+  flex: 0 0 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 50%;
+  background: rgba(102, 227, 210, 0.14);
+  color: #66e3d2;
+  font-size: 12px;
+  font-weight: 700;
+}
+.install-step-title { font-size: 12.5px; color: #e9f1fa; font-weight: 600; }
+.install-step-detail { font-size: 11px; color: #8fa3bd; margin-top: 2px; line-height: 1.5; }
+/* ===== v2.2 Round 2：配对前置自检 / 配对成功页 / 撤销影响预览 / 设备卡字段 ===== */
+.v2-preflight { margin-bottom: 12px; }
+.v2-preflight .card-title { display: flex; align-items: center; gap: 8px; }
+.preflight-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+.preflight-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+.preflight-row { display: flex; gap: 8px; padding: 8px 10px; border: 1px solid #1d2a3d; border-radius: 10px; background: rgba(7, 11, 20, 0.5); }
+.preflight-row.bad { border-color: rgba(255, 107, 107, 0.45); background: rgba(255, 107, 107, 0.06); }
+.preflight-row.ok { border-color: rgba(102, 227, 210, 0.22); }
+.preflight-icon { flex: 0 0 18px; font-weight: 700; color: #66e3d2; }
+.preflight-row.bad .preflight-icon { color: #ff6b6b; }
+.preflight-label { font-size: 12.5px; color: #e9f1fa; font-weight: 600; }
+.preflight-detail { line-height: 1.5; margin-top: 2px; word-break: break-word; }
+.preflight-fix { margin-top: 6px; padding: 6px 8px; border-left: 2px solid #ffb45c; background: rgba(255, 180, 92, 0.06); border-radius: 4px; }
+.preflight-fix ol { margin: 4px 0 0 16px; padding: 0; font-size: 11px; color: #c7d5e6; line-height: 1.6; }
+.pair-gated { padding: 24px 10px; border: 1px dashed #22324a; border-radius: 10px; text-align: center; background: rgba(7, 11, 20, 0.4); }
+.pair-gated strong { display: block; color: #ffb45c; margin-bottom: 6px; }
+.v2-pair-success { border-color: rgba(102, 227, 210, 0.4); background: linear-gradient(180deg, rgba(14, 32, 34, 0.95), rgba(9, 15, 26, 0.96)); margin-bottom: 12px; }
+.pair-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 10px 0 4px; }
+.pair-action { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid rgba(102, 227, 210, 0.28); border-radius: 10px; background: rgba(102, 227, 210, 0.05); color: #e9f1fa; text-align: left; cursor: pointer; }
+.pair-action:hover { border-color: #66e3d2; background: rgba(102, 227, 210, 0.12); }
+.pair-action .pa-name { font-weight: 700; font-size: 13px; }
+.pair-action .pa-detail { font-size: 11px; color: #8fa3bd; line-height: 1.5; }
+.impact-target { margin-bottom: 8px; font-size: 12px; color: #c7d5e6; }
+.impact-counts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.impact-lists { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.impact-group ul { margin: 4px 0 0 16px; padding: 0; font-size: 11.5px; color: #c7d5e6; line-height: 1.6; }
+.repair-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.repair-hint .btn { margin-left: auto; }
+.v2d-icon { font-size: 15px; }
+.v2d-rename { padding: 0 4px; min-width: 0; font-size: 11px; color: #8fa3bd; }
+.v2d-caps { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: 4px; }
+.v2d-caps .tag { font-size: 10px; padding: 1px 6px; }
+
+/* 手机端：自检 / 成功页 / 动作 */
+.m-preflight { margin-bottom: 10px; }
+.m-preflight-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
+.m-preflight-list { display: flex; flex-direction: column; gap: 6px; }
+.m-preflight-row { display: flex; gap: 8px; padding: 7px 9px; border-radius: 9px; border: 1px solid #1d2a3d; background: rgba(7, 11, 20, 0.45); }
+.m-preflight-row.bad { border-color: rgba(255, 107, 107, 0.4); }
+.m-preflight-icon { flex: 0 0 16px; font-weight: 700; color: #66e3d2; }
+.m-preflight-row.bad .m-preflight-icon { color: #ff6b6b; }
+.m-preflight-label { font-size: 12px; color: #e9f1fa; font-weight: 600; }
+.m-preflight-fix { margin-top: 5px; padding: 5px 7px; border-left: 2px solid #ffb45c; background: rgba(255, 180, 92, 0.07); border-radius: 4px; }
+.m-preflight-fix ol { margin: 3px 0 0 15px; padding: 0; font-size: 10.5px; color: #c7d5e6; line-height: 1.6; }
+.m-qr-canvas { width: 150px; height: 150px; border-radius: 10px; background: #0c1524; border: 1px solid #1d2a3d; display: block; }
+.m-pair-success { margin: 10px 0; padding: 12px; border: 1px solid rgba(102, 227, 210, 0.4); border-radius: 12px; background: linear-gradient(180deg, rgba(14, 32, 34, 0.9), rgba(9, 15, 26, 0.95)); }
+.m-pair-success-head { display: flex; gap: 10px; align-items: center; }
+.m-pair-success-head .ok-mark { flex: 0 0 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: rgba(102, 227, 210, 0.15); color: #66e3d2; font-weight: 700; }
+.m-pair-caps { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0; }
+.m-pair-actions { display: flex; flex-direction: column; gap: 8px; }
+.m-pair-action { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(102, 227, 210, 0.3); background: rgba(102, 227, 210, 0.06); color: #e9f1fa; text-align: left; }
+.m-pair-action:active { background: rgba(102, 227, 210, 0.16); }
+.m-pair-action .act-name { font-weight: 700; font-size: 13px; }
+.m-pair-action .act-detail { font-size: 10.5px; color: #8fa3bd; line-height: 1.5; }

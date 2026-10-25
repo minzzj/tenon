@@ -32,11 +32,20 @@
 
     <section class="m-card">
       <h2>配对 <span class="count">同一 WiFi</span></h2>
+      <!-- Round2 P0-1：配对前置自检（六项，全绿才放二维码；红项就地给下一步；手输码始终可用） -->
+      <div id="m-preflight" class="m-preflight" data-testid="m-preflight"></div>
+      <div id="m-pair-expired" class="alert alert-warn hidden" data-testid="m-pair-expired"></div>
+      <!-- Round2 P0-3：配对成功页（能力清单 + 3 个一键动作） -->
+      <div id="m-pair-success" class="m-pair-success hidden" data-testid="m-pair-success"></div>
       <div class="m-row" style="align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:0 0 auto;margin-right:10px" id="m-pair-qr-wrap">
+          <canvas id="m-pair-qr" data-testid="m-pair-qr" width="150" height="150" class="m-qr-canvas"></canvas>
+          <div class="tiny dim" id="m-pair-qr-hint" style="text-align:center;margin-top:4px">自检全绿后显示二维码</div>
+        </div>
         <div style="flex:1;min-width:150px">
           <div class="tiny dim">本机配对码（在电脑上输入，或电脑扫码）</div>
           <div class="pair-code" id="m-pair-code" data-testid="m-link-code" style="font-size:22px">----</div>
-          <div class="v2-m-note">配对码由中枢 <code>GET /api/v2/link/peers</code> 下发；接口未就绪时显示临时码，仍需后端支持才能完成配对。</div>
+          <div class="v2-m-note">手机扫码/点链接会自动配对；也可手输电脑上显示的 6 位码。</div>
         </div>
       </div>
       <div class="form-row" style="margin-top:10px">
@@ -110,6 +119,7 @@
       配对 ≤10s · 只发摘要与链接，正文不出内网 · 默认零外联
     </div>
   </div>
+  <script src="/qr.js"></script>
   <script src="/m-v2.js"></script>
 </body>
 </html>

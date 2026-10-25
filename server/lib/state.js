@@ -19,6 +19,7 @@ export function replay(events) {
     scenes: { items: {}, runs: [] },
     org: { users: {}, policy: {}, approvals: [], denied: [] },
     super: { asks: [], handoffs: [] },
+    devices: { bindings: {} },
     seq: 0,
     dataAsOf: null,
     startedAt: null,
@@ -463,6 +464,19 @@ function apply(ev, s) {
       s.org.users[d.userId] = { userId: d.userId, name: d.name || d.userId, role: d.role || 'member', at: ev.at };
       break;
     }
+    case 'device.bound': {
+      s.devices.bindings[d.deviceId] = { deviceId: d.deviceId, name: d.name || d.deviceId, by: d.by || '你', at: ev.at };
+      break;
+    }
+    case 'device.unbound': {
+      delete s.devices.bindings[d.deviceId];
+      break;
+    }
+    case 'device.action': {
+      // 一键操作审计（仅记录，供 UI 展示最近动作）
+      s.devices.lastAction = { at: ev.at, deviceId: d.deviceId || '', action: d.action || '', result: d.result || '' };
+      break;
+    }
     case 'super.asked': {
       s.super.asks.push({ at: ev.at, text: d.text || '', reply: d.reply || '', plan: d.plan || [], result: d.result || null, needsConfirm: !!d.needsConfirm });
       if (s.super.asks.length > 100) s.super.asks = s.super.asks.slice(-100);
@@ -599,6 +613,10 @@ export function snapshot(state, extra = {}) {
         basket: assets.basket || [],
       },
       scenes: { items: Object.values(scenes.items || {}), runs: (scenes.runs || []).slice(-10).reverse() },
+      devices: {
+        bindings: Object.values((state.devices && state.devices.bindings) || {}),
+        lastAction: (state.devices && state.devices.lastAction) || null,
+      },
       super: {
         asks: (state.super && state.super.asks ? state.super.asks : []).slice(-10).reverse(),
         handoffs: (state.super && state.super.handoffs ? state.super.handoffs : []).slice(-10).reverse(),
