@@ -76,6 +76,8 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
   const channels = createChannels({ ledger, state });
   const clients = new Set();
   const scheduled = new Set();
+  const liveSeen = new Map();
+  const persistedBeat = new Map();
   const aiDefault = ai.available;
   let offline = false;
 
@@ -125,7 +127,11 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
     const now = Date.now();
     const nodes = Object.values(st.nodes).map((n) => ({
       ...n,
-      online: n.id === 'hub' ? true : n.kind === 'node' ? !!(n.online && n.lastSeen && now - new Date(n.lastSeen).getTime() < 8000) : !!n.online,
+      online: n.id === 'hub'
+        ? true
+        : n.kind === 'node'
+          ? (liveSeen.has(n.id) ? now - liveSeen.get(n.id) < 8000 : !!(n.online && n.lastSeen && now - new Date(n.lastSeen).getTime() < 8000))
+          : !!n.online,
     }));
     const rels = relations(st);
     const caps = listCapabilities(st).map((c) => ({
@@ -186,12 +192,20 @@ export function createHttpServer({ root, ledger, state, ai, secret, mode, readOn
         capabilities: Array.isArray(b.capabilities) ? b.capabilities : (st.nodes[b.nodeId] ? st.nodes[b.nodeId].capabilities : []),
         domain: b.domain || st.meta.domain,
       }, 'node:' + b.nodeId);
+      liveSeen.set(b.nodeId, Date.now());
+      persistedBeat.set(b.nodeId, Date.now());
       return json(res, 200, { ok: true, nodeId: b.nodeId, hubTime: new Date().toISOString() });
     }
     if (pathname === '/api/node/heartbeat' && req.method === 'POST') {
       const b = await readBody(req);
       if (!b.nodeId) return json(res, 400, { error: 'nodeId required' });
-      ledger.append('node.heartbeat', { nodeId: b.nodeId, at: b.at || new Date().toISOString() }, 'node:' + b.nodeId);
+      const nowMs = Date.now();
+      liveSeen.set(b.nodeId, nowMs);
+      const lastPersisted = persistedBeat.get(b.nodeId) || 0;
+      if (nowMs - lastPersisted > 60000) {
+        persistedBeat.set(b.nodeId, nowMs);
+        ledger.append('node.heartbeat', { nodeId: b.nodeId, at: b.at || new Date().toISOString() }, 'node:' + b.nodeId);
+      }
       return json(res, 200, { ok: true });
     }
     if (pathname === '/api/node/pull' && req.method === 'GET') {
