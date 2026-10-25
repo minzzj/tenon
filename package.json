@@ -1,0 +1,28 @@
+{
+  "name": "tenon",
+  "version": "0.1.0",
+  "description": "Tenon (榫卯) — a self-hostable hub that connects devices, software and AI into one auditable task chain",
+  "type": "module",
+  "private": true,
+  "license": "CC-BY-NC-SA-4.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/start.js",
+    "test": "node --test test/unit",
+    "test:e2e": "node test/e2e/run-real-browser.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minzzj/tenon.git"
+  },
+  "keywords": [
+    "local-first",
+    "device-hub",
+    "task-ledger",
+    "audit",
+    "self-hosted",
+    "ai"
+  ]
+}

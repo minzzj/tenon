@@ -1,0 +1,26 @@
+# runtime data & logs
+data/
+logs/
+*.log
+
+# secrets & local env
+.env
+.env.*
+*.local
+
+# internal materials (never published)
+_internal/
+*.docx
+PLAN.md
+
+# evidence temp / local captures
+browser-screenshots/
+
+# node
+node_modules/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/

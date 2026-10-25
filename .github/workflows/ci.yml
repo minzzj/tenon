@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  foundation-and-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Foundation checks
+        shell: pwsh
+        run: |
+          $required = @(
+            'LICENSE', 'LICENSE.zh-CN.md',
+            'README.md', 'README.zh-CN.md',
+            'COMMERCIAL.md', 'COMMERCIAL.zh-CN.md',
+            'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md',
+            'docs/产品定义.md', 'docs/假设与未覆盖清单.md',
+            'docs/使用手册.md', 'docs/测试方法.md', 'docs/交付物清单.md'
+          )
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Missing required files: $($missing -join ', ')" }
+
+          # no secrets / local paths in tracked files
+          $bad = Select-String -Path README.md,README.zh-CN.md,docs/*.md -Pattern 'sk-[A-Za-z0-9]{20,}' -ErrorAction SilentlyContinue
+          if ($bad) { throw 'Possible API key committed' }
+          Write-Host 'Foundation OK'
+
+      - name: Unit tests
+        shell: pwsh
+        run: |
+          if (Test-Path 'test/unit') {
+            $files = Get-ChildItem 'test/unit' -Recurse -Filter '*.test.js' -ErrorAction SilentlyContinue
+            if ($files) { node --test test/unit } else { Write-Host 'No unit tests yet (foundation milestone).' }
+          } else {
+            Write-Host 'test/unit not present yet.'
+          }
