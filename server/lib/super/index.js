@@ -25,6 +25,7 @@ import { createHandoff, recentHandoffs, recentAsks } from './handoff.js';
 import { createRoutes, absoluteRoutes } from './routes.js';
 import { getSuperAction } from './actions.js';
 import { httpError } from './errors.js';
+import { loadPresets, findPreset, expandPlaceholders, PRESET_VERSION } from './presets.js';
 
 export function createSuperService(options = {}) {
   const { ledger, state, root, dataDir, ai = null, nodeRunner = null, hubUrl = null, getState = null, by = '你' } = options;
@@ -88,13 +89,82 @@ export function createSuperService(options = {}) {
     intentCache,
     /** 设备 + 程序目录（可注入 app.list 探测结果） */
     catalog: () => buildCatalog({ state: currentState(), appsByNode: Object.fromEntries(appListCache) }),
-    /** 首页数据：目录 + 最近流转/对话 + 建议话术 */
+    /** 首页数据：目录 + 最近流转/对话 + 建议话术 + 一键场景预设 */
     home: () => ({
       ok: true,
       catalog: service.catalog(),
       recent: { asks: recentAsks(ledger, 5), handoffs: recentHandoffs(ledger, 5) },
       suggestions: INTENT_EXAMPLES.slice(0, 8),
+      presets: service.presets().presets,
     }),
+    /** 一键场景预设（回家/工作/睡前；来自 data/super/presets.json 或内置） */
+    presets: () => {
+      const doc = loadPresets(resolvedDataDir);
+      return {
+        ok: true,
+        version: PRESET_VERSION,
+        source: doc.source,
+        file: path.relative(repoRoot, doc.file).split(path.sep).join('/'),
+        presets: doc.presets.map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          icon: preset.icon,
+          description: preset.description,
+          steps: preset.steps.map((step) => ({ capabilityId: step.capabilityId, label: step.label })),
+          stepCount: preset.steps.length,
+        })),
+      };
+    },
+    /** 执行一个场景预设：真实 plan → executor → node 队列；append scene.ran 供审计/界面读取 */
+    presetRun: async (presetId, { confirmed = false, by: opBy = by } = {}) => {
+      const { preset } = findPreset(resolvedDataDir, presetId);
+      if (!preset) throw httpError(404, '场景预设不存在：' + presetId);
+      const ctxVars = { hubUrl: deps.hubUrl, root: repoRoot };
+      const plan = preset.steps.map((step) => ({
+        capabilityId: step.capabilityId,
+        label: step.label,
+        params: expandPlaceholders(step.params || {}, ctxVars),
+      }));
+      const text = '场景：' + preset.name;
+      const result = await executePlan({
+        text,
+        intent: { plan, say: preset.description || preset.name },
+        ledger,
+        state: currentState(),
+        deps,
+        by: opBy,
+        confirmed: !!confirmed,
+      });
+      const ok = !!(result.ok && !result.needsConfirm);
+      const sceneResult = {
+        say: result.say || '',
+        steps: result.steps || [],
+        taskIds: result.taskIds || [],
+        needsConfirm: !!result.needsConfirm,
+        presetId: preset.id,
+        presetName: preset.name,
+      };
+      try {
+        ledger.append('scene.ran', {
+          sceneId: preset.id,
+          name: preset.name,
+          by: opBy,
+          ok,
+          result: sceneResult,
+        }, 'super');
+      } catch {
+        /* 审计事件失败不影响已派发的任务 */
+      }
+      return {
+        ok,
+        needsConfirm: !!result.needsConfirm,
+        say: result.say || '',
+        preset: { id: preset.id, name: preset.name, icon: preset.icon, description: preset.description },
+        steps: result.steps || [],
+        taskIds: result.taskIds || [],
+        ai: result.ai || null,
+      };
+    },
     /** 程序清单；probe=true 时尝试实时读取电脑端 app.list（需要 nodeRunner，P0 不落账本） */
     programs: async ({ probe = false } = {}) => {
       const probeInfo = probe ? await probeAppList() : null;
@@ -142,5 +212,6 @@ export { parseIntent, parseRuleIntent, INTENT_EXAMPLES } from './intent.js';
 export { executePlan } from './executor.js';
 export { createHandoff, normalizeHandoffInput, recentAsks, recentHandoffs } from './handoff.js';
 export { SUPER_ACTIONS, getSuperAction } from './actions.js';
+export { DEFAULT_PRESETS, loadPresets, findPreset, expandPlaceholders, PRESET_VERSION } from './presets.js';
 export { matchRoutes, matchPath, matchPathLoose, createRoutes, absoluteRoutes } from './routes.js';
 export default createSuperService;

@@ -624,6 +624,7 @@
       var type = obj && obj.type ? String(obj.type) : '';
       if (type === 'node.heartbeat') { applyHeartbeatEvent(obj); return; }
       if (type === 'ai.called') { refreshSoon(1200); return; }
+      if (type.indexOf('task.') === 0) superOnTaskEvent(obj);
       if (v2IsRealtimeEvent(type)) { v2OnRealtimeEvent(obj); refreshSoon(SSE_DEBOUNCE); return; }
       refreshSoon(SSE_DEBOUNCE);
     };
@@ -965,6 +966,7 @@
       '<span class="tag">' + (nodes.length) + ' 台 L0 设备</span><span class="tag cyan">已绑定 ' + boundCount + '</span>' + (hidden ? '<span class="tag">隐身 ' + hidden + '</span>' : '') + (gone ? '<span class="tag red">已断开 ' + gone + '</span>' : ''));
     /* v2.2 Round1：绑定列表 + 一键安装区块（即使中枢离线也显示安装入口） */
     html += v2DevicesBindSection();
+    html += v2RemoteEntrySection();
     html += v2InstallSection();
     if (V2.data.repairHint) {
       html += '<div class="alert alert-info repair-hint" data-testid="repair-hint"><span>' + esc(V2.data.repairHint) + '</span>' +
@@ -2250,6 +2252,38 @@
       '<div class="tiny dim">命令行安装：<code data-testid="install-command">' + esc(cmd) + '</code></div>' +
       '</section>';
   }
+  function v2RemoteEntrySection() {
+    var base = (location.protocol === 'http:' || location.protocol === 'https:') ? location.origin : 'http://127.0.0.1:7410';
+    var url = base + '/m/remote';
+    return '<section class="v2-block remote-entry" data-testid="remote-entry">' +
+      '<div class="v2-block-head"><h3>📱 用手机控制这台电脑</h3><span class="hint">触控板 / 键盘 / 媒体键 / 一键启动程序 · 同一 WiFi 内生效</span></div>' +
+      '<div class="remote-entry-grid">' +
+      '<div class="remote-entry-qr"><canvas id="remote-qr" width="148" height="148" data-testid="remote-qr" class="install-qr"></canvas>' +
+      '<div class="tiny dim" style="text-align:center;margin-top:4px">手机扫码打开遥控页</div></div>' +
+      '<div class="remote-entry-main"><div class="tiny dim">手机浏览器打开：</div>' +
+      '<div class="remote-entry-url"><code data-testid="remote-url">' + esc(url) + '</code>' +
+      '<button class="btn btn-sm" data-v2="copy-remote-link" data-testid="btn-copy-remote-link">复制链接</button></div>' +
+      '<div class="tiny dim" style="margin-top:8px">1) 手机扫码/打开链接 → 2) 首次输入一次操作令牌（启动日志里有）→ 3) 滑动触控板即可控制电脑鼠标。</div>' +
+      '<div class="tiny dim" style="margin-top:4px">也可以先在 <a href="#/link">互联</a> 页配对：手机与电脑在同一 WiFi 会出现在「已发现设备」里。</div>' +
+      '<div class="row-wrap" style="margin-top:8px"><a class="btn btn-primary btn-sm" href="/m/remote" target="_blank" rel="noopener" data-testid="btn-open-remote">在本机打开遥控页预览</a>' +
+      '<a class="btn btn-sm" href="#/link" data-testid="btn-goto-link-remote">先配对手机 →</a></div></div></div></section>';
+  }
+  function v2RenderRemoteQr() {
+    var canvas = $('#remote-qr');
+    if (!canvas) return;
+    var base = (location.protocol === 'http:' || location.protocol === 'https:') ? location.origin : 'http://127.0.0.1:7410';
+    var payload = base + '/m/remote';
+    try {
+      if (window.TenonQR && typeof window.TenonQR.render === 'function') {
+        window.TenonQR.render(canvas, payload, { size: 148, margin: 3 });
+        canvas.setAttribute('data-ok', '1');
+        return;
+      }
+    } catch (err) {
+      window.__tenonErrors.push('remote qr: ' + String((err && err.message) || err));
+    }
+    canvas.setAttribute('data-ok', '0');
+  }
   function v2ReloadDevices() {
     return v2LoadDevices().then(function () { render(true); });
   }
@@ -2332,7 +2366,7 @@
     return info.qr ? String(info.qr) : '';
   }
   function v2AfterRender() {
-    if (S.route === 'devices') { v2RenderInstallQr(); return; }
+    if (S.route === 'devices') { v2RenderInstallQr(); v2RenderRemoteQr(); return; }
     if (S.route !== 'link') return;
     var canvas = $('#pair-qr');
     if (!canvas) return;
@@ -3454,6 +3488,11 @@
         return 'U' + d.orgUsers.map(function (u) { return (u.userId || u.id) + ':' + (u.role || '') + ':' + (u.status || '') + ':' + JSON.stringify(u.allowedActions || ''); }).join('|').slice(0, 900) +
           'P' + JSON.stringify(d.policy || {}) + 'A' + d.approvals.map(function (a) { return (a.requestId || a.id) + ':' + (a.status || 'pending'); }).join('|') +
           'T' + d.entTab + 'E' + (d.editUserId || '') + 'S' + st.join(',');
+      case 'devices':
+        return 'D' + (V2.data.devices || []).map(function (x) {
+          return [x.id, x.name || '', x.online ? 1 : 0, x.bound ? 1 : 0, x.installed ? 1 : 0,
+            x.lastActiveText || '', (x.capabilityTags ? listOf(x.capabilityTags).length : 0), x.source || ''].join(':');
+        }).join('|') + 'N' + JSON.stringify(V2.data.deviceCounts || {}) + 'I' + JSON.stringify(V2.data.install || {}) + 'S' + st.join(',');
       case 'super': return 'S' + superSig();
       case 'handoff': return 'H' + superSig();
       default: return '';
@@ -3484,6 +3523,14 @@
         V2.data.preflight = null;
         render(true);
         v2RefreshPage('link').then(function () { render(true); });
+        break;
+      case 'copy-remote-link':
+        try {
+          var base2 = (location.protocol === 'http:' || location.protocol === 'https:') ? location.origin : 'http://127.0.0.1:7410';
+          var link = base2 + '/m/remote';
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function () { toast('遥控页链接已复制：' + link, 'ok'); }, function () { toast('复制失败，请手动复制：' + link, 'warn'); });
+          else toast('遥控页链接：' + link, 'ok');
+        } catch (_) { toast('复制失败', 'warn'); }
         break;
       case 'preflight-copy':
         try {
@@ -3614,8 +3661,21 @@
     backendMissing: false,
     catalog: null,
     suggestions: [],
+    presets: [],
+    presetBusy: false,
+    presetLast: null,
+    presetPollTimer: null,
+    onboard: null,
     loadedAt: 0
   };
+  function superOnboardKey() { return 'tenon:super-onboard-v1'; }
+  function superOnboardState() {
+    try { return localStorage.getItem(superOnboardKey()) || ''; } catch (_) { return ''; }
+  }
+  function superSetOnboard(v) {
+    try { if (v) localStorage.setItem(superOnboardKey(), v); else localStorage.removeItem(superOnboardKey()); } catch (_) {}
+    SUPER.onboard = v;
+  }
 
   function superIsRoute(route) { return (route || S.route) === 'super' || (route || S.route) === 'handoff'; }
   function superKindIcon(kind, name) {
@@ -3721,10 +3781,12 @@
     SUPER.loadingAll = true;
     return Promise.all([
       v2Fetch('superState', '/api/v2/super/state'),
-      v2Fetch('superHome', '/api/v2/super/home')
+      v2Fetch('superHome', '/api/v2/super/home'),
+      v2Fetch('superPresets', '/api/v2/super/presets')
     ]).then(function (res) {
       SUPER.loadingAll = false;
-      var st = res[0], home = res[1];
+      var st = res[0], home = res[1], presetsRes = res[2];
+      if (presetsRes && listOf(presetsRes.presets).length) SUPER.presets = listOf(presetsRes.presets);
       if (st) {
         SUPER.state = st;
         SUPER.handoffs = listOf(st.handoffs).map(superNormHandoff);
@@ -3742,6 +3804,7 @@
         }
         if (!SUPER.asks.length) SUPER.asks = listOf(recent.asks);
         if (!SUPER.handoffs.length) SUPER.handoffs = listOf(recent.handoffs).map(superNormHandoff);
+        if (listOf(home.presets).length) SUPER.presets = listOf(home.presets);
       }
       if (!SUPER.lastAsk && SUPER.asks.length) {
         var last = SUPER.asks[0] || {};
@@ -4031,6 +4094,144 @@
     }
     return html + '</div>';
   }
+  function superPresetSection() {
+    var presets = listOf(SUPER.presets);
+    if (!presets.length) {
+      presets = [
+        { id: 'home', name: '回家模式', icon: '🏠', description: '打开常用页面、调音量、播放音乐、桌面欢迎页', steps: [] },
+        { id: 'work', name: '工作模式', icon: '💼', description: '微信 + Chrome + 记事本', steps: [] },
+        { id: 'sleep', name: '睡前模式', icon: '🌙', description: '静音 + 桌面晚安页', steps: [] }
+      ];
+    }
+    var last = SUPER.presetLast;
+    var html = '<section class="super-section" data-testid="super-presets"><div class="super-section-head"><h3>一键场景</h3><span class="hint">回家 / 工作 / 睡前 · 真实打开程序与调整音量，每一步都有结果</span></div>' +
+      '<div class="super-preset-grid">' + presets.map(function (p) {
+        return '<button class="super-preset" data-super="preset-run" data-preset-id="' + attr(p.id) + '" data-testid="super-preset-' + attr(p.id) + '"' + (SUPER.presetBusy ? ' disabled' : '') + '>' +
+          '<span class="super-preset-icon">' + esc(p.icon || '⚡') + '</span>' +
+          '<span class="super-preset-name">' + esc(p.name) + '</span>' +
+          '<span class="super-preset-desc">' + esc(p.description || '') + '</span>' +
+          '<span class="super-preset-steps">' + (listOf(p.steps).length ? listOf(p.steps).length + ' 步 · ' + listOf(p.steps).map(function (s) { return s.label || s.capabilityId; }).slice(0, 3).join(' / ') : '点击执行') + '</span>' +
+          '</button>';
+      }).join('') + '</div>';
+    if (last) {
+      html += '<div class="super-preset-result card v2-card" data-testid="super-preset-result">' +
+        '<div class="super-preset-result-head"><b>' + esc((last.preset && last.preset.icon) || '') + ' ' + esc((last.preset && last.preset.name) || '场景') + '</b>' +
+        '<span class="tag ' + (last.ok ? 'cyan' : 'amber') + '" data-testid="super-preset-result-state">' + (last.ok ? '执行完成' : (last.needsConfirm ? '需要确认' : '部分失败')) + '</span>' +
+        '<span class="tiny dim">' + esc(last.at ? dateOf(last.at) : '') + '</span></div>' +
+        '<div class="super-steps">' + listOf(last.steps).map(function (st) {
+          var stt = superStepState(st);
+          return '<div class="super-step" data-testid="super-preset-step" data-status="' + attr(stt.cls) + '">' +
+            '<span class="super-step-icon">' + stt.icon + '</span>' +
+            '<span class="super-step-label">' + esc(superStepLabel(st)) + '</span>' +
+            (st.deviceName || st.nodeName ? '<span class="tag">' + esc(st.deviceName || st.nodeName) + '</span>' : '') +
+            '<span class="super-step-state ' + stt.cls + '">' + stt.label + '</span></div>';
+        }).join('') + '</div>' +
+        '<div class="tiny dim" style="margin-top:6px">' + esc(last.say || '') + ' · 审计事件 scene.ran 已写入账本</div></div>';
+    }
+    return html + '</section>';
+  }
+  function superRunPreset(presetId, confirmed) {
+    if (!presetId || SUPER.presetBusy) return;
+    SUPER.presetBusy = true;
+    render(true);
+    v2Post('/api/v2/super/presets/' + encodeURIComponent(presetId) + '/run', { confirmed: !!confirmed }, '执行场景').then(function (data) {
+      SUPER.presetBusy = false;
+      if (!data) { render(true); return; }
+      if (data.needsConfirm) {
+        SUPER.presetBusy = false;
+        render(true);
+        v2ConfirmOpen('确认执行场景', '场景里包含不可逆动作（如打印/对外发送），确认后才会执行。',
+          '<div class="tiny muted">场景：' + esc((data.preset && data.preset.name) || presetId) + '</div>',
+          function () { superRunPreset(presetId, true); });
+        return;
+      }
+      SUPER.presetLast = Object.assign({}, data, { at: nowIso() });
+      toast(((data.preset && data.preset.name) || '场景') + (data.ok ? ' 已派发执行' : ' 部分失败'), data.ok ? 'ok' : 'warn');
+      render(true);
+      superStartPresetPolling();
+    });
+  }
+  /* 场景执行后轮询任务真实状态：把「已派发」更新为「已完成/失败」，步骤展示可验证 */
+  function superRefreshPresetSteps() {
+    var last = SUPER.presetLast;
+    if (!last || !listOf(last.steps).length) return;
+    api('/api/state').then(function (res) {
+      if (!res || !res.ok || !res.data) return;
+      var st = res.data;
+      var tasks = st.tasks || {};
+      var changed = false;
+      listOf(last.steps).forEach(function (step) {
+        if (!step.taskId || !tasks[step.taskId]) return;
+        var t = tasks[step.taskId];
+        var mapped = t.status === 'succeeded' ? 'succeeded' : t.status === 'failed' ? 'failed' : (t.status === 'running' ? 'running' : step.status || 'dispatched');
+        if (step.status !== mapped) { step.status = mapped; changed = true; }
+        if (t.result && t.result.summary) { step.summary = t.result.summary; changed = true; }
+      });
+      if (changed) {
+        last.ok = !listOf(last.steps).some(function (s) { return s.status === 'failed'; });
+        render(true);
+      }
+    });
+  }
+  /* 场景步骤实时刷新：SSE task.* 事件直接命中 + 每秒轮询兜底（节点逐个真实执行约 5-8s） */
+  function superOnTaskEvent(ev) {
+    var d = (ev && ev.data) || {};
+    var taskId = String(d.taskId || '');
+    if (!taskId) return;
+    var last = SUPER.presetLast;
+    if (!last || !listOf(last.steps).length) return;
+    var status = ev.type === 'task.succeeded' ? 'succeeded' : ev.type === 'task.failed' ? 'failed' : ev.type === 'task.started' ? 'running' : ev.type === 'task.step' ? 'running' : null;
+    var hit = false;
+    listOf(last.steps).forEach(function (step) {
+      if (String(step.taskId || '') !== taskId) return;
+      hit = true;
+      if (status) step.status = status;
+      if (d.result && d.result.summary) step.summary = d.result.summary;
+      if (ev.type === 'task.failed' && d.error) step.summary = '失败：' + d.error;
+    });
+    if (hit) {
+      last.ok = !listOf(last.steps).some(function (s) { return s.status === 'failed'; });
+      render(true);
+    }
+  }
+  function superStartPresetPolling() {
+    if (SUPER.presetPollTimer) { clearInterval(SUPER.presetPollTimer); SUPER.presetPollTimer = null; }
+    setTimeout(superLoadState, 1400);
+    var ticks = 0;
+    SUPER.presetPollTimer = setInterval(function () {
+      ticks += 1;
+      superRefreshPresetSteps();
+      var last = SUPER.presetLast;
+      var steps = listOf(last && last.steps);
+      var terminal = steps.length && steps.every(function (s) { return ['succeeded', 'failed'].indexOf(String(s.status)) >= 0; });
+      if (terminal || ticks >= 25) {
+        clearInterval(SUPER.presetPollTimer);
+        SUPER.presetPollTimer = null;
+        render(true);
+      }
+    }, 1000);
+  }
+  function superOnboardBlock() {
+    var state = superOnboardState();
+    if (state === 'done' || state === 'later') return '';
+    var steps = [
+      { n: 1, icon: '📱', title: '手机装上 App / 打开手机页', detail: '手机与电脑同一 WiFi，浏览器打开本机手机页；也可以下载 Android App。', action: '下载手机页', href: '#/devices' },
+      { n: 2, icon: '🔗', title: '配对并绑定电脑', detail: '在「互联」页看自检 → 扫码或输入 6 位配对码；配对成功后回「我的设备」一键绑定。', action: '去配对', href: '#/link' },
+      { n: 3, icon: '🖼️', title: '甩一张照片到电脑', detail: '手机打开 /m 点「拍照/选图 → 甩到电脑」，照片会直接滑到电脑大屏。', action: '试试→手机页', href: '/m' }
+    ];
+    return '<div class="super-onboard" data-testid="super-onboard">' +
+      '<div class="super-onboard-head"><span class="super-eyebrow">TENON · 第一次用</span><h3>3 步，把手机和电脑连成一个超级终端</h3>' +
+      '<button class="btn btn-sm" data-super="onboard-skip" data-testid="btn-onboard-skip">稍后再说</button></div>' +
+      '<div class="super-onboard-steps">' + steps.map(function (s) {
+        return '<div class="super-onboard-step" data-testid="super-onboard-step">' +
+          '<span class="super-onboard-num">' + s.n + '</span>' +
+          '<div><div class="super-onboard-title">' + s.icon + ' ' + esc(s.title) + '</div>' +
+          '<div class="tiny dim">' + esc(s.detail) + '</div></div>' +
+          '<a class="btn btn-sm" href="' + attr(s.href) + '" data-testid="btn-onboard-step-' + s.n + '">' + esc(s.action) + ' →</a></div>';
+      }).join('') + '</div>' +
+      '<div class="row-wrap" style="margin-top:10px"><button class="btn btn-primary btn-sm" data-super="onboard-done" data-testid="btn-onboard-done">我已完成引导 🎉</button>' +
+      '<span class="tiny dim">关闭后不再自动出现（浏览器本地记录）</span></div></div>';
+  }
   function superRenderSuper() {
     var devices = superDevices();
     var programs = superPrograms();
@@ -4042,6 +4243,10 @@
       '<div class="super-hero-tags"><span class="tag cyan">本机运行 · 私有</span><span class="tag">语音 + AI 识别</span><span class="tag">手机一倾就流转</span></div>' +
       '</section>';
     html += superDegradeBanner();
+    /* Round3 D：首次使用的 3 步引导（可「稍后再说」，完成态写 localStorage） */
+    html += superOnboardBlock();
+    /* Round3 C：一键回家 / 工作 / 睡前（真实执行 + 步骤结果） */
+    html += superPresetSection();
     /* 设备横排 */
     html += '<section class="super-section"><div class="super-section-head"><h3>我的设备</h3><span class="hint">' + devices.filter(function (d) { return d.online; }).length + ' 台在线 · 共 ' + devices.length + ' 台</span></div>' +
       '<div class="super-devices" data-testid="super-devices">' + devices.map(function (d) {
@@ -4071,10 +4276,10 @@
       '<div class="super-handoffs" data-testid="super-handoffs">' +
       (handoffs.length ? handoffs.slice(0, 6).map(function (h) {
         return '<button class="super-handoff-card handoff-slide" data-testid="super-handoff-card" data-super="handoff-card" data-handoff-id="' + attr(h.id || '') + '" data-url="' + attr(h.url || '') + '" data-text="' + attr(h.text || '') + '" data-asset-id="' + attr(h.assetId || '') + '">' +
-          '<span class="super-handoff-icon">' + superHandoffIcon(h) + '</span>' +
+          (h.assetId ? '<img class="super-handoff-thumb" alt="流转照片缩略图" loading="lazy" src="/api/v2/assets/' + encodeURIComponent(h.assetId) + '/thumb?w=160" onerror="this.style.display=\'none\'">' : '<span class="super-handoff-icon">' + superHandoffIcon(h) + '</span>') +
           '<span class="super-handoff-main"><b>' + esc(superHandoffLabel(h)) + '</b><span class="tiny dim">' + esc(h.from || '手机') + ' · ' + esc(dateOf(h.at)) + '</span></span>' +
           '<span class="super-handoff-arrow">↗</span></button>';
-      }).join('') : '<div class="super-empty card"><strong>还没有流转内容</strong>在手机上打开 /m，点「甩到电脑」或把手机往前一倾，内容就会出现在这里。</div>') +
+      }).join('') : '<div class="super-empty card" data-testid="super-handoffs-empty"><strong>还没有流转内容</strong>在手机上打开 <a href="/m" target="_blank" rel="noopener">手机页 /m</a>，点「拍照/选图 → 甩到电脑」；<a href="/m/remote">手机遥控</a>也能立刻控制这台电脑。<div class="row-wrap" style="margin-top:8px"><a class="btn btn-sm" href="#/devices">下载安装包 / 生成配对入口</a><a class="btn btn-sm" href="/m" target="_blank" rel="noopener">打开手机页</a></div></div>') +
       '</div></section>';
     /* 快捷去别处 */
     html += '<section class="super-section"><div class="super-section-head"><h3>更多</h3><span class="hint">素材、场景、设备细节都在这里</span></div>' +
@@ -4123,6 +4328,10 @@
     var act = el.getAttribute('data-super');
     var ds = el.dataset || {};
     if (act === 'ask') superAsk(ds.text || '');
+    else if (act === 'preset-run') superRunPreset(ds.presetId, false);
+    else if (act === 'onboard-skip') { superSetOnboard('later'); toast('已收起引导：随时点「一键场景」开始用', 'ok'); render(true); }
+    else if (act === 'onboard-done') { superSetOnboard('done'); toast('🎉 新手引导完成：手机遥控 / 拍照甩屏 / 一键场景都可以用了', 'ok', 5200); render(true); }
+    else if (act === 'onboard-reset') { superSetOnboard(''); render(true); }
     else if (act === 'program' || act === 'program-desktop') superAsk(ds.ask || '');
     else if (act === 'refresh') superLoadState();
     else if (act === 'handoff-card') {

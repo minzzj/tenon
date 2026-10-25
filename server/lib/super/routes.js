@@ -163,6 +163,16 @@ export function createRoutes(service) {
 
     // 最近 asks / handoffs（只读）
     route('GET', '/super/state', wrap('/super/state', async () => ({ body: service.state() }))),
+
+    // 一键场景预设（回家/工作/睡前）：列表 + 执行（写 scene.ran 审计）
+    route('GET', '/super/presets', wrap('/super/presets', async () => ({ body: service.presets() }))),
+    route('POST', '/super/presets/:id/run', wrap('/super/presets/:id/run', async ({ params, body }) => {
+      const result = await service.presetRun(params.id, {
+        confirmed: !!(body && body.confirmed),
+        by: (body && body.by) || '你',
+      });
+      return { body: result };
+    })),
   ];
 }
 

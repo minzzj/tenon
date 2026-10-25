@@ -1,8 +1,9 @@
 // 榫卯 v2 · 电脑端受控动作能力（供物模型/场景调用，TENON_V2=1 时由 agent 注册）
 // system.open / system.volume / system.power（默认禁用，需 TENON_ALLOW_POWER=1 + 二次确认）/ file.print
 import path from 'node:path';
-import { isWindows, runPowerShell, makeTempDir, removeTempDir, readUtf8Json, wrapResultScript } from './lib/ps.js';
+import { isWindows, psQuote, runPowerShell, makeTempDir, removeTempDir, readUtf8Json, wrapResultScript } from './lib/ps.js';
 import { openPath, printFile } from './files.js';
+import { CS_AUDIO } from './input.js';
 
 export const ACTION_VERSION = '2.0.0';
 
@@ -82,15 +83,32 @@ async function runSystemOpen(task, ctx) {
   };
 }
 
-// ---------- system.volume ----------
+// ---------- system.volume（Round3：CoreAudio 真实音量，支持 level 绝对值；失败回退按键） ----------
 async function runSystemVolume(task, ctx) {
   if (!isWindows()) throw new Error('仅 Windows 支持音量动作');
   const params = paramsOf(task);
   let action = params.action || (params.mute === true ? 'mute' : params.delta === 'up' || params.up === true ? 'up' : params.delta === 'down' || params.down === true ? 'down' : null);
-  if (params.level !== undefined && params.level !== null) {
-    throw new Error('P0 音量近似实现只支持 mute/up/down；绝对音量（level）需要 CoreAudio COM，列为 P1');
+  const hasLevel = params.level !== undefined && params.level !== null;
+  if (hasLevel) {
+    const level = Number(params.level);
+    if (!Number.isFinite(level) || level < 0 || level > 100) throw new Error(`level 必须是 0-100 的整数：${params.level}`);
+    const body = `Add-Type -TypeDefinition ${psQuote(CS_AUDIO)}
+$before = [TenonAudio]::Read()
+$set = [TenonAudio]::SetVolume([float](${level} / 100.0))
+Start-Sleep -Milliseconds 120
+$after = [TenonAudio]::Read()
+$result = @{ ok = $true; mode = 'coreaudio'; level = ${level}; before = $before; after = $after; hr = $set[0] }`;
+    await step(ctx, '设置音量', `调到 ${level}%`);
+    const r = await runPs(body, 15000);
+    if (!r.ok) throw new Error(`音量设置失败：${r.error}`);
+    return {
+      summary: `已把音量调到 ${r.after[0]}%（原 ${r.before[0]}%，CoreAudio 真实设置）`,
+      items: [{ name: 'volume', ok: true, detail: `before=${r.before[0]}% after=${r.after[0]}% mute=${r.after[1]}` }],
+      partial: false,
+      evidence: { mode: 'coreaudio', level, beforeVolume: r.before[0], afterVolume: r.after[0], beforeMute: r.before[1], afterMute: r.after[1] },
+    };
   }
-  if (!action) throw new Error('缺少参数 action（mute/up/down）');
+  if (!action) throw new Error('缺少参数 action（mute/up/down）或 level（0-100）');
   if (!['mute', 'up', 'down'].includes(action)) throw new Error(`不支持的音量动作：${action}`);
   const steps = Math.max(1, Math.min(50, Number(params.steps) || 5));
   await step(ctx, '调整音量', `${action}${action === 'mute' ? '' : ` × ${steps}`}`);
@@ -102,15 +120,30 @@ async function runSystemVolume(task, ctx) {
       partial: false,
     };
   }
-  const body = `$action = '${action}'
+  const body = `Add-Type -TypeDefinition ${psQuote(CS_AUDIO)}
+$before = [TenonAudio]::Read()
+$mode = 'coreaudio'
+${action === 'mute' ? '$hr = [TenonAudio]::EnsureMute()' : `for ($i = 0; $i -lt ${steps}; $i++) { $hr = [TenonAudio]::Step(${action === 'up' ? 1 : -1}) }`}
+Start-Sleep -Milliseconds 120
+$after = [TenonAudio]::Read()
+$result = @{ ok = $true; mode = $mode; before = $before; after = $after }`;
+  let r = await runPs(body, 15000);
+  if (!r.ok) {
+    const fallback = `$action = '${action}'
 $steps = ${steps}
 ${VOLUME_BODY}`;
-  const result = await runPs(body, 15000);
-  if (!result.ok) throw new Error(`音量动作失败：${result.error}`);
+    r = await runPs(fallback, 15000);
+    if (!r.ok) throw new Error(`音量动作失败：${r.error}`);
+    return { summary: `已执行：${label}（CoreAudio 不可用，已回退按键级，可能受系统音量控制策略影响）`, items: [{ name: action, ok: true, detail: 'media-key-fallback' }], partial: false };
+  }
+  const detail = action === 'mute'
+    ? `静音：${r.before[1] ? '已是静音' : '已静音'}（音量 ${r.after[0]}%）`
+    : `音量：${r.before[0]}% → ${r.after[0]}%（${steps} 档）`;
   return {
-    summary: `已执行：${label}（P0 近似实现：按键级音量控制，绝对值需 P1 CoreAudio）`,
-    items: [{ name: action, ok: true, detail: `steps=${action === 'mute' ? 1 : steps}` }],
+    summary: `已执行：${label} · ${detail}`,
+    items: [{ name: action, ok: true, detail }, { name: 'volume', ok: true, detail: `before=${r.before[0]}% after=${r.after[0]}%` }],
     partial: false,
+    evidence: { mode: 'coreaudio', beforeVolume: r.before[0], afterVolume: r.after[0], beforeMute: r.before[1], afterMute: r.after[1] },
   };
 }
 

@@ -506,3 +506,58 @@ main .nav,
 .m-pair-action:active { background: rgba(102, 227, 210, 0.16); }
 .m-pair-action .act-name { font-weight: 700; font-size: 13px; }
 .m-pair-action .act-detail { font-size: 10.5px; color: #8fa3bd; line-height: 1.5; }
+/* ===== v2.3 Round 3：一键场景 / 新手引导 / 拍照流转 / 手机遥控 ===== */
+.super-preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.super-preset {
+  display: flex; flex-direction: column; gap: 6px; text-align: left;
+  padding: 16px; border-radius: 14px; cursor: pointer;
+  border: 1px solid rgba(102, 227, 210, 0.22);
+  background: linear-gradient(160deg, rgba(13, 26, 40, 0.95), rgba(9, 15, 26, 0.96));
+  color: #e9f1fa; transition: border-color .15s, transform .15s;
+}
+.super-preset:hover { border-color: #66e3d2; transform: translateY(-1px); }
+.super-preset:disabled { opacity: .6; cursor: wait; }
+.super-preset-icon { font-size: 28px; }
+.super-preset-name { font-size: 16px; font-weight: 800; }
+.super-preset-desc { font-size: 11.5px; color: #8fa3bd; line-height: 1.5; }
+.super-preset-steps { font-size: 10.5px; color: #66e3d2; margin-top: 2px; }
+.super-preset-result { margin-top: 12px; }
+.super-preset-result-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.super-preset-result-head .tag { margin-left: 0; }
+.super-onboard {
+  margin: 16px 0; padding: 18px; border-radius: 16px;
+  border: 1px solid rgba(255, 180, 92, 0.35);
+  background: linear-gradient(160deg, rgba(38, 30, 16, 0.85), rgba(9, 15, 26, 0.96));
+}
+.super-onboard-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.super-onboard-head h3 { margin: 2px 0 0; font-size: 17px; color: #fff; }
+.super-onboard-head .btn { margin-left: auto; }
+.super-onboard-steps { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.super-onboard-step { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px dashed rgba(255, 180, 92, 0.25); background: rgba(7, 11, 20, 0.45); }
+.super-onboard-num { flex: 0 0 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: rgba(255, 180, 92, 0.16); color: #ffb45c; font-weight: 800; }
+.super-onboard-title { font-size: 13px; font-weight: 700; color: #e9f1fa; }
+.super-onboard-step .btn { margin-left: auto; }
+.super-handoff-thumb { flex: 0 0 44px; width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 1px solid #1d2a3d; }
+.handoff-photo img { max-width: 100%; max-height: 68vh; border-radius: 12px; display: block; margin: 0 auto; }
+.remote-entry-grid { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.remote-entry-qr { flex: 0 0 148px; }
+.remote-entry-main { flex: 1; min-width: 240px; }
+.remote-entry-url { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.remote-entry-url code { color: #66e3d2; font-size: 12px; word-break: break-all; }
+.m-touchpad {
+  position: relative; height: 220px; border-radius: 16px; margin-top: 8px;
+  border: 1px dashed rgba(102, 227, 210, 0.35);
+  background: radial-gradient(circle at 50% 50%, rgba(102, 227, 210, 0.08), rgba(7, 11, 20, 0.6));
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.m-touchpad.active { border-color: #66e3d2; background: radial-gradient(circle at 50% 50%, rgba(102, 227, 210, 0.18), rgba(7, 11, 20, 0.7)); }
+.m-touchpad-dot { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: rgba(102, 227, 210, 0.7); }
+.m-touchpad-hint { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 11px; color: #8fa3bd; }
+.m-key-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.m-key { padding: 10px 4px; border-radius: 9px; border: 1px solid #1d2a3d; background: #0c1524; color: #e9f1fa; font-size: 12px; }
+.m-key:active { background: rgba(102, 227, 210, 0.16); border-color: #66e3d2; }
+.m-photo-preview { margin-top: 10px; }
+.m-photo-preview img { max-width: 100%; max-height: 260px; border-radius: 12px; display: block; }
+.m-ok { color: #66e3d2; } .m-warn { color: #ffb45c; } .m-bad { color: #ff6b6b; }
+.m-toast-root { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 99; display: flex; flex-direction: column; gap: 6px; align-items: center; width: calc(100% - 32px); max-width: 420px; pointer-events: none; }
+.m-toast-root .toast { pointer-events: auto; }

@@ -30,6 +30,25 @@ All notable changes to Tenon (榫卯) are documented here. Format follows [Keep 
 
 ### Added
 
+- **手机遥控器/触控板（v2.2 Round 3）**：电脑端新增 `input.mouse`（SendInput；绝对/相对移动、点击、滚轮）、`input.key`（文字+白名单组合键）、`input.media`（媒体/音量）；服务端新增 `server/lib/remote/`（`POST /api/v2/remote/:deviceId/input`，未绑定 403/未知 404/未知 type 400，移动 50ms 节流）；手机新增 `/m/remote` 触控板/键盘/媒体键/常用程序；桌面 `#/devices` 增加「用手机控制这台电脑」入口。实测远程鼠标移动误差 0、音量 40→38→40、记事本键盘输入真实生效。
+- **拍照/相册一甩上大屏**：手机 `/m` 支持拍照/选图 → 素材入库 → `super.handoff {kind:'photo'}` → 电脑 `#/handoff` 大图呈现；账本记录 `asset.ingested` + `super.handoff`。
+- **一键场景（回家/工作/睡前）**：`scripts/seed-home.js` 生成 `data/super/presets.json` 与真实可执行计划（app.launch/url.open/system.volume/media.show/handoff.show），`#/super` 首页大按钮执行，账本 `scene.defined`/`scene.ran` 可查。
+- **新手引导**：首次打开 `#/super` 3 步引导（装 App→配对绑定→甩照片），可跳过、完成态持久化。
+- **宣传片 v2/v2.1**：54s/60s 两个版本（真实新界面截图 + R3 追加段：手机遥控、拍照甩屏），导出 `代码视频/导出/榫卯介绍片v2.1_60秒/`（bgm/silent/poster/contact-sheet/导出说明），关键截图 7 张入 `docs/images/`。
+
+- **设备绑定与一键安装（v2.2 Round 1）**：新增 `#/devices` 设备页（设备卡：在线/已绑定/已安装/能力数/最近活跃/来源/能力标签；一键绑定/解绑二次确认；一键安装 3 步引导）。新增 `server/lib/devices/`（`GET /api/v2/devices`、bind/unbind/action/rename/install），绑定持久化 `data/devices/bindings.json` 并写账本 `device.bound/unbound/renamed`。新增 Windows 节点一键安装包：`scripts/build-install-package.js` 生成 `public/download/tenon-node-win.zip`（149KB，含 node-agent + `install-node.ps1`，支持 `-HubUrl/-InstallDir/-NoStartup/-Uninstall`、登录自启、安装结果 JSON），中枢提供下载入口与安装信息 API。
+- **配对可用性改造（v2.2 Round 2，依据大厂互联调研 P0）**：`GET /api/v2/link/preflight` 六项前置自检（中枢在线/同网段/端口可达/发现端口/版本一致/目录可写，红项给三步修复+复制诊断）；二维码带 `v/exp/oneTime` 与一次性码，手机 `/m/link` 扫码自动配对、过期自动换码、手输兜底；配对成功页能力清单 + 3 个一键动作（发文件/同步剪贴板/甩页面）；设备卡字段补齐与重命名持久化；撤销前影响预览（确定/可能/未知）+ 撤销后 ≤1s 内 403 `PEER_REVOKED` + `link.revoked` 审计。
+- **验收装置入库**：`test/verify/`（API 全路由矩阵、真实 Chrome UI 全页巡检、R2 API/UI 验收脚本），均为可重跑的真实环境验收。
+
+### Fixed
+
+- 修复 v2 网关注入路径匹配（模块全路径/相对路径路由归一化），修复 link 模块只读/鉴权边界。
+- 修复安装包构建早期版本遗留：stdout JSON 类型不稳定、卸载误杀其它安装目录 agent、安装包体积（265KB→149KB，排除 `__tests__`）。
+- 修复 `server/lib/devices` 早期字面 `\n` 导致常量未定义（GET /api/v2/devices 500）。
+
+
+### Added
+
 - **Executable real-browser E2E** (`test/e2e/run-real-browser.js`, `npm run test:e2e`): zero npm dependencies; spawns an isolated hub + node + real Chrome, drives it over CDP (real navigation, mouse clicks, keyboard input, screenshots), covers 8 checks (phone draft → five-section draft → real node execution → receipt; irreversible confirm/reject; impact preview + cancel; device disconnect downgrade; inbox + receipt login gate; offline drill; ledger integrity / no duplicate execution). Evidence: `docs/测试证据/e2e-*.json` + `e2e-screenshots/`. Runs green locally and in the `Real-browser E2E` GitHub Actions workflow (windows-latest, real Chrome).
 
 ### Fixed

@@ -506,6 +506,7 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
       if (pathname === '/m' || pathname === '/m/') return serveFile(res, 'm.html');
       if (pathname === '/m/link') return serveFile(res, 'm-link.html');
       if (pathname === '/m/assets') return serveFile(res, 'm-assets.html');
+      if (pathname === '/m/remote') return serveFile(res, 'm-remote.html');
       if (pathname === '/login') return serveFile(res, 'login.html');
       if (pathname.startsWith('/r/')) return receiptPage(req, res, pathname.slice(3));
       return serveFile(res, pathname.replace(/^\/+/, ''));

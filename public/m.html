@@ -66,10 +66,37 @@
       <div class="v2-m-note">支持麦克风/倾斜的浏览器可直接用；不支持时自动退回文字与按钮，不假装可用。</div>
     </section>
 
+    <section class="m-card" data-testid="m-photo-card">
+      <h2>拍照 / 选图 → 甩到电脑 <span class="count">照片直接上大屏</span></h2>
+      <div class="m-row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <label class="btn btn-sm" for="m-photo-input" data-testid="m-photo-pick">📷 拍照 / 选图</label>
+        <input type="file" id="m-photo-input" data-testid="m-photo-input" accept="image/*" capture="environment" style="display:none">
+        <button class="btn btn-primary btn-sm" id="m-photo-handoff" data-testid="m-photo-handoff">甩到电脑大屏</button>
+      </div>
+      <div class="m-photo-preview hidden" id="m-photo-preview" data-testid="m-photo-preview"></div>
+      <div class="tiny dim m-photo-status" id="m-photo-status" data-testid="m-photo-status" style="margin-top:8px">点「拍照/选图」选择一张照片 → 点「甩到电脑大屏」，电脑端 #/handoff 会显示大图。</div>
+      <div class="hidden" id="m-photo-token-row" data-testid="m-photo-token-row">
+        <div class="form-row" style="margin-top:8px">
+          <div class="field" style="flex:1"><input type="password" id="m-photo-token-input" placeholder="operatorToken（电脑启动日志里）" autocomplete="off"></div>
+          <button class="btn btn-primary btn-sm" id="m-photo-token-save" data-testid="m-photo-token-save">保存令牌</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="m-card">
+      <h2>手机遥控电脑 <span class="count">触控板 + 键盘</span></h2>
+      <div class="tiny dim">手机立刻变成电脑的触控板/键盘：滑动移动鼠标、轻点左键、双指滚动、媒体音量键、一键启动程序。</div>
+      <div class="row-wrap" style="margin-top:8px">
+        <button class="btn btn-primary" id="m-remote-entry-btn" data-testid="m-remote-entry">打开手机遥控 →</button>
+        <a class="btn btn-sm" href="/m/remote" data-testid="m-entry-remote">/m/remote</a>
+      </div>
+    </section>
+
     <section class="m-card">
       <h2>v2 · 互联 / 素材 / 中转站 <span class="count mono">新</span></h2>
       <div class="m-v2-entries">
         <a class="m-v2-entry" href="/m/link" data-testid="m-entry-link"><span class="ico" aria-hidden="true">⇄</span><span><b>互联</b><span class="sub">配对码 · 传文件 · 剪贴板 · 通知</span></span><span class="arrow" aria-hidden="true">→</span></a>
+        <a class="m-v2-entry" href="/m/remote" data-testid="m-entry-remote-v2"><span class="ico" aria-hidden="true">🎮</span><span><b>遥控电脑</b><span class="sub">触控板 · 键盘 · 媒体键 · 启动程序</span></span><span class="arrow" aria-hidden="true">→</span></a>
         <a class="m-v2-entry" href="/m/assets" data-testid="m-entry-assets"><span class="ico" aria-hidden="true">▦</span><span><b>素材库</b><span class="sub">搜索 · OCR · 缩略图 · 浏览</span></span><span class="arrow" aria-hidden="true">→</span></a>
         <a class="m-v2-entry" href="/m/assets#basket" data-testid="m-entry-basket"><span class="ico" aria-hidden="true">⇥</span><span><b>中转站</b><span class="sub">手机暂存 · 电脑一次取用</span></span><span class="arrow" aria-hidden="true">→</span></a>
       </div>
@@ -114,5 +141,6 @@
     </div>
   </div>
   <script src="m.js"></script>
+  <script src="m-r3.js"></script>
 </body>
 </html>

@@ -135,9 +135,10 @@ export const SUPER_ACTIONS = [
       properties: {
         action: str('动作：up | down | mute'),
         steps: int('按键档数（默认 5）', { minimum: 1, maximum: 50, default: 5 }),
+        level: int('绝对音量 0-100（可选；设置时忽略 steps，由 CoreAudio 真实设置）', { minimum: 0, maximum: 100 }),
       },
     },
-    describe: (p) => `音量${p.action === 'up' ? '调大' : p.action === 'down' ? '调小' : '静音'}${p.action === 'mute' ? '' : ` ${Number(p.steps) || 5} 档`}`,
+    describe: (p) => (p.level !== undefined && p.level !== null ? `把音量调到 ${Number(p.level)}%` : `音量${p.action === 'up' ? '调大' : p.action === 'down' ? '调小' : '静音'}${p.action === 'mute' ? '' : ` ${Number(p.steps) || 5} 档`}`),
   },
   {
     id: 'app.list',
@@ -268,7 +269,9 @@ export function mapParamsForCapability(action, params = {}, capabilityId) {
     return { path: p.path || p.file, copies: Number(p.copies) || 1 };
   }
   if (capabilityId === 'system.volume') {
-    return { action: p.action, steps: Number(p.steps) || 5 };
+    const out = { action: p.action, steps: Number(p.steps) || 5 };
+    if (p.level !== undefined && p.level !== null) out.level = Number(p.level);
+    return out;
   }
   return p;
 }

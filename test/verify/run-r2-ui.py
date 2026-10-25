@@ -80,6 +80,18 @@ def wait_http(url, timeout=45):
     return False
 
 
+def start_second_agent(base, data_dir, node_id, node_token):
+    """真实第二个 node-agent（独立 nodeId/数据目录），用于 #/devices 卡片出现。"""
+    os.makedirs(data_dir, exist_ok=True)
+    env = dict(os.environ)
+    env.update({"TENON_HUB_URL": base, "TENON_DATA_DIR": data_dir, "TENON_NODE_TOKEN": node_token,
+                "TENON_NODE_ID": node_id, "TENON_NODE_NAME": "验收第二台电脑(UI)"})
+    logf = open(os.path.join(LOG_DIR, "second-agent-%s.log" % STAMP), "a", encoding="utf-8")
+    proc = subprocess.Popen(["node", os.path.join(ROOT, "node-agent", "agent.js")], cwd=ROOT, env=env,
+                            stdout=logf, stderr=logf)
+    return proc
+
+
 def start_hub():
     os.makedirs(DATA, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -103,6 +115,7 @@ def main():
     ap.add_argument("--keep", action="store_true")
     args = ap.parse_args()
     proc = None
+    agent = None
     base = ""
     token = ""
     results = {"kind": "r2-ui", "stamp": datetime.now().isoformat(), "checks": CHECKS, "evidence": {}}
@@ -111,6 +124,23 @@ def main():
     try:
         proc, base, token = start_hub()
         log("隔离实例就绪 " + base)
+        node_token = ""
+        try:
+            with open(os.path.join(DATA, "secrets.json"), "r", encoding="utf-8") as f:
+                node_token = json.load(f)["nodeToken"]
+        except Exception:
+            node_token = ""
+        agent = None
+        if node_token:
+            agent = start_second_agent(base, os.path.join(RUN, "agent-data"), "node-checker-ui", node_token)
+            log("真实第二个 node-agent 已启动（node-checker-ui）")
+            for _ in range(60):
+                st_dev, devs = api(base + "/api/v2/devices", token)
+                items = (devs.get("items") or devs.get("devices") or []) if st_dev == 200 else []
+                if any(d.get("id") == "node-checker-ui" for d in items):
+                    log("第二设备已注册进设备列表")
+                    break
+                time.sleep(0.5)
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(channel="chrome", headless=True, args=["--disable-dev-shm-usage"])
@@ -288,7 +318,20 @@ def main():
                     except Exception:
                         pass
                     rec("P0-5 撤销预览取消零变化（弹窗关闭 + 账本无 link.revoked）", modal_after == 0 and events.count("link.revoked") == ev_before, "modalAfter=%d revoked=%d/%d" % (modal_after, events.count("link.revoked"), ev_before))
-                # 设备卡 R2 字段 + 重命名 UI
+                # 回访场景：#/devices 已知产品 P1（v2Sig 缺 devices 分支）——记录为 SKIP 并单独报 Operator
+                known_page = ctx.new_page()
+                known_page.goto(base + "/#/devices", wait_until="domcontentloaded", timeout=30000)
+                known_page.wait_for_timeout(4000)
+                known_cards = known_page.locator('[data-testid="v2-device-card"]').count()
+                known_loading = "正在检测 v2 接口" in known_page.inner_text("body")
+                known_page.screenshot(path=os.path.join(SHOTS, "30-returning-devices-known-issue.png"))
+                rec("P0-4 回访/刷新用户 #/devices 渲染（v2Sig devices 修复后）", known_cards >= 1 and not known_loading,
+                    "cards=%d loading=%s" % (known_cards, known_loading))
+                # 首访用户（干净 localStorage 的新 context + 已注册真实第二 node-agent）→ #/devices 真实渲染
+                dctx = browser.new_context(viewport={"width": 1440, "height": 900})
+                dctx.add_init_script("try{localStorage.setItem('tenon:token','%s')}catch(e){}" % token)
+                page = dctx.new_page()
+                page.on("pageerror", lambda e: derr.append(str(e)[:200]))
                 page.goto(base + "/#/devices", wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(1200)
                 for _ in range(40):
@@ -296,7 +339,7 @@ def main():
                         break
                     page.wait_for_timeout(300)
                 page.wait_for_timeout(600)
-                page.screenshot(path=os.path.join(SHOTS, "28-desktop-devices-r2.png"))
+                page.screenshot(path=os.path.join(SHOTS, "31-devices-first-visit.png"))
                 cards = page.locator('[data-testid="v2-device-card"]').count()
                 last_active = page.locator('[data-testid="v2-device-last-active"]').count()
                 src = page.locator('[data-testid="v2-device-source"]').count()
@@ -327,9 +370,8 @@ def main():
                                 events = [json.loads(l)["type"] for l in f.read().split("\n") if l.strip()]
                         except Exception:
                             pass
-                        page.screenshot(path=os.path.join(SHOTS, "29-desktop-renamed.png"))
+                        page.screenshot(path=os.path.join(SHOTS, "32-desktop-renamed.png"))
                         rec("P0-4 桌面重命名 UI → 列表更新 + 账本 device.renamed", ok_name and dev is not None and dev.get("name") == new_name and "device.renamed" in events, "uiName=%s apiName=%s ledger=%s" % (ok_name, dev.get("name") if dev else None, "device.renamed" in events))
-                        # 改回原名
                         if dev:
                             api(base + "/api/v2/devices/" + target_id + "/rename", token, method="POST", body={"name": old_name})
                 rec("桌面 #/link/#/devices JS 运行时错误 = 0", len(derr) == 0, json.dumps(derr[:3], ensure_ascii=False))
@@ -338,6 +380,11 @@ def main():
     except Exception as e:
         rec("R2 UI 执行异常", False, str(e)[:500])
     finally:
+        if agent:
+            try:
+                subprocess.run(["taskkill", "/PID", str(agent.pid), "/T", "/F"], capture_output=True)
+            except Exception:
+                pass
         if proc:
             try:
                 subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
