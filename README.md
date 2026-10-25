@@ -146,7 +146,7 @@ Testing is done the way a user uses it: **real Chrome clicks, real files, real p
 |---|---|
 | Unit tests | **146 passed / 0 failed** in 8 files (`npm test`; ledger 16 / state 30 / ai 21 / tasks 23 / channels 10 / checkup 16 / png 14 / seed-demo 16) |
 | Real-browser acceptance | **8/8 acceptance checks passed** (plus 2 extra: dual-instance read-only, real AI provider); 19 evidence screenshots |
-| Executable real-browser E2E | `npm run test:e2e` — **8/8 automated checks pass** in one run: isolated instance auto-seeded, real Chrome driven over CDP (real clicks, real typing, real screenshots); evidence `docs/测试证据/e2e-2026-10-25-1822.json` + 10 screenshots |
+| Executable real-browser E2E | `npm run test:e2e` — **8/8 automated checks pass** in one run: isolated instance auto-seeded, real Chrome driven over CDP (real clicks, real typing, real screenshots); evidence `docs/测试证据/e2e-2026-10-25-1822.json` + 10 screenshots; **also passes in GitHub Actions** ([run](https://github.com/minzzj/tenon/actions/runs/40184873877)) |
 | Disconnect a device referenced by 3 tasks | all 3 tasks downgraded to "needs confirmation" within **275 ms** (acceptance line: 10 s) |
 | Impact preview | **certain 3 / possible 1 / unknown 1**; cancel leaves business state unchanged |
 | Dual instance | second instance is read-only; writes answer **423** ("another window is read-only") |

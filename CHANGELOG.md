@@ -6,7 +6,7 @@ All notable changes to Tenon (榫卯) are documented here. Format follows [Keep 
 
 ### Added
 
-- **Executable real-browser E2E** (`test/e2e/run-real-browser.js`, `npm run test:e2e`): zero npm dependencies; spawns an isolated hub + node + real Chrome, drives it over CDP (real navigation, mouse clicks, keyboard input, screenshots), covers 8 checks (phone draft → five-section draft → real node execution → receipt; irreversible confirm/reject; impact preview + cancel; device disconnect downgrade; inbox + receipt login gate; offline drill; ledger integrity / no duplicate execution). Evidence: `docs/测试证据/e2e-*.json` + `e2e-screenshots/`.
+- **Executable real-browser E2E** (`test/e2e/run-real-browser.js`, `npm run test:e2e`): zero npm dependencies; spawns an isolated hub + node + real Chrome, drives it over CDP (real navigation, mouse clicks, keyboard input, screenshots), covers 8 checks (phone draft → five-section draft → real node execution → receipt; irreversible confirm/reject; impact preview + cancel; device disconnect downgrade; inbox + receipt login gate; offline drill; ledger integrity / no duplicate execution). Evidence: `docs/测试证据/e2e-*.json` + `e2e-screenshots/`. Runs green locally and in the `Real-browser E2E` GitHub Actions workflow (windows-latest, real Chrome).
 
 ### Fixed
 
