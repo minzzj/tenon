@@ -24,7 +24,8 @@
       </div>
     </header>
 
-    <div class="offline-banner hidden" id="remote-offline" data-testid="m-remote-offline">离线：无法连接中枢</div>
+    <div class="offline-banner hidden" id="remote-offline" data-testid="m-remote-offline">数据截至 --:--（缓存）· 网络断开，恢复后可用</div>
+    <div id="remote-error-slot" data-testid="m-remote-error-slot"></div>
 
     <section class="m-card">
       <h2>连接状态 <span class="count mono" id="remote-latency" data-testid="m-remote-latency">—</span></h2>
@@ -115,6 +116,7 @@
     <div class="m-foot">榫卯 Tenon v3 · 手机遥控：只在同一 WiFi 内生效 · 遥控动作会写账本</div>
   </div>
   <div class="m-toast-root" id="m-toast"></div>
+  <script src="/errors.js"></script>
   <script src="/m-remote.js"></script>
 </body>
 </html>

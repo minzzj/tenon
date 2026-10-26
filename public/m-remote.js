@@ -12,6 +12,7 @@
     moveAcc: { dx: 0, dy: 0, timer: null },
     busy: false,
     lastError: '',
+    lastOkAt: 0,
   };
 
   function $(sel) { return document.querySelector(sel); }
@@ -46,6 +47,34 @@
     $('#remote-token-card').classList.remove('hidden');
     var input = $('#remote-token-input');
     if (input) input.focus();
+  }
+  /* Round4 · 离线体验 + 统一错误码 */
+  function showErrorCard(status, msg, network) {
+    var slot = $('#remote-error-slot');
+    if (!slot) return;
+    var code = (window.TenonErrors && window.TenonErrors.fromHttp) ? window.TenonErrors.fromHttp(status, msg, network) : 'UNKNOWN';
+    slot.innerHTML = window.TenonErrors ? window.TenonErrors.render(code, { detail: (msg || '') + ' · /m/remote' }) : '';
+  }
+  function clearErrorCard() { var slot = $('#remote-error-slot'); if (slot) slot.innerHTML = ''; }
+  function updateOffline() {
+    var off = false;
+    try { off = navigator.onLine === false; } catch (_) { off = false; }
+    if (!off && state.lastOkAt && Date.now() - state.lastOkAt > 10000) off = true;
+    var banner = $('#remote-offline');
+    if (banner) {
+      if (off) {
+        var d = state.lastOkAt ? new Date(state.lastOkAt) : new Date();
+        var hh = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        banner.textContent = '数据截至 ' + hh + '（缓存）· 网络断开，恢复后可用';
+        banner.classList.remove('hidden');
+        banner.setAttribute('data-offline', '1');
+      } else {
+        banner.classList.add('hidden');
+        banner.removeAttribute('data-offline');
+      }
+    }
+    if (document.body) document.body.classList.toggle('tenon-offline', off);
+    return off;
   }
   function currentDevice() {
     for (var i = 0; i < state.devices.length; i++) if (state.devices[i].id === state.deviceId) return state.devices[i];
@@ -83,9 +112,14 @@
   function loadDevices() {
     return api('/api/v2/remote/devices').then(function (res) {
       if (!res.ok || !res.data || !Array.isArray(res.data.devices)) {
+        state.lastOkAt = state.lastOkAt || Date.now();
+        showErrorCard(res.status, (res.data && res.data.error) || ('HTTP ' + res.status), !!res.network);
         toast('无法读取可遥控设备：' + ((res.data && res.data.error) || ('HTTP ' + res.status)), 'bad');
         return null;
       }
+      clearErrorCard();
+      state.lastOkAt = Date.now();
+      updateOffline();
       state.devices = res.data.devices;
       var query = new URLSearchParams(location.search);
       var wanted = query.get('device') || '';
@@ -104,6 +138,8 @@
         if (asof) asof.textContent = '未连接';
         return;
       }
+      state.lastOkAt = Date.now();
+      if (typeof updateOffline === 'function') updateOffline();
       state.status = res.data;
       if (asof) asof.textContent = '已连接 ' + new Date().toLocaleTimeString();
       var latency = $('#remote-latency');
@@ -254,6 +290,10 @@
     if (!state.token) needToken();
     bindPad();
     bindActions();
+    updateOffline();
+    window.addEventListener('online', function () { state.lastOkAt = Date.now(); updateOffline(); loadDevices().then(refreshStatus); });
+    window.addEventListener('offline', function () { updateOffline(); });
+    setInterval(function () { updateOffline(); }, 2000);
     loadDevices().then(refreshStatus);
     setInterval(refreshStatus, 3000);
     setInterval(function () { if (state.devices.length) loadDevices(); }, 15000);

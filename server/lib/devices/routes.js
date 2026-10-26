@@ -40,7 +40,8 @@ function wrap(fn) {
       await fn(req, res, ctx || {});
     } catch (err) {
       const code = Number(err && err.statusCode) || 500;
-      if (!res.headersSent) sendJson(res, code, { ok: false, error: String((err && err.message) || err) });
+      const extra = err && err.payload && typeof err.payload === 'object' ? err.payload : {};
+      if (!res.headersSent) sendJson(res, code, { ok: false, error: String((err && err.message) || err), ...extra });
       else {
         try {
           res.end();
@@ -68,6 +69,37 @@ export function createDeviceRoutes(service) {
       handler: wrap(async (req, res, ctx) => {
         const svc = serviceOf(ctx);
         sendJson(res, 200, { ok: true, install: svc.installInfo() });
+      }),
+    },
+    // Round4 · 设备槽位设置：个人 3 / 家庭 8（可配置）+ 到上限的最久未活跃 3 台建议
+    {
+      method: 'GET',
+      path: '/api/v2/devices/settings',
+      handler: wrap(async (req, res, ctx) => {
+        const svc = serviceOf(ctx);
+        sendJson(res, 200, { ok: true, settings: svc.settingsInfo(ctx.services && ctx.services.link) });
+      }),
+    },
+    {
+      method: 'PATCH',
+      path: '/api/v2/devices/settings',
+      handler: wrap(async (req, res, ctx) => {
+        const svc = serviceOf(ctx);
+        guardWrite(svc, req, ctx);
+        const body = await readJsonBody(req).catch(() => ({}));
+        const result = svc.updateSettings(body, { by: body.by || '你', linkService: ctx.services && ctx.services.link });
+        sendJson(res, 200, result);
+      }),
+    },
+    {
+      method: 'POST',
+      path: '/api/v2/devices/settings',
+      handler: wrap(async (req, res, ctx) => {
+        const svc = serviceOf(ctx);
+        guardWrite(svc, req, ctx);
+        const body = await readJsonBody(req).catch(() => ({}));
+        const result = svc.updateSettings(body, { by: body.by || '你', linkService: ctx.services && ctx.services.link });
+        sendJson(res, 200, result);
       }),
     },
     {
@@ -151,6 +183,9 @@ export function createDeviceRoutes(service) {
 export const ROUTES = [
   { method: 'GET', path: '/api/v2/devices' },
   { method: 'GET', path: '/api/v2/devices/install' },
+  { method: 'GET', path: '/api/v2/devices/settings' },
+  { method: 'PATCH', path: '/api/v2/devices/settings' },
+  { method: 'POST', path: '/api/v2/devices/settings' },
   { method: 'GET', path: '/api/v2/devices/:id/impact' },
   { method: 'GET', path: '/api/v2/devices/:id/revoke-preview' },
   { method: 'GET', path: '/api/v2/devices/:id/unbind-preview' },

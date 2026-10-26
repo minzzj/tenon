@@ -119,6 +119,10 @@ export function createDevicesService(opts = {}) {
   const root = path.resolve(opts.root || process.cwd());
   const dataDir = opts.dataDir ? path.resolve(opts.dataDir) : path.join(root, 'data');
   const bindingsFile = path.join(dataDir, 'devices', 'bindings.json');
+  // Round4 · 设备槽位：个人 3 / 家庭 8（可配置，data/devices/settings.json）
+  const settingsFile = path.join(dataDir, 'devices', 'settings.json');
+  const SLOT_LIMITS = { personal: 3, family: 8 };
+  const SLOT_MODES = ['personal', 'family'];
   const tokens = opts.tokens || opts.secret || readJson(path.join(dataDir, 'secrets.json'), null) || {};
   const readOnly = !!opts.readOnly;
   const ledger = opts.ledger || null;
@@ -155,6 +159,73 @@ export function createDevicesService(opts = {}) {
     } catch {
       /* 账本追加失败不应让绑定接口失败（绑定文件已落盘） */
     }
+  }
+
+  function readSettings() {
+    const saved = readJson(settingsFile, null) || {};
+    const mode = SLOT_MODES.includes(String(saved.mode)) ? String(saved.mode) : 'personal';
+    const fallback = SLOT_LIMITS[mode];
+    const maxDevices = Number(saved.maxDevices);
+    return {
+      mode,
+      maxDevices: Number.isFinite(maxDevices) && maxDevices >= 1 && maxDevices <= 64 ? Math.floor(maxDevices) : fallback,
+      updatedAt: saved.updatedAt || null,
+    };
+  }
+
+  function saveSettings(settings) {
+    const store = { version: 1, mode: settings.mode, maxDevices: settings.maxDevices, updatedAt: new Date().toISOString() };
+    atomicWriteJson(settingsFile, store);
+    return store;
+  }
+
+  /** 当前槽位状态 + 到上限时「最久未活跃的 3 台」替换建议 */
+  function settingsInfo(linkService) {
+    const settings = readSettings();
+    const bindings = readBindings();
+    const devices = decorate(collectDevices(linkService || opts.linkService || null), bindings);
+    const bound = devices.filter((d) => d.bound);
+    const atLimit = bound.length >= settings.maxDevices;
+    const suggestions = bound
+      .slice()
+      .sort((a, b) => {
+        const ta = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+        const tb = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+        if (ta !== tb) return ta - tb;
+        return String(a.boundAt || '').localeCompare(String(b.boundAt || ''));
+      })
+      .slice(0, 3)
+      .map((d) => ({ id: d.id, deviceId: d.id, name: d.name, online: !!d.online, boundAt: d.boundAt || null, lastSeen: d.lastSeen || null, lastActiveText: d.lastActiveText || relativeTimeText(d.lastSeen) }));
+    return {
+      mode: settings.mode,
+      maxDevices: settings.maxDevices,
+      limits: { ...SLOT_LIMITS },
+      modes: SLOT_MODES.slice(),
+      used: bound.length,
+      total: devices.length,
+      remaining: Math.max(0, settings.maxDevices - bound.length),
+      atLimit,
+      full: atLimit,
+      suggestions: atLimit ? suggestions : [],
+      updatedAt: settings.updatedAt,
+    };
+  }
+
+  function updateSettings(patch = {}, extra = {}) {
+    const current = readSettings();
+    const mode = patch.mode === undefined ? current.mode : String(patch.mode);
+    if (!SLOT_MODES.includes(mode)) throw httpError(400, 'mode 只能是 personal（个人 3 台）或 family（家庭 8 台）');
+    let maxDevices = current.maxDevices;
+    if (patch.maxDevices !== undefined && patch.maxDevices !== null) {
+      const n = Number(patch.maxDevices);
+      if (!Number.isFinite(n) || n < 1 || n > 64) throw httpError(400, 'maxDevices 必须是 1-64 的整数');
+      maxDevices = Math.floor(n);
+    } else if (patch.mode !== undefined && patch.maxDevices === undefined) {
+      maxDevices = SLOT_LIMITS[mode];
+    }
+    const saved = saveSettings({ mode, maxDevices });
+    appendEvent('device.settings.changed', { mode: saved.mode, maxDevices: saved.maxDevices, by: extra.by || '你' });
+    return { ok: true, settings: settingsInfo(extra.linkService), changed: true };
   }
 
   function nodeOnline(node, now) {
@@ -337,6 +408,7 @@ export function createDevicesService(opts = {}) {
       items: devices,
       counts,
       install: installInfo(),
+      settings: settingsInfo(linkService),
       bindingsFile: path.relative(root, bindingsFile).split(path.sep).join('/'),
       bindingsUpdatedAt: bindings.updatedAt || null,
       serverNow: new Date().toISOString(),
@@ -357,6 +429,26 @@ export function createDevicesService(opts = {}) {
     const decorated = decorate([device], bindings)[0];
     if (existing) {
       return { ok: true, already: true, device: decorated, binding: existing, message: '该设备已绑定（幂等）' };
+    }
+    const slotSettings = readSettings();
+    const boundCount = Object.keys(bindings.devices || {}).length;
+    if (boundCount >= slotSettings.maxDevices) {
+      const info = settingsInfo(extra.linkService);
+      const modeLabel = slotSettings.mode === 'family' ? '家庭版' : '个人版';
+      const err = httpError(409, '设备槽位已满：' + modeLabel + '最多 ' + slotSettings.maxDevices + ' 台。先解绑一台，或从「最久未活跃的 3 台」里替换。');
+      err.code = 'DEVICE_SLOT_FULL';
+      err.slotFull = true;
+      err.payload = {
+        ok: false,
+        code: 'DEVICE_SLOT_FULL',
+        error: err.message,
+        mode: slotSettings.mode,
+        limit: slotSettings.maxDevices,
+        used: boundCount,
+        suggestions: info.suggestions,
+        hint: '可在「我的设备 → 设备槽位」切换个人版（3 台）/ 家庭版（8 台），或点替换把最久未活跃的设备换下。',
+      };
+      throw err;
     }
     const binding = {
       deviceId: device.id,
@@ -449,12 +541,27 @@ export function createDevicesService(opts = {}) {
     if (clean.length > 40) throw httpError(400, '名称不能超过 40 个字符');
     const bindings = readBindings();
     const from = (bindings.names[id] && bindings.names[id].name) || device.name;
-    const decorated = decorate([device], bindings)[0];
-    if (from === clean) return { ok: true, unchanged: true, device: decorated };
-    bindings.names[id] = { name: clean, by: extra.by || '你', at: new Date().toISOString() };
+    // Round4：重名自动加后缀（2）（3）…（避免「客厅电脑」出现两台分不清）
+    const usedNames = new Set();
+    for (const d of collectDevices(linkService)) {
+      if (String(d.id) === String(id)) continue;
+      const override = bindings.names[d.id] && bindings.names[d.id].name;
+      const nm = String(override || d.name || '').trim();
+      if (nm) usedNames.add(nm);
+    }
+    let finalName = clean;
+    let suffixed = false;
+    if (usedNames.has(finalName)) {
+      let n = 2;
+      while (usedNames.has(finalName + '（' + n + '）')) n += 1;
+      finalName = finalName + '（' + n + '）';
+      suffixed = true;
+    }
+    if (from === finalName) return { ok: true, unchanged: true, device: decorate([device], bindings)[0] };
+    bindings.names[id] = { name: finalName, requested: clean, suffixed, by: extra.by || '你', at: new Date().toISOString() };
     saveBindings(bindings);
-    appendEvent('device.renamed', { nodeId: device.id, deviceId: device.id, from, to: clean, by: extra.by || '你' });
-    return { ok: true, unchanged: false, from, to: clean, device: decorate([device], bindings)[0] };
+    appendEvent('device.renamed', { nodeId: device.id, deviceId: device.id, from, to: finalName, requested: clean, suffixed, by: extra.by || '你' });
+    return { ok: true, unchanged: false, from, to: finalName, requested: clean, suffixed, device: decorate([device], bindings)[0] };
   }
 
   function activeStatus(status) {
@@ -565,6 +672,8 @@ export function createDevicesService(opts = {}) {
     rename,
     impact,
     installInfo,
+    settingsInfo,
+    updateSettings,
     ROUTES,
     _resetBindings: regenerateBindingsForTest,
   };

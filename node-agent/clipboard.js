@@ -37,6 +37,63 @@ for ($i = 0; $i -lt 3; $i++) {
   }
 }`;
 
+// Round4：同步侧隐私过滤（发送前/写入前各一次；与 server/lib/link/privacy.js 规则保持一致）
+const LOCAL_PRIVACY = { longDigitsThreshold: 12, maxSyncChars: 8000 };
+const LOCAL_LABELS = { password: '密码/口令', otp: '验证码/动态码', idcard: '身份证号', bankcard: '银行卡号', token: '密钥/令牌', 'long-digits': '超长数字串', 'too-long': '超长文本' };
+
+function luhnValid(digits) {
+  const s = String(digits || '').replace(/\D/g, '');
+  if (s.length < 12 || s.length > 19) return false;
+  let sum = 0;
+  let alt = false;
+  for (let i = s.length - 1; i >= 0; i -= 1) {
+    let n = Number(s[i]);
+    if (Number.isNaN(n)) return false;
+    if (alt) { n *= 2; if (n > 9) n -= 9; }
+    sum += n;
+    alt = !alt;
+  }
+  return sum % 10 === 0;
+}
+
+function idCardLike(value) {
+  const v = String(value || '').trim();
+  if (/^\d{15}$/.test(v)) return true;
+  if (!/^\d{17}[\dXx]$/.test(v)) return false;
+  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  const check = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
+  let sum = 0;
+  for (let i = 0; i < 17; i += 1) sum += Number(v[i]) * weights[i];
+  if (check[sum % 11] === v[17].toUpperCase()) return true;
+  return /^\d{6}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]$/.test(v);
+}
+
+export function detectSensitiveLocal(text) {
+  const value = typeof text === 'string' ? text : String(text === undefined || text === null ? '' : text);
+  if (!value) return { sensitive: false, type: null, label: null };
+  if (value.length > LOCAL_PRIVACY.maxSyncChars) return { sensitive: true, type: 'too-long', label: LOCAL_LABELS['too-long'] };
+  const rules = [
+    { type: 'password', re: /(?:密码|口令|password|passwd|pwd)\s*(?:是|为|[:：=])\s*\S{3,}/i },
+    { type: 'otp', re: /(?:验证码|校验码|动态码|verification\s*code|one[- ]?time\s*code|\botp\b)[^0-9]{0,12}\d{4,8}/i },
+    { type: 'idcard', re: /(?:^|[^\d])(\d{17}[\dXx]|\d{15})(?![\d])/ },
+    { type: 'token', re: /(?:sk-[A-Za-z0-9_-]{16,}|tok_[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{20,}|api[_-]?key\s*[:=]\s*[A-Za-z0-9]{16,})/i },
+  ];
+  for (const rule of rules) {
+    const m = value.match(rule.re);
+    if (!m) continue;
+    if (rule.type === 'idcard' && !idCardLike(m[1])) continue;
+    return { sensitive: true, type: rule.type, label: LOCAL_LABELS[rule.type] };
+  }
+  const cardMatches = value.match(/(?:^|[^\d])((?:\d[ -]?){15,19})(?![\d])/g) || [];
+  const context = /(?:银行卡|卡号|bank\s*card|card\s*number)/i.test(value);
+  if (cardMatches.some((raw) => luhnValid(raw) || /(?:\d{4}[ -]){3}\d{4}/.test(String(raw).trim()) || context)) {
+    return { sensitive: true, type: 'bankcard', label: LOCAL_LABELS.bankcard };
+  }
+  const longDigits = value.match(/(?:^|[^\d])(\d{12,})(?![\d])/);
+  if (longDigits) return { sensitive: true, type: 'long-digits', label: LOCAL_LABELS['long-digits'] };
+  return { sensitive: false, type: null, label: null };
+}
+
 export function hashText(text) {
   return crypto.createHash('sha256').update(String(text || ''), 'utf8').digest('hex').slice(0, 16);
 }
@@ -126,6 +183,9 @@ export function createClipboardSync({
     applied: 0,
     hubReady: true,
     ticks: 0,
+    privacy: { enabled: true, checkedAt: null, remoteEnabled: true },
+    redacted: 0,
+    skippedDisabled: 0,
   };
   let timer = null;
   let busy = false;
@@ -142,6 +202,12 @@ export function createClipboardSync({
 
   async function reportLocalText(text) {
     if (!hub || typeof hub.postJson !== 'function') return false;
+    const hit = detectSensitiveLocal(text);
+    if (hit.sensitive) {
+      state.redacted += 1;
+      log(`[剪贴板] 已过滤敏感内容（${hit.label}），不落盘不同步`);
+      return false;
+    }
     if (String(text).length > maxChars) {
       state.lastError = { at: new Date().toISOString(), where: 'report', message: `剪贴板内容超过 ${maxChars} 字，已跳过上报（防止刷爆账本）` };
       return false;
@@ -186,9 +252,32 @@ export function createClipboardSync({
     }
   }
 
+  async function pollPrivacySettings() {
+    if (!hub || typeof hub.getJson !== 'function') return;
+    const now = Date.now();
+    if (state.privacy.checkedAt && now - state.privacy.checkedAt < 5000) return;
+    state.privacy.checkedAt = now;
+    try {
+      const payload = await hub.getJson('/api/v2/link/clipboard/settings');
+      const enabled = payload && payload.ok !== false && payload.enabled !== false;
+      state.privacy.remoteEnabled = enabled;
+      if (state.privacy.enabled !== enabled) {
+        state.privacy.enabled = enabled;
+        log(`[剪贴板] 隐私开关：${enabled ? '已开启' : '已关闭（停止采集/同步）'}`);
+      }
+    } catch {
+      // 中枢不可达时保持本地开关状态，不误伤正常同步
+    }
+  }
+
   async function syncOnce() {
     state.ticks += 1;
     state.lastError = state.lastError || null;
+    await pollPrivacySettings();
+    if (!state.privacy.enabled) {
+      state.skippedDisabled += 1;
+      return { ok: true, disabled: true };
+    }
     const local = await readClipboard({ platform });
     if (!local || !local.ok) {
       if (local && local.unsupported) {
@@ -215,6 +304,13 @@ export function createClipboardSync({
         if (latest.text === text) {
           lastAppliedText = latest.text;
           return { ok: true, applied: false, reason: 'already-in-sync' };
+        }
+        const remoteHit = detectSensitiveLocal(latest.text);
+        if (remoteHit.sensitive) {
+          state.redacted += 1;
+          lastRemoteKey = key;
+          log(`[剪贴板] 中枢内容命中隐私过滤（${remoteHit.label}），已跳过写入本机`);
+          return { ok: true, applied: false, redacted: true, type: remoteHit.type };
         }
         const wrote = await writeClipboard(latest.text, { platform });
         if (wrote && wrote.ok) {
@@ -275,4 +371,4 @@ export function createClipboardSync({
   return { state, syncOnce, start, stop, reportLocalText, fetchLatest, status: () => ({ ...state }) };
 }
 
-export default { readClipboardText, writeClipboardText, classifyKind, hashText, createClipboardSync };
+export default { readClipboardText, writeClipboardText, classifyKind, hashText, detectSensitiveLocal, createClipboardSync };

@@ -471,11 +471,16 @@ export const routeDefs = [
       const auth = authenticate(link, ctx, req);
       const body = await readJsonBody(req);
       const from = body.from || (auth.role === 'peer' ? auth.peerId : 'operator');
-      const item = link.clipboard.share({
+      const result = link.clipboard.share({
         from, kind: body.kind || 'text', text: body.text || '', to: body.to || null,
         files: body.files, transferId: body.transferId, preview: body.preview,
       });
-      sendJson(res, 200, { ok: true, clipboard: clipboardView(item) });
+      // Round4：敏感内容被过滤 → 200 + redacted:true（不落盘、不同步、事件只记类型）
+      if (result && result.redacted) {
+        sendJson(res, 200, { ok: true, redacted: true, sensitiveType: result.sensitiveType, label: result.label, length: result.length, preview: result.preview, say: result.say, clipboard: null });
+        return;
+      }
+      sendJson(res, 200, { ok: true, redacted: false, clipboard: clipboardView(result) });
     }),
   },
   {
@@ -486,7 +491,58 @@ export const routeDefs = [
       const auth = authenticate(link, ctx, req);
       const forDevice = String(queryValue(ctx, req, 'for') || queryValue(ctx, req, 'deviceId') || (auth.role === 'peer' ? auth.peerId : ''));
       const item = link.clipboard.latest({ forDevice: forDevice || null });
-      sendJson(res, 200, { ok: true, clipboard: clipboardView(item) });
+      sendJson(res, 200, { ok: true, clipboard: clipboardView(item), privacy: link.clipboard.settings() });
+    }),
+  },
+  // Round4 · 剪贴板隐私：最近 5 条历史（仅 preview）+ 单条删除/清空 + 开关
+  {
+    method: 'GET',
+    path: '/api/v2/link/clipboard/history',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      authenticate(link, ctx, req);
+      const limit = Number(queryValue(ctx, req, 'limit') || 5);
+      sendJson(res, 200, { ok: true, limit, history: link.clipboard.history(limit), privacy: link.clipboard.settings() });
+    }),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v2/link/clipboard/history/:id',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      const auth = requireOperator(link, ctx, req);
+      const params = paramsOf(ctx, req);
+      const result = link.clipboard.deleteItem(params.id, auth.by || 'operator');
+      sendJson(res, 200, { ok: true, ...result });
+    }),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v2/link/clipboard/history',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      const auth = requireOperator(link, ctx, req);
+      const result = link.clipboard.clear(auth.by || 'operator');
+      sendJson(res, 200, { ok: true, ...result });
+    }),
+  },
+  {
+    method: 'GET',
+    path: '/api/v2/link/clipboard/settings',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      sendJson(res, 200, { ok: true, ...link.clipboard.settings() });
+    }),
+  },
+  {
+    method: 'POST',
+    path: '/api/v2/link/clipboard/settings',
+    handler: wrap(async (req, res, ctx) => {
+      const link = serviceOf(ctx);
+      const auth = requireOperator(link, ctx, req);
+      const body = await readJsonBody(req);
+      const s = link.clipboard.setEnabled(body.enabled !== false, auth.by || 'operator');
+      sendJson(res, 200, { ok: true, ...s });
     }),
   },
   // ---- 通知镜像 ----

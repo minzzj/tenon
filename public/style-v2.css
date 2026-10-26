@@ -561,3 +561,26 @@ main .nav,
 .m-ok { color: #66e3d2; } .m-warn { color: #ffb45c; } .m-bad { color: #ff6b6b; }
 .m-toast-root { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 99; display: flex; flex-direction: column; gap: 6px; align-items: center; width: calc(100% - 32px); max-width: 420px; pointer-events: none; }
 .m-toast-root .toast { pointer-events: auto; }
+/* ===== Round4 · 离线体验 / 错误码 / 设备槽位 ===== */
+body.tenon-offline .btn-primary, body.tenon-offline .btn-danger,
+body.tenon-offline [data-v2="pair"], body.tenon-offline [data-v2="device-bind"],
+body.tenon-offline [data-v2="device-unbind"], body.tenon-offline [data-v2="device-rename"],
+body.tenon-offline [data-v2="clipboard-send"], body.tenon-offline [data-v2="scene-run"],
+body.tenon-offline [data-v2="preset-run"], body.tenon-offline [data-super="preset-run"] {
+  opacity: .42; cursor: not-allowed; pointer-events: none;
+}
+#offline-banner[data-offline="1"] { background: linear-gradient(90deg, rgba(255,180,92,.2), rgba(13,26,40,.95)); border-bottom: 1px solid rgba(255,180,92,.5); }
+.tenon-error-card { border: 1px solid rgba(255,107,107,.45); border-radius: 14px; padding: 14px 16px; background: linear-gradient(160deg, rgba(40,18,20,.75), rgba(9,15,26,.95)); }
+.tenon-error-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tenon-error-head .tag { background: rgba(255,107,107,.16); color: #ff9d9d; }
+.tenon-error-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #dfe9f5; }
+.tenon-error-body b { color: #ffb45c; margin-right: 4px; }
+.tenon-error-next, .tenon-error-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.tenon-error-details { margin-top: 6px; }
+.tenon-error-details pre { white-space: pre-wrap; background: #070b14; border: 1px solid #1d2a3d; border-radius: 8px; padding: 10px; font-size: 11.5px; color: #8fa3bd; max-height: 220px; overflow: auto; }
+.v2-error-demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.v2-error-demo { min-width: 0; }
+.device-slot-progress { margin-top: 8px; }
+.slot-suggest-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed #1d2a3d; }
+.slot-suggest-row:last-child { border-bottom: 0; }
+.slot-suggest-row .btn { margin-left: auto; }

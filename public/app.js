@@ -31,7 +31,8 @@
     scenes: { title: '场景', sub: '打印素材 / 投屏照片 / 备份到 NAS；不可逆动作需确认' },
     enterprise: { title: '企业控制台', sub: '成员与角色、动作权限、审批、审计导出与保留期' },
     super: { title: '超级终端', sub: '一台小软件，调动家里所有设备与程序 · 说话或一倾，内容就滑到电脑上' },
-    handoff: { title: '流转接收', sub: '从手机流转过来的网页 / 照片 / 文字，滑入电脑，可打开或收藏' }
+    handoff: { title: '流转接收', sub: '从手机流转过来的网页 / 照片 / 文字，滑入电脑，可打开或收藏' },
+    errors: { title: '错误提示', sub: '12 个高频错误码统一成「现象 + 原因 + 下一步 + 复制诊断」；诊断含版本/端口/时间/最近 5 条事件' }
   };
   var STATUS = {
     draft: { label: '草案', cls: 'b-muted' },
@@ -295,6 +296,7 @@
       setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 280);
     }, ms || 3800);
   }
+  window.tenonToast = toast;
 
   /* ---------- 令牌 / 登录 ---------- */
   function showAuth(reason) {
@@ -412,6 +414,71 @@
     return '数据截至 ' + body + (S.stale ? '（缓存）' : '');
   }
   function setText(sel, text) { var el = $(sel); if (el) el.textContent = text; }
+  /* Round4 · 离线体验统一：所有 v2 页顶部「数据截至 HH:mm（缓存）」，写按钮置灰，恢复 10s 内消失 */
+  function tenonNavigatorOnline() { try { return navigator.onLine !== false; } catch (_) { return true; } }
+  function tenonIsOfflineNow() {
+    if (!tenonNavigatorOnline()) return true;
+    if (S.netFailAt && Date.now() - S.netFailAt < 60000) return true;
+    if (!S.sseOpen && S.lastOkAt && (Date.now() - S.lastOkAt) > 5000) return true;
+    return false;
+  }
+  var tenonPingBusy = false;
+  function tenonPing() {
+    if (tenonPingBusy || !tenonNavigatorOnline()) return;
+    if (document.hidden) return;
+    tenonPingBusy = true;
+    var ctrl = null;
+    var pingTimer = null;
+    function pingOk() {
+      tenonPingBusy = false;
+      if (pingTimer) clearTimeout(pingTimer);
+      var wasFail = !!S.netFailAt;
+      S.netFailAt = 0;
+      S.lastOkAt = Date.now();
+      if (wasFail) { updateChrome(); render(true); }
+    }
+    function pingFail() {
+      tenonPingBusy = false;
+      if (pingTimer) clearTimeout(pingTimer);
+      var firstFail = !S.netFailAt;
+      S.netFailAt = Date.now();
+      updateChrome();
+      if (firstFail) render(true);
+    }
+    try {
+      if (window.AbortController) { ctrl = new AbortController(); pingTimer = setTimeout(function () { pingFail(); }, 1800); }
+      fetch('/api/v2/health', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
+        if (res && res.ok) pingOk(); else pingFail();
+      }).catch(function () { pingFail(); });
+    } catch (_) { pingFail(); }
+  }
+  var OFFLINE_WRITE_SEL = [
+    '.btn-primary', '.btn-danger',
+    '[data-v2="pair"]', '[data-v2="device-bind"]', '[data-v2="device-unbind"]', '[data-v2="device-rename"]',
+    '[data-v2="device-mode"]', '[data-v2="settings-save"]', '[data-v2="clipboard-send"]', '[data-v2="transfer-send"]',
+    '[data-v2="scene-run"]', '[data-v2="preset-run"]', '[data-v2="pair-action-send-file"]', '[data-v2="repair-pair"]',
+    '[data-super="preset-run"]', '[data-mv2-write]'
+  ].join(',');
+  function tenonApplyOfflineUi() {
+    var off = tenonIsOfflineNow();
+    S.offline = off;
+    var body = document.body;
+    if (body) body.classList.toggle('tenon-offline', off);
+    var nodes = $$(OFFLINE_WRITE_SEL);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (off) {
+        if (el.tagName === 'BUTTON') { el.disabled = true; el.setAttribute('data-offline-disabled', '1'); }
+        else el.setAttribute('aria-disabled', 'true');
+        el.setAttribute('title', '离线：网络恢复后可用');
+      } else if (el.getAttribute('data-offline-disabled') === '1') {
+        if (el.tagName === 'BUTTON') el.disabled = false;
+        el.removeAttribute('data-offline-disabled');
+        el.setAttribute('title', '');
+      }
+    }
+    return off;
+  }
   function updateChrome() {
     var asof = $('#data-asof');
     if (asof) {
@@ -424,14 +491,19 @@
     var state = (S.stale && !S.serverOk) ? 'stale' : ((S.sseOpen || S.serverOk) ? 'ok' : 'connecting');
     if (conn) conn.setAttribute('data-state', state);
     if (connText) connText.textContent = state === 'ok' ? (S.sseOpen ? '实时连接' : '已连接') : state === 'stale' ? '离线 · 缓存' : '连接中';
+    var isOffline = (S.stale && !S.serverOk) || tenonIsOfflineNow();
     var banner = $('#offline-banner');
     if (banner) {
-      if (S.stale) {
+      if (isOffline) {
         banner.classList.remove('hidden');
-        setText('#offline-title', '离线只读');
-        setText('#offline-text', asOfLabel() + ' · 无法连接中枢，正在显示本机缓存；写操作已禁用。启动中枢后自动恢复。');
+        banner.setAttribute('data-offline', '1');
+        setText('#offline-title', '离线 · 缓存');
+        var asOf = asOfLabel();
+        if (asOf.indexOf('（缓存）') < 0) asOf = asOf.replace(/\s*$/, '') + '（缓存）';
+        setText('#offline-text', asOf + ' · 网络已断开，正在显示本机缓存；写操作恢复后可用（自动重试连接中）。');
       } else {
         banner.classList.add('hidden');
+        banner.removeAttribute('data-offline');
       }
     }
     var s = snap();
@@ -452,6 +524,7 @@
       authChip.setAttribute('data-auth', logged ? 'ok' : 'readonly');
       authChip.setAttribute('title', logged ? '已保存操作令牌：写操作会带 x-tenon-token' : '未登录：首屏只读；写操作会先引导输入令牌');
     }
+    tenonApplyOfflineUi();
     var meta = ROUTE_META[S.route] || ROUTE_META.overview;
     setText('#view-title', meta.title);
     setText('#view-sub', meta.sub);
@@ -615,14 +688,16 @@
   function connectSSE() {
     if (!('EventSource' in window)) { startPolling(); return; }
     try { es = new EventSource('/api/stream'); } catch (err) { startPolling(); return; }
-    es.onopen = function () { S.sseOpen = true; stopPolling(); updateChrome(); };
+    es.onopen = function () { S.sseOpen = true; S.serverOk = true; S.sseDownAt = 0; S.lastOkAt = Date.now(); stopPolling(); updateChrome(); };
     es.onmessage = function (ev) {
       S.sseOpen = true;
       S.serverOk = true;
       var obj = null;
       try { obj = ev && ev.data ? JSON.parse(ev.data) : null; } catch (_) {}
       var type = obj && obj.type ? String(obj.type) : '';
+      S.lastOkAt = Date.now();
       if (type === 'node.heartbeat') { applyHeartbeatEvent(obj); return; }
+      if (window.TenonErrors) { try { window.TenonErrors.recordEvent(type || 'event', (obj && obj.at) || null, ''); } catch (_) {} }
       if (type === 'ai.called') { refreshSoon(1200); return; }
       if (type.indexOf('task.') === 0) superOnTaskEvent(obj);
       if (v2IsRealtimeEvent(type)) { v2OnRealtimeEvent(obj); refreshSoon(SSE_DEBOUNCE); return; }
@@ -630,6 +705,7 @@
     };
     es.onerror = function () {
       S.sseOpen = false;
+      S.sseDownAt = Date.now();
       if (es) { try { es.close(); } catch (_) {} es = null; }
       startPolling();
       updateChrome();
@@ -730,7 +806,7 @@
   }
   function routeHtml() {
     switch (S.route) {
-      case 'devices': return renderDevices();
+      case 'devices': return v2WithErrors(renderDevices());
       case 'capabilities': return renderCapabilities();
       case 'tasks': return renderTasks();
       case 'messages': return renderMessages();
@@ -738,13 +814,14 @@
       case 'audit': return renderAudit();
       case 'drills': return renderDrills();
       case 'settings': return renderSettings();
-      case 'link': return v2RenderLink();
-      case 'assets': return v2RenderAssets();
+      case 'link': return v2WithErrors(v2RenderLink());
+      case 'assets': return v2WithErrors(v2RenderAssets());
       case 'basket': return v2RenderBasket();
-      case 'scenes': return v2RenderScenes();
+      case 'scenes': return v2WithErrors(v2RenderScenes());
       case 'enterprise': return v2RenderEnterprise();
-      case 'super': return superRenderSuper();
-      case 'handoff': return superRenderHandoff();
+      case 'super': return v2WithErrors(superRenderSuper());
+      case 'handoff': return v2WithErrors(superRenderHandoff());
+      case 'errors': return renderErrorsPage();
       default: return renderOverview();
     }
   }
@@ -964,6 +1041,9 @@
     var boundCount = (V2.data.deviceCounts && V2.data.deviceCounts.bound) || (V2.data.devices || []).filter(function (d) { return d.bound; }).length;
     var html = pageHead('我的设备', '把手机、电脑、第二台设备接进同一个超级终端：先「一键安装」把节点装到设备上，再回来点「一键绑定」。离线保留上次状态，断开前必出影响预览。',
       '<span class="tag">' + (nodes.length) + ' 台 L0 设备</span><span class="tag cyan">已绑定 ' + boundCount + '</span>' + (hidden ? '<span class="tag">隐身 ' + hidden + '</span>' : '') + (gone ? '<span class="tag red">已断开 ' + gone + '</span>' : ''));
+    /* Round4：设备槽位（个人 3 / 家庭 8）+ 槽位满替换建议 */
+    html += v2DeviceSlotsCard();
+    html += v2SlotFullCard();
     /* v2.2 Round1：绑定列表 + 一键安装区块（即使中枢离线也显示安装入口） */
     html += v2DevicesBindSection();
     html += v2RemoteEntrySection();
@@ -1663,10 +1743,13 @@
     loaded: {},
     loading: {},
     status: {},
+    lastError: null,
     data: {
       peers: [],
       devices: [],
       deviceCounts: null,
+      deviceSettings: null,
+      slotFull: null,
       install: null,
       preflight: null,
       pairSuccess: null,
@@ -1730,6 +1813,36 @@
     if (st.kind === 'offline') return '无法连接中枢（离线）';
     return st.msg || ('HTTP ' + st.http);
   }
+  /* Round4：统一错误码组件（现象/原因/下一步/复制诊断；至少 link/devices/super 页使用） */
+  function v2ErrorCodeOf(status, msg, network) {
+    if (window.TenonErrors && typeof window.TenonErrors.fromHttp === 'function') return window.TenonErrors.fromHttp(status, msg, network);
+    if (network) return 'TIMEOUT';
+    if (status === 401) return 'TOKEN_INVALID';
+    if (status === 403) return 'PERMISSION_DENIED';
+    if (status === 423) return 'READONLY';
+    return 'UNKNOWN';
+  }
+  function v2NoteError(path, status, msg, network) {
+    var code = v2ErrorCodeOf(status, msg, network);
+    V2.lastError = { code: code, detail: (network ? '网络不可达 ' : ('HTTP ' + status + ' ')) + (msg || '') + ' · ' + path, at: Date.now() };
+    if (window.TenonErrors) { try { window.TenonErrors.recordEvent('api.error', new Date().toISOString(), code + ' ' + path + ' ' + (msg || '')); } catch (_) {} }
+    return code;
+  }
+  function v2ErrorPanel() {
+    if (!window.TenonErrors || typeof window.TenonErrors.render !== 'function') return '';
+    var err = V2.lastError;
+    if (!err) {
+      if (!tenonIsOfflineNow()) return '';
+      err = { code: 'TIMEOUT', detail: '网络已断开：无法加载最新数据，正在显示本机缓存；恢复后写操作可用。' };
+    }
+    return '<div class="tenon-error-wrap" data-testid="tenon-error-panel" style="margin:0 0 14px">' + window.TenonErrors.render(err.code, { detail: err.detail }) + '</div>';
+  }
+  function v2WithErrors(html) {
+    var panel = v2ErrorPanel();
+    if (!panel) return html;
+    if (html && /^<section[^>]*super-hero/.test(html)) return html.replace(/^(<section[^>]*super-hero[^>]*>)/, function (m) { return m; }).replace('</section>', '</section>') + panel;
+    return panel + html;
+  }
   function v2Degrade(keys, what) {
     var missing = [];
     for (var i = 0; i < keys.length; i++) {
@@ -1764,10 +1877,12 @@
       if (res.data && typeof res.data === 'object') msg = res.data.error || res.data.message || '';
       else if (typeof res.data === 'string') msg = res.data.slice(0, 120);
       V2.status[key] = { ok: false, kind: kind, http: res.status, path: path, msg: msg, at: Date.now() };
+      if (kind !== 'missing') v2NoteError(path, res.status, msg, kind === 'offline');
       return null;
     }, function () {
       V2.loading[key] = false;
       V2.status[key] = { ok: false, kind: 'error', http: 0, path: path };
+      v2NoteError(path, 0, '网络异常', true);
       return null;
     });
   }
@@ -1789,15 +1904,19 @@
         return res;
       }).then(function (res) {
         if (!res) return null;
-        if (res.status === 401) { toast(label + '失败：令牌无效（HTTP 401）', 'bad'); return null; }
-        if (res.network) { toast(label + '失败：无法连接中枢', 'bad'); return null; }
+        if (res.status === 401) { v2NoteError(path, 401, '令牌无效', false); toast(label + '失败：令牌无效（HTTP 401）', 'bad'); render(true); return null; }
+        if (res.network) { v2NoteError(path, 0, '无法连接中枢', true); toast(label + '失败：无法连接中枢', 'bad'); render(true); return null; }
         if (!res.ok) {
           var msg = (res.data && (res.data.error || res.data.message)) || ('HTTP ' + res.status);
+          v2NoteError(path, res.status, msg, false);
           toast(label + '失败：' + msg, 'bad');
+          render(true);
           return null;
         }
         if (res.data && res.data.ok === false && !res.data.needsConfirm) {
+          v2NoteError(path, res.status || 0, res.data.error || '服务端拒绝', false);
           toast(label + '失败：' + (res.data.error || '服务端拒绝'), 'bad');
+          render(true);
           return null;
         }
         toast(label + '：已完成', 'ok');
@@ -1999,6 +2118,7 @@
       if (!data) return null;
       V2.data.devices = v2Arr(data, ['devices', 'items', 'list']);
       V2.data.deviceCounts = data.counts || null;
+      if (data.settings) V2.data.deviceSettings = data.settings;
       if (data.install) V2.data.install = data.install;
       return data;
     });
@@ -2200,6 +2320,42 @@
       '<div class="btn-row">' + bindBtn + actions.slice(0, 3).map(function (a) { return v2DeviceActionBtn(d, a); }).join('') + '</div>' +
       '</article>';
   }
+  /* Round4 · 设备槽位：个人 3 / 家庭 8 + 到上限时「最久未活跃的 3 台」替换建议 */
+  function v2SlotFullCard() {
+    var sf = V2.data.slotFull;
+    if (!sf) return '';
+    var suggestions = listOf(sf.suggestions);
+    return '<div class="alert alert-bad" data-testid="device-slot-full" style="margin:12px 0"><strong>绑定被拦：设备槽位已满（' + esc(sf.mode === 'family' ? '家庭版' : '个人版') + '上限 ' + esc(String(sf.limit)) + ' 台）</strong>' +
+      '<div class="tiny" style="margin-top:4px">要绑定的设备：<code>' + esc(sf.pendingDeviceId || '') + '</code> · ' + esc(sf.message || '') + '</div>' +
+      (suggestions.length ? '<div class="v2-list" style="margin-top:8px">' + suggestions.map(function (s) {
+        return '<div class="slot-suggest-row" data-testid="device-slot-full-suggestion" data-device-id="' + attr(s.id) + '">' +
+          '<span class="tag">' + esc(s.name) + '</span><span class="tiny dim">最后活跃：' + esc(s.lastActiveText || '暂无记录') + '</span>' +
+          '<button class="btn btn-sm" data-v2="device-replace" data-old-id="' + attr(s.id) + '" data-new-id="' + attr(sf.pendingDeviceId || '') + '" data-testid="btn-device-replace">替换这台</button></div>';
+      }).join('') + '</div>' : '') +
+      '<div class="tiny dim" style="margin-top:6px">操作会先解绑旧设备（写账本 device.unbound）再绑定新设备；也可以把模式切到家庭版（8 台）。</div></div>';
+  }
+  function v2DeviceSlotsCard() {
+    var st = V2.data.deviceSettings || null;
+    if (!st) return '';
+    var modeLabel = st.mode === 'family' ? '家庭版' : '个人版';
+    var pct = st.maxDevices ? Math.min(100, Math.round((st.used / st.maxDevices) * 100)) : 0;
+    var html = '<section class="v2-block device-slots" data-testid="device-slots">' +
+      '<div class="v2-block-head"><h3>🧩 设备槽位</h3><span class="hint">' + esc(modeLabel) + ' · 已用 ' + st.used + ' / ' + st.maxDevices + ' 台' + (st.atLimit ? ' · 已满' : ' · 还可绑定 ' + st.remaining + ' 台') + '</span></div>' +
+      '<div class="progress device-slot-progress" data-testid="device-slot-progress"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="row-wrap" style="margin-top:10px">' +
+      '<button class="btn btn-sm' + (st.mode === 'personal' ? ' btn-primary' : '') + '" data-v2="device-mode" data-mode="personal" data-testid="btn-device-mode-personal"' + (st.mode === 'personal' ? ' disabled' : '') + '>个人版 · 3 台</button>' +
+      '<button class="btn btn-sm' + (st.mode === 'family' ? ' btn-primary' : '') + '" data-v2="device-mode" data-mode="family" data-testid="btn-device-mode-family"' + (st.mode === 'family' ? ' disabled' : '') + '>家庭版 · 8 台</button>' +
+      '<span class="tiny dim">切换模式或上限会写账本 device.settings.changed；重名设备会自动加「（2）」后缀。</span></div>';
+    if (st.atLimit && listOf(st.suggestions).length) {
+      html += '<div class="alert alert-warn" data-testid="device-slot-suggestions" style="margin-top:12px"><strong>槽位已满：最久未活跃的 ' + listOf(st.suggestions).length + ' 台（可替换）</strong>' +
+        '<div class="v2-list" style="margin-top:8px">' + listOf(st.suggestions).map(function (s) {
+          return '<div class="slot-suggest-row" data-testid="device-slot-suggestion" data-device-id="' + attr(s.id) + '">' +
+            '<span class="tag">' + esc(s.name) + '</span><span class="tiny dim">最后活跃：' + esc(s.lastActiveText || '暂无记录') + (s.online ? ' · 在线' : ' · 离线') + '</span></div>';
+        }).join('') + '</div>' +
+        '<div class="tiny dim" style="margin-top:6px">下一步：在设备列表里解绑上面任一台，或点「替换」把最久未活跃的一台换下（会先解绑再绑定新设备，解绑前仍会出影响预览）。</div></div>';
+    }
+    return html + '</section>';
+  }
   function v2DevicesBindSection() {
     var list = V2.data.devices || [];
     var counts = V2.data.deviceCounts || null;
@@ -2291,11 +2447,25 @@
     if (!deviceId) return;
     v2ConfirmOpen('一键绑定设备', '绑定后可在这台设备上执行任务、传文件与场景动作；不会改动设备本身。',
       '<div class="tiny muted">设备：<code>' + esc(deviceId) + '</code></div>', function () {
-        return v2Post('/api/v2/devices/' + encodeURIComponent(deviceId) + '/bind', {}, '绑定设备').then(function (data) {
-          if (data) {
-            toast(data.already ? '该设备已绑定（幂等）' : '绑定成功：已加入我的设备', 'ok');
+        var tok = getToken();
+        return api('/api/v2/devices/' + encodeURIComponent(deviceId) + '/bind', { method: 'POST', body: {}, token: tok }).then(function (res) {
+          if (res && res.ok && res.data && res.data.ok !== false) {
+            V2.data.slotFull = null;
+            toast(res.data.already ? '该设备已绑定（幂等）' : '绑定成功：已加入我的设备', 'ok');
             v2LoadDevices().then(function () { render(true); });
+            return res.data;
           }
+          var d = (res && res.data) || {};
+          if (d.code === 'DEVICE_SLOT_FULL' || res.status === 409) {
+            V2.data.slotFull = { code: 'DEVICE_SLOT_FULL', limit: d.limit, used: d.used, mode: d.mode, suggestions: d.suggestions || [], message: d.error || '设备槽位已满', pendingDeviceId: deviceId };
+            toast('设备槽位已满：可解绑一台或使用替换建议', 'warn');
+            render(true);
+            return null;
+          }
+          v2NoteError('/api/v2/devices/' + deviceId + '/bind', res.status || 0, d.error || '绑定失败', !!(res && res.network));
+          toast('绑定失败：' + (d.error || '服务端拒绝'), 'bad');
+          render(true);
+          return null;
         });
       });
   }
@@ -3516,6 +3686,34 @@
       case 'revoke': v2DoRevoke(ds.peerId); break;
       case 'device-bind': v2DoBindDevice(ds.deviceId); break;
       case 'device-unbind': v2DoUnbindDevice(ds.deviceId); break;
+      case 'device-mode':
+        v2Patch('/api/v2/devices/settings', { mode: ds.mode }, ds.mode === 'family' ? '切换到家庭版（8 台）' : '切换到个人版（3 台）').then(function (data) {
+          if (data && data.settings) V2.data.deviceSettings = data.settings;
+          toast('已切换为' + (ds.mode === 'family' ? '家庭版（8 台）' : '个人版（3 台）'), 'ok');
+          v2LoadDevices().then(function () { render(true); });
+        });
+        break;
+      case 'device-replace':
+        (function (oldId, newId) {
+          if (!oldId || !newId) return;
+          v2FetchImpact(oldId).then(function (impact) {
+            v2ConfirmOpen('替换设备前确认', '会先解绑最久未活跃的设备，再绑定新设备；解绑影响如下（取消不会产生任何变化）。',
+              '<div class="impact-target">将解绑：<code>' + esc((impact && impact.target && impact.target.name) || oldId) + '</code> → 将绑定：<code>' + esc(newId) + '</code></div>' + v2ImpactSummaryHtml(impact),
+              function () {
+                return v2Post('/api/v2/devices/' + encodeURIComponent(oldId) + '/unbind', { reason: '槽位替换' }, '解绑旧设备').then(function (un) {
+                  if (!un) return null;
+                  return v2Post('/api/v2/devices/' + encodeURIComponent(newId) + '/bind', {}, '绑定新设备').then(function (bound) {
+                    if (bound) {
+                      V2.data.slotFull = null;
+                      toast('已替换：最久未活跃的设备已解绑，新设备绑定成功', 'ok');
+                      v2LoadDevices().then(function () { render(true); });
+                    }
+                  });
+                });
+              });
+          });
+        })(ds.oldId, ds.newId);
+        break;
       case 'device-action': v2DoDeviceAction(ds.deviceId, ds.act); break;
       case 'device-rename': v2DoRenameDevice(ds.deviceId, ds.name); break;
       case 'devices-refresh': v2ReloadDevices(); break;
@@ -4211,6 +4409,18 @@
       }
     }, 1000);
   }
+  /* Round4：12 个错误码演示页（#/errors），每张卡都有 现象/原因/下一步/复制诊断 */
+  function renderErrorsPage() {
+    var list = (window.TenonErrors && window.TenonErrors.ORDER) || [];
+    var html = pageHead('错误提示', '把「出事」变成可处理：12 个高频错误码统一成现象、原因、下一步（可点击）和复制诊断；诊断串包含版本、端口、时间与最近 5 条事件。',
+      '<span class="tag">' + list.length + ' 个错误码</span><span class="tag cyan">复制诊断可发给支持</span>');
+    html += '<div class="alert alert-info" data-testid="errors-intro"><strong>诊断信息不包含剪贴板/文件正文</strong>：只用版本、端口、时间、事件类型；敏感内容在剪贴板层已被过滤。</div>';
+    html += '<div class="v2-error-demo-grid">' + list.map(function (code) {
+      return '<div class="v2-error-demo" data-testid="error-demo-' + code + '" data-error-demo-code="' + code + '">' +
+        window.TenonErrors.render(code, { detail: '演示：' + code }) + '</div>';
+    }).join('') + '</div>';
+    return html;
+  }
   function superOnboardBlock() {
     var state = superOnboardState();
     if (state === 'done' || state === 'later') return '';
@@ -4388,6 +4598,14 @@
     window.addEventListener('hashchange', onRoute);
     setInterval(function () { if (!S.sseOpen) loadState(); }, 12000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) loadState(); });
+    window.addEventListener('online', function () { S.lastOkAt = Date.now(); S.serverOk = true; updateChrome(); render(true); refreshSoon(200); });
+    window.addEventListener('offline', function () { updateChrome(); render(true); });
+    setInterval(function () {
+      tenonPing();
+      var want = tenonIsOfflineNow();
+      var shown = !!S.offline;
+      if (want !== shown) updateChrome();
+    }, 2000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

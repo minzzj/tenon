@@ -28,6 +28,21 @@ All notable changes to Tenon (榫卯) are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-26
+
+### Added
+
+- **剪贴板隐私过滤（v2.4 Round 4）**：`server/lib/link/privacy.js` 识别密码/验证码/银行卡/身份证/长数字串/token/超长共 7 类敏感内容；命中后**不落盘、不同步**，账本只记录 `redacted:true + sensitiveType + length`（无原文）；`GET /api/v2/link/clipboard/history` 最近 5 条 + 单条删除/一键清空（写账本）；开关关闭后服务端拒绝 + node-agent 5s 轮询停采；node-agent 发送前/写入前双过滤。单测 10/10。
+- **12 个高频错误码文案库**：`public/errors.js`，每个错误码一张卡「现象 + 原因 + 下一步（可点击）+ 复制诊断」（诊断含版本/端口/中枢/时间/最近 5 条事件）；新增 `#/errors` 演示页；接入 link/devices/assets/scenes/super/handoff 页面与 /m/remote。
+- **离线体验统一**：桌面 v2 页离线顶部「数据截至 HH:mm（缓存）」+ 写操作置灰；恢复后 ≤10s 自动消失（online/offline + SSE 断连 + 健康轮询三路检测）；/m/remote 同步。
+- **设备槽位与重名**：`data/devices/settings.json` + `GET/PATCH/POST /api/v2/devices/settings`（个人 3 / 家庭 8）；到上限 bind 返回 409 `DEVICE_SLOT_FULL` + 「最久未活跃 3 台」替换建议；重名自动加「（2）」后缀；`#/devices` 槽位卡与替换建议 UI。单测 4/4。
+- **全面测试装置**（`test/verify/`）：用户旅程 E2E（7 条，12 PASS）、10 分钟 soak（294/294 请求、seq 断裂 0、RSS 无增长）、性能基线（/api/state p50 0.76ms/p95 1.24ms 等）、R4 隐私/错误码/离线/槽位验收（21/21）。
+
+### Changed
+
+- v2 模块测试 87/87、API 矩阵 229/229（v2 路由 87 条）、v1 E2E 9/9、super UI 14/14 全绿。
+
+
 ### Added
 
 - **手机遥控器/触控板（v2.2 Round 3）**：电脑端新增 `input.mouse`（SendInput；绝对/相对移动、点击、滚轮）、`input.key`（文字+白名单组合键）、`input.media`（媒体/音量）；服务端新增 `server/lib/remote/`（`POST /api/v2/remote/:deviceId/input`，未绑定 403/未知 404/未知 type 400，移动 50ms 节流）；手机新增 `/m/remote` 触控板/键盘/媒体键/常用程序；桌面 `#/devices` 增加「用手机控制这台电脑」入口。实测远程鼠标移动误差 0、音量 40→38→40、记事本键盘输入真实生效。
