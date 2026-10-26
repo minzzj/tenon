@@ -93,7 +93,7 @@ async function main() {
   record('C1', '连接层 info/peers/pair-qr', true, 'deviceId=' + info.data.deviceId + ' code=' + qr.data.code + ' qr=' + String(qr.data.qr).slice(0, 28) + '…');
 
   // C2 剪贴板
-  const clipText = 'v2 clipboard ' + Date.now();
+  const clipText = 'v2 clipboard 验收文本（非敏感）';
   const post = await api('/api/v2/link/clipboard', { method: 'POST', body: { kind: 'text', text: clipText, from: 'node-local' } });
   assert(post.status === 200 && post.data.ok, 'clipboard POST 失败：' + post.text.slice(0, 160));
   const latest = await api('/api/v2/link/clipboard/latest');
