@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.util.UUID
 
-/** 全局配置：中枢地址 / 访问令牌 / 设备身份 / 功能开关，全部落在 SharedPreferences。 */
+/** 全局配置：中枢地址 / 操作令牌 / 设备身份 / 语音与播报偏好。 */
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
@@ -18,14 +18,22 @@ class App : Application() {
         private fun sp(): SharedPreferences =
             instance.getSharedPreferences("tenon", Context.MODE_PRIVATE)
 
-        fun hub(): String = sp().getString("hub", "") ?: ""
+        /** 中枢地址：优先用户设置；首次为空时用 APK 内置默认值（本机体验）。 */
+        fun hub(): String {
+            val saved = sp().getString("hub", "") ?: ""
+            return if (saved.isBlank()) normalize(BuildConfig.DEFAULT_HUB) else saved
+        }
+
         fun setHub(v: String) = sp().edit().putString("hub", normalize(v)).apply()
 
-        fun token(): String = sp().getString("token", "") ?: ""
-        fun setToken(v: String) = sp().edit().putString("token", v.trim()).apply()
+        /** 操作令牌：优先用户设置；首次为空时用 APK 内置默认值。 */
+        fun token(): String {
+            val saved = sp().getString("token", "") ?: ""
+            return if (saved.isBlank()) BuildConfig.DEFAULT_TOKEN else saved
+        }
 
-        fun peerId(): String = sp().getString("peerId", "hub") ?: "hub"
-        fun setPeerId(v: String) = sp().edit().putString("peerId", v).apply()
+        fun setToken(v: String) = sp().edit().putString("token", v.trim()).apply()
+        fun hasCustomToken(): Boolean = !(sp().getString("token", "") ?: "").isBlank()
 
         fun deviceName(): String {
             val saved = sp().getString("deviceName", "") ?: ""
@@ -43,17 +51,87 @@ class App : Application() {
             return id
         }
 
+        // ---- 本机语音/播报偏好 ----
+        fun ttsLocalEnabled(): Boolean = sp().getBoolean("ttsLocal", true)
+        fun setTtsLocalEnabled(v: Boolean) = sp().edit().putBoolean("ttsLocal", v).apply()
+
+        fun wakeEnabledLocal(): Boolean = sp().getBoolean("wakeEnabledLocal", true)
+        fun setWakeEnabledLocal(v: Boolean) = sp().edit().putBoolean("wakeEnabledLocal", v).apply()
+
+        fun wakeWordsLocal(): String = sp().getString("wakeWordsLocal", "榫卯,小榫") ?: "榫卯,小榫"
+        fun setWakeWordsLocal(v: String) = sp().edit().putString("wakeWordsLocal", v).apply()
+
+        fun alwaysRecord(): Boolean = sp().getBoolean("alwaysRecord", false)
+        fun setAlwaysRecord(v: Boolean) = sp().edit().putBoolean("alwaysRecord", v).apply()
+
+        fun lastResultJson(): String = sp().getString("lastResult", "") ?: ""
+        fun setLastResultJson(v: String) = sp().edit().putString("lastResult", v).apply()
+
+        // ---- V0.5：语音来源 / 屏幕内容采集 ----
+        /** 语音来源：pc=送电脑识别（默认），local=手机离线（P1，暂未提供）。 */
+        fun speechSource(): String = sp().getString("speechSource", "pc") ?: "pc"
+        fun setSpeechSource(v: String) = sp().edit().putString("speechSource", v).apply()
+
+        fun screenEnabled(): Boolean = sp().getBoolean("screenEnabled", false)
+        fun setScreenEnabled(v: Boolean) = sp().edit().putBoolean("screenEnabled", v).apply()
+
+        /** 屏幕采集间隔（秒），默认 120，允许 30–600。 */
+        fun screenInterval(): Int = sp().getInt("screenInterval", 120).coerceIn(30, 600)
+        fun setScreenInterval(v: Int) = sp().edit().putInt("screenInterval", v.coerceIn(30, 600)).apply()
+
+        fun screenBlacklist(): String = sp().getString("screenBlacklist", "") ?: ""
+        fun setScreenBlacklist(v: String) = sp().edit().putString("screenBlacklist", v).apply()
+
+        private fun dayKey(): String =
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINA).format(java.util.Date())
+
+        fun bumpScreenUpload() {
+            val key = "screenCount_" + dayKey()
+            sp().edit().putInt(key, sp().getInt(key, 0) + 1).apply()
+        }
+
+        fun screenUploadsToday(): Int = sp().getInt("screenCount_" + dayKey(), 0)
+
+        fun setScreenLast(info: String) {
+            sp().edit().putString("screenLast", info).apply()
+        }
+
+        fun screenLast(): String = sp().getString("screenLast", "") ?: ""
+
+        fun setScreenLastError(info: String) {
+            sp().edit().putString("screenLastError", info).apply()
+        }
+
+        fun screenLastError(): String = sp().getString("screenLastError", "") ?: ""
+
+        // ---- 旧版功能开关（保留兼容） ----
+        fun peerId(): String = sp().getString("peerId", "hub") ?: "hub"
+        fun setPeerId(v: String) = sp().edit().putString("peerId", v).apply()
         fun clipboardEnabled(): Boolean = sp().getBoolean("clipboardEnabled", false)
         fun setClipboardEnabled(v: Boolean) = sp().edit().putBoolean("clipboardEnabled", v).apply()
-
         fun notificationsEnabled(): Boolean = sp().getBoolean("notificationsEnabled", true)
         fun setNotificationsEnabled(v: Boolean) = sp().edit().putBoolean("notificationsEnabled", v).apply()
-
-        /** 倾斜甩屏开关与灵敏度（v2.1 超级终端）。 */
         fun tiltEnabled(): Boolean = sp().getBoolean("tiltEnabled", true)
         fun setTiltEnabled(v: Boolean) = sp().edit().putBoolean("tiltEnabled", v).apply()
         fun tiltSensitivity(): Int = sp().getInt("tiltSensitivity", 25).coerceIn(15, 45)
         fun setTiltSensitivity(v: Int) = sp().edit().putInt("tiltSensitivity", v.coerceIn(15, 45)).apply()
+
+        /** 清空本机记录（不影响中枢数据/账本）。 */
+        fun clearLocalRecords() {
+            sp().edit()
+                .remove("lastResult")
+                .putString("wakeWordsLocal", "榫卯,小榫")
+                .putBoolean("ttsLocal", true)
+                .putBoolean("wakeEnabledLocal", true)
+                .putBoolean("alwaysRecord", false)
+                .apply()
+        }
+
+        fun resetAll() {
+            val keepDevice = deviceId()
+            sp().edit().clear().apply()
+            sp().edit().putString("deviceId", keepDevice).apply()
+        }
 
         /** 规范化中枢地址：补 http://、去尾部 /。 */
         fun normalize(raw: String): String {

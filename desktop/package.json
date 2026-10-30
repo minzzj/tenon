@@ -1,0 +1,75 @@
+{
+  "name": "tenon-super-terminal",
+  "version": "0.5.0",
+  "description": "榫卯超级终端 · 单程序桌面 App（语音/屏幕/每日总结/设备控制）",
+  "main": "main.js",
+  "author": "minzzj",
+  "license": "CC-BY-NC-SA-4.0",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0"
+  },
+  "build": {
+    "appId": "com.minzzj.tenon.superterminal",
+    "productName": "榫卯超级终端",
+    "copyright": "minzzj · CC BY-NC-SA 4.0",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "assets/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../server",
+        "to": "server"
+      },
+      {
+        "from": "../public",
+        "to": "public"
+      },
+      {
+        "from": "../scripts",
+        "to": "scripts"
+      },
+      {
+        "from": "../node-agent",
+        "to": "node-agent"
+      },
+      {
+        "from": "../package.json",
+        "to": "package.json"
+      },
+      {
+        "from": "../node_modules",
+        "to": "node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "artifactName": "TenonSuperTerminal-${version}-portable.${ext}"
+    },
+    "portable": {
+      "artifactName": "TenonSuperTerminal-${version}-portable.${ext}"
+    },
+    "compression": "normal"
+  }
+}

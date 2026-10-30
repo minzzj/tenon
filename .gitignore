@@ -31,3 +31,14 @@ data-super-e2e/
 
 # 提供给手机局域网下载的 APK（构建产物，不入库）
 public/download/
+
+# V4 本地模型/桌面打包/构建产物（不入库）
+models/
+desktop/node_modules/
+desktop/release/
+desktop/dist/
+scripts/screen/__pycache__/
+android/.gradle/
+android/app/build/
+*.pyc
+vendor/

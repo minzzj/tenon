@@ -32,6 +32,7 @@
     enterprise: { title: '企业控制台', sub: '成员与角色、动作权限、审批、审计导出与保留期' },
     super: { title: '超级终端', sub: '一台小软件，调动家里所有设备与程序 · 说话或一倾，内容就滑到电脑上' },
     handoff: { title: '流转接收', sub: '从手机流转过来的网页 / 照片 / 文字，滑入电脑，可打开或收藏' },
+    voice: { title: '语音管家', sub: '7×24 本地语音：唤醒词 → 本地小模型规划 → 执行 → 语音回复；实时字幕与转写全部留在本机' },
     errors: { title: '错误提示', sub: '12 个高频错误码统一成「现象 + 原因 + 下一步 + 复制诊断」；诊断含版本/端口/时间/最近 5 条事件' }
   };
   var STATUS = {
@@ -525,6 +526,7 @@
       authChip.setAttribute('title', logged ? '已保存操作令牌：写操作会带 x-tenon-token' : '未登录：首屏只读；写操作会先引导输入令牌');
     }
     tenonApplyOfflineUi();
+    voiceConsoleSyncRoute();
     var meta = ROUTE_META[S.route] || ROUTE_META.overview;
     setText('#view-title', meta.title);
     setText('#view-sub', meta.sub);
@@ -821,6 +823,7 @@
       case 'enterprise': return v2RenderEnterprise();
       case 'super': return v2WithErrors(superRenderSuper());
       case 'handoff': return v2WithErrors(superRenderHandoff());
+      case 'voice': return renderVoiceConsole();
       case 'errors': return renderErrorsPage();
       default: return renderOverview();
     }
@@ -3686,6 +3689,10 @@
       case 'revoke': v2DoRevoke(ds.peerId); break;
       case 'device-bind': v2DoBindDevice(ds.deviceId); break;
       case 'device-unbind': v2DoUnbindDevice(ds.deviceId); break;
+      case 'voice-toggle': if (window.TenonVoiceConsole) window.TenonVoiceConsole.toggle(); break;
+      case 'voice-command': if (window.TenonVoiceConsole) window.TenonVoiceConsole.runCommand(); break;
+      case 'voice-save-config': if (window.TenonVoiceConsole) window.TenonVoiceConsole.saveConfig(); break;
+      case 'voice-refresh': if (window.TenonVoiceConsole) { window.TenonVoiceConsole.state.loadedAt = 0; window.TenonVoiceConsole.load(true); } break;
       case 'device-mode':
         v2Patch('/api/v2/devices/settings', { mode: ds.mode }, ds.mode === 'family' ? '切换到家庭版（8 台）' : '切换到个人版（3 台）').then(function (data) {
           if (data && data.settings) V2.data.deviceSettings = data.settings;
@@ -4410,6 +4417,23 @@
     }, 1000);
   }
   /* Round4：12 个错误码演示页（#/errors），每张卡都有 现象/原因/下一步/复制诊断 */
+  /* ================= Round5 · V3 语音管家控制台（#/voice；实现见 public/v3-console.js） ================= */
+  function renderVoiceConsole() {
+    var inner = (window.TenonVoiceConsole && typeof window.TenonVoiceConsole.render === 'function')
+      ? window.TenonVoiceConsole.render()
+      : '<div class="alert alert-warn" data-testid="voice-console-missing">语音控制台脚本未加载（/v3-console.js）。请确认页面静态资源可访问。</div>';
+    setTimeout(function () {
+      var c = window.TenonVoiceConsole;
+      if (!c) return;
+      try { c.bind(); c.load(); c.connect(); } catch (err) { window.__tenonErrors.push('voice console: ' + String((err && err.message) || err)); }
+    }, 0);
+    return '<div data-testid="voice-console-wrap">' + inner + '</div>';
+  }
+  function voiceConsoleToggle() { if (window.TenonVoiceConsole) window.TenonVoiceConsole.toggle(); }
+  function voiceConsoleRunCommand() { if (window.TenonVoiceConsole) window.TenonVoiceConsole.runCommand(); }
+  function voiceConsoleSaveConfig() { if (window.TenonVoiceConsole) window.TenonVoiceConsole.saveConfig(); }
+  function voiceConsoleSyncRoute() { if (window.TenonVoiceConsole) window.TenonVoiceConsole.syncRoute(S.route); }
+
   function renderErrorsPage() {
     var list = (window.TenonErrors && window.TenonErrors.ORDER) || [];
     var html = pageHead('错误提示', '把「出事」变成可处理：12 个高频错误码统一成现象、原因、下一步（可点击）和复制诊断；诊断串包含版本、端口、时间与最近 5 条事件。',

@@ -112,7 +112,11 @@ function lanUrls(p) {
   return out;
 }
 
-const ai = new AI();
+// DeepSeek 配置：环境变量优先，其次 data/secrets.json（local，不提交）
+const deepseekKey = process.env.DEEPSEEK_API_KEY || secret.deepseekApiKey || '';
+const deepseekModel = process.env.DEEPSEEK_MODEL || secret.deepseekModel || 'deepseek-chat';
+const deepseekBase = process.env.DEEPSEEK_BASE_URL || secret.deepseekBaseUrl || 'https://api.deepseek.com';
+const ai = new AI({ apiKey: deepseekKey, model: deepseekModel, baseUrl: deepseekBase });
 const { httpServer, kick, v2 } = await createHttpServer({
   root, ledger, state: replay(ledger.events), ai, secret, mode, readOnly, version, dataDir,
   onShutdown: () => shutdown(),

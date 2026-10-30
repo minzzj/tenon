@@ -10,8 +10,34 @@
   <meta name="theme-color" content="#070B14">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="style-v2.css">
+  <link rel="stylesheet" href="style-v3.css">
 </head>
 <body class="m-body">
+  <div class="m-v3-hero" data-testid="m-voice-hero">
+    <div class="m-v3-row">
+      <button class="m-v3-orb" id="m-voice-orb" data-testid="m-voice-orb" title="唤醒语音管家">🎙️</button>
+      <div class="m-v3-main">
+        <div class="m-v3-title">榫卯 · 语音管家</div>
+        <div class="m-v3-sub" id="m-voice-status" data-testid="m-voice-status">正在连接…</div>
+        <div class="m-v3-summary" id="m-today-summary" data-testid="m-today-summary">今日语音：—</div>
+      </div>
+    </div>
+    <div class="m-v3-caption" id="m-voice-caption" data-testid="m-voice-caption">说「榫卯」唤醒，或点上方麦克风</div>
+    <div class="m-v3-quick">
+      <a href="/m-live.html" data-testid="m-quick-live">实时字幕 →</a>
+      <a href="/m/remote" data-testid="m-quick-remote">遥控电脑</a>
+      <a href="/m/assets" data-testid="m-quick-assets">素材库</a>
+      <a href="/#/voice" data-testid="m-quick-console">语音控制台</a>
+    </div>
+  </div>
+  <section class="m-card" data-testid="m-diary-card" style="margin:12px 16px 16px">
+    <h2>今日总结 / 日记 <span class="count" id="m-diary-provider" data-testid="m-diary-provider">—</span></h2>
+    <div class="tiny dim" id="m-diary-content" data-testid="m-diary-content" style="line-height:1.7;white-space:pre-wrap">正在读取今日总结…</div>
+    <div class="row-wrap" style="margin-top:8px">
+      <button class="btn btn-sm" id="m-diary-generate" data-testid="m-diary-generate">生成今日总结</button>
+      <a class="btn btn-sm" href="/m-live.html" data-testid="m-diary-live">实时字幕 →</a>
+    </div>
+  </section>
   <div class="m-shell">
     <header class="m-head">
       <div class="m-brand">
@@ -141,6 +167,8 @@
     </div>
   </div>
   <script src="m.js"></script>
+  <script src="m-v3.js"></script>
   <script src="m-r3.js"></script>
+  <script src="phone-voice.js"></script>
 </body>
 </html>

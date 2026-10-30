@@ -10,6 +10,8 @@ const MODULES = [
   { dir: 'super', name: 'super', factory: 'createSuperService' },
   { dir: 'devices', name: 'devices', factory: 'createDevicesService' },
   { dir: 'remote', name: 'remote', factory: 'createRemoteService' },
+  { dir: 'voice', name: 'voice', factory: 'createVoiceService' },
+  { dir: 'agent', name: 'agent', factory: 'createAgentService' },
 ];
 
 function json(res, code, obj) {

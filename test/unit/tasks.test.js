@@ -165,20 +165,30 @@ test('createDraft：仅手动能力 → 不派发，追加「仅手动」步骤'
 test('confirmTask：pending → 已确认 + 排队；并保留 nodeId', async () => {
   const { ledger, state, ai } = setup();
   const r = await createDraft({ ledger, ai, state, text: '打印三份合同' });
-  const t = confirmTask({ ledger, state, taskId: r.taskId, note: '确认执行不可逆动作' });
-  assert.equal(t.status, 'queued');
-  assert.ok(t.steps.some((s) => s.label === '已确认'));
-  assert.ok(t.steps.some((s) => s.label === '已排队'));
-  assert.equal(t.nodeId, 'node-local');
+  const res = confirmTask({ ledger, state, taskId: r.taskId, note: '确认执行不可逆动作' });
+  // V4：幂等友好语义（返回对象，不抛错；重复确认返回 already）
+  assert.equal(res.ok, true);
+  assert.equal(res.already, false);
+  const confirmed = ledger.events.find((e) => e.type === 'task.confirmed' && e.data && e.data.taskId === r.taskId);
+  const queued = ledger.events.find((e) => e.type === 'task.queued' && e.data && e.data.taskId === r.taskId);
+  assert.ok(confirmed, '应写 task.confirmed');
+  assert.ok(queued, '应写 task.queued');
+  assert.equal(queued.data.nodeId, 'node-local');
 });
 
-test('confirmTask：不存在的任务 / 状态不对 抛错', async () => {
+test('confirmTask：不存在/重复确认 → 幂等友好返回（不抛错）', async () => {
   const { ledger, state, ai } = setup();
-  assert.throws(() => confirmTask({ ledger, state, taskId: 'nope' }), /任务不存在/);
+  const notFound = confirmTask({ ledger, state, taskId: 'nope' });
+  assert.equal(notFound.ok, false);
+  assert.equal(notFound.notFound, true);
   const r = await createDraft({ ledger, ai, state, text: '打印三份合同' });
-  confirmTask({ ledger, state, taskId: r.taskId });
-  assert.equal(state.tasks[r.taskId].status, 'queued');
-  assert.throws(() => confirmTask({ ledger, state, taskId: r.taskId }), /不在待确认状态/);
+  const first = confirmTask({ ledger, state, taskId: r.taskId });
+  assert.equal(first.ok, true);
+  assert.equal(first.already, false);
+  const again = confirmTask({ ledger, state, taskId: r.taskId });
+  assert.equal(again.ok, true);
+  assert.equal(again.already, true);
+  assert.ok(again.message && again.message.length > 0);
 });
 
 test('rejectTask：拒绝留痕，原因默认为「未填写」', async () => {

@@ -2,6 +2,7 @@ package com.minzzj.tenon.net
 
 import com.minzzj.tenon.App
 import com.minzzj.tenon.LogBus
+import java.io.File
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -80,6 +81,52 @@ object TenonHttp {
             out.write(buf, 0, n)
         }
         return out.toByteArray().toString(Charsets.UTF_8)
+    }
+
+    /** multipart 上传单个文件（语音 WAV 转写用）。 */
+    fun postMultipart(
+        path: String,
+        file: File,
+        field: String = "file",
+        filename: String = file.name,
+        token: String = App.token(),
+        timeoutMs: Int = 30000
+    ): Resp {
+        val base = App.baseUrl()
+        if (base.isEmpty()) return Resp(0, "未配置中枢地址", null)
+        val boundary = "----TenonAndroid" + System.currentTimeMillis()
+        val head = ("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"" + field + "\"; filename=\"" + filename.replace("\"", "_") + "\"\r\n"
+                + "Content-Type: audio/wav\r\n\r\n").toByteArray(Charsets.UTF_8)
+        val tail = ("\r\n--" + boundary + "--\r\n").toByteArray(Charsets.UTF_8)
+        val total = head.size.toLong() + file.length() + tail.size.toLong()
+        val conn = open("POST", base + path, token, timeoutMs)
+        return try {
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary)
+            conn.setFixedLengthStreamingMode(total)
+            conn.outputStream.use { os ->
+                os.write(head)
+                file.inputStream().use { fis ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = fis.read(buf)
+                        if (n < 0) break
+                        os.write(buf, 0, n)
+                    }
+                }
+                os.write(tail)
+                os.flush()
+            }
+            val code = conn.responseCode
+            val stream: InputStream? = if (code in 200..299) conn.inputStream else conn.errorStream
+            Resp(code, stream?.use { readAll(it) } ?: "", null)
+        } catch (e: Exception) {
+            LogBus.log("上传失败：" + e.message)
+            Resp(-1, e.message ?: "网络错误", null)
+        } finally {
+            try { conn.disconnect() } catch (_: Exception) {}
+        }
     }
 
     fun errorOf(code: Int, body: String): IOException =

@@ -411,7 +411,10 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
       const b = await readBody(req);
       const st = replay(ledger.events);
       try {
-        if (action === 'confirm') confirmTask({ ledger, state: st, taskId: id, note: b.note });
+        if (action === 'confirm') {
+          const cr = confirmTask({ ledger, state: st, taskId: id, note: b.note });
+          return json(res, 200, { ok: true, ...(cr || {}) });
+        }
         else if (action === 'reject') rejectTask({ ledger, taskId: id, reason: b.reason });
         else if (action === 'cancel') cancelTask({ ledger, state: st, taskId: id });
         else if (action === 'retry') retryTask({ ledger, state: st, taskId: id });
@@ -502,11 +505,13 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
       const u = new URL(req.url, 'http://' + (req.headers.host || '127.0.0.1'));
       const pathname = decodeURIComponent(u.pathname);
       if (pathname.startsWith('/api/')) return await handleApi(req, res, u, pathname);
-      if (pathname === '/' || pathname === '/index.html') return serveFile(res, 'index.html');
+      if (pathname === '/' || pathname === '/home') return serveFile(res, 'super.html');
+      if (pathname === '/index.html' || pathname === '/legacy') return serveFile(res, 'index.html');
       if (pathname === '/m' || pathname === '/m/') return serveFile(res, 'm.html');
       if (pathname === '/m/link') return serveFile(res, 'm-link.html');
       if (pathname === '/m/assets') return serveFile(res, 'm-assets.html');
       if (pathname === '/m/remote') return serveFile(res, 'm-remote.html');
+      if (pathname === '/m/live') return serveFile(res, 'm-live.html');
       if (pathname === '/login') return serveFile(res, 'login.html');
       if (pathname.startsWith('/r/')) return receiptPage(req, res, pathname.slice(3));
       return serveFile(res, pathname.replace(/^\/+/, ''));

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#03060c">
+  <link rel="icon" href="data:,">
+  <meta name="description" content="榫卯 Tenon · 语音管家实时字幕（眼镜模式）">
+  <title>榫卯 · 语音管家</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style-v2.css">
+  <link rel="stylesheet" href="/style-v3.css">
+</head>
+<body class="v3-page" data-page="live" data-testid="m-live-page">
+  <div class="v3-shell">
+    <header class="v3-head">
+      <div>
+        <h1>榫卯 · 语音管家</h1>
+        <div class="v3-sub">7×24 本地语音 · 实时字幕 · 本地小模型规划，数据不出这台机器</div>
+      </div>
+      <div class="v3-status" data-testid="voice-status">
+        <span class="v3-chip" id="chip-state" data-testid="voice-chip-state">连接中…</span>
+        <span class="v3-chip" id="chip-asr" data-testid="voice-chip-asr">ASR —</span>
+        <span class="v3-chip" id="chip-llm" data-testid="voice-chip-llm">模型 —</span>
+        <span class="v3-chip" id="chip-tts" data-testid="voice-chip-tts">TTS —</span>
+        <span class="v3-chip" id="chip-ai" data-testid="voice-chip-ai">理解 —</span>
+        <span class="v3-chip" id="voice-privacy" data-testid="voice-privacy">隐私 —</span>
+      </div>
+    </header>
+
+    <div class="v3-orb-wrap">
+      <button class="v3-orb" id="voice-orb" data-testid="voice-orb" data-active="0" data-state="idle" title="点一下唤醒 / 开始">
+        <span class="v3-orb-icon">🎙️</span>
+        <span class="v3-orb-label" id="voice-orb-label">语音管家</span>
+      </button>
+      <div class="v3-state" id="voice-state-text" data-testid="voice-state">正在连接语音服务…</div>
+      <div class="v3-mic-level" id="voice-level-wrap"><i id="voice-level"></i></div>
+      <div class="v3-tools">
+        <button class="v3-btn v3-btn-primary" id="voice-mic-toggle" data-testid="voice-mic-toggle">开启语音</button>
+        <a class="v3-btn" href="/m" data-testid="voice-back-m">← 手机页</a>
+        <a class="v3-btn" href="/m/remote" data-testid="voice-to-remote">遥控电脑</a>
+        <a class="v3-btn" href="/" data-testid="voice-to-desktop">桌面控制台</a>
+      </div>
+      <div class="v3-error hidden" id="voice-error" data-testid="voice-error"></div>
+    </div>
+
+    <section class="v3-hud" data-testid="voice-hud">
+      <div class="v3-hud-head"><span class="dot"></span><span>实时字幕</span><span class="v3-chip" id="voice-wake" data-testid="voice-wake">等待唤醒「榫卯」</span></div>
+      <div class="v3-caption-stream" id="voice-caption-stream" data-testid="voice-caption-stream" aria-live="polite"></div>
+      <div class="v3-reply-card hidden" id="voice-reply" data-testid="voice-reply">
+        <div class="v3-reply-label">AI 回复</div>
+        <div class="v3-reply-text" id="voice-reply-text" data-testid="voice-reply-text"></div>
+        <div class="v3-steps" id="voice-reply-steps" data-testid="voice-reply-steps"></div>
+        <div class="v3-reply-meta" id="voice-reply-meta" data-testid="voice-reply-meta"></div>
+        <audio id="voice-reply-audio" data-testid="voice-reply-audio" controls class="hidden" style="width:100%;margin-top:8px"></audio>
+      </div>
+    </section>
+
+    <div class="v3-input-row">
+      <input id="voice-text-input" data-testid="voice-text-input" placeholder="也可以打字命令：打开记事本 / 把音量调到 40 / 回家模式" autocomplete="off">
+      <button class="v3-btn v3-btn-primary" id="voice-text-send" data-testid="voice-text-send">发送</button>
+    </div>
+    <div class="v3-hint" style="margin-top:6px;color:#5f7592;font-size:11px">语音服务未就绪时，文本命令仍可用（规则引擎兜底）。</div>
+
+    <div class="v3-grid">
+      <div class="v3-card">
+        <h3>最近转写 <span class="v3-chip" data-testid="voice-transcript-count" id="voice-transcript-count">0</span></h3>
+        <div class="v3-transcript-list" id="voice-transcript-list" data-testid="voice-transcript-list"></div>
+      </div>
+      <div class="v3-card">
+        <h3>唤醒词与建议</h3>
+        <div class="v3-hint" id="voice-wakewords" data-testid="voice-wakewords">榫卯 / 小榫 / 你好榫卯 / 榫卯在吗 / 小助手（含同音纠错，支持拼音唤醒）</div>
+        <div class="v3-actions-row" data-testid="voice-suggestions">
+          <button data-suggest="打开记事本">打开记事本</button>
+          <button data-suggest="把音量调到 40">音量 40</button>
+          <button data-suggest="回家模式">回家模式</button>
+          <button data-suggest="把欢迎页甩到电脑">甩屏</button>
+          <button data-suggest="今天做了什么">今日摘要</button>
+        </div>
+      </div>
+      <div class="v3-card">
+        <h3>最近事件</h3>
+        <div class="v3-events" id="voice-events" data-testid="voice-events"></div>
+      </div>
+    </div>
+
+    <div id="voice-token-card" class="v3-card hidden" data-testid="voice-token-card" style="margin-top:16px">
+      <h3>需要操作令牌</h3>
+      <div class="v3-hint">语音控制写操作需要一次操作令牌（电脑启动日志或 data/secrets.json 里的 operatorToken）。</div>
+      <div class="v3-input-row">
+        <input type="password" id="voice-token-input" data-testid="voice-token-input" placeholder="operatorToken" autocomplete="off">
+        <button class="v3-btn v3-btn-primary" id="voice-token-save" data-testid="voice-token-save">保存</button>
+      </div>
+    </div>
+  </div>
+  <div class="v3-toast-root" id="voice-toast-root" data-testid="voice-toast-root"></div>
+  <script src="/errors.js"></script>
+  <script src="/m-live.js"></script>
+  <script src="/phone-voice.js"></script>
+</body>
+</html>

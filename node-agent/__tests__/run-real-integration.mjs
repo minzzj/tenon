@@ -260,12 +260,12 @@ await (async () => {
     await waitFor(async () => {
       const state = await api('/api/state', { token: '' });
       const node = (state.nodes || []).find((item) => item.id === 'node-local' && item.name === '真实联调工作台');
-      return node && node.capabilities && node.capabilities.length === 13 ? node : null;
-    }, '真实注册 13 能力', 30000);
+      return node && node.capabilities && node.capabilities.length === 20 ? node : null;
+    }, '真实注册 20 能力', 30000);
     const state = await api('/api/state', { token: '' });
     const node = state.nodes.find((item) => item.id === 'node-local');
     evidence.sections.register = { nodeId: node.id, name: node.name, online: node.online, capabilities: node.capabilities.map((cap) => cap.id) };
-    check('real-register', '真实注册 13 项能力并通过 /api/state 可见', node.capabilities.length === 13, node.capabilities.map((cap) => cap.id).join(','));
+    check('real-register', '真实注册 13 项能力并通过 /api/state 可见', node.capabilities.length === 20, node.capabilities.map((cap) => cap.id).join(','));
     // 心跳：中枢把 node.heartbeat 落账本做了 60 秒节流（server/lib/http.js persistedBeat），
     // 在线状态走 liveSeen 8 秒窗口。注册后等 9.5 秒仍 online=true，即可证明 2 秒心跳持续生效。
     const onlineAfterWait = await waitFor(async () => {

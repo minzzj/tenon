@@ -193,6 +193,35 @@ Full list: [docs/假设与未覆盖清单.md](docs/假设与未覆盖清单.md).
 Tenon does **not** implement Matter/Thread pairing, is **not** a cloud automation SaaS, **not** a file-sync or chat product, and **not** a GUI click robot. It sits above those: a task-and-responsibility layer for the devices, software and models you already own.
 
 
+## V4 Super Terminal (v0.5.0, 2026-10-30)
+
+**One desktop program is enough.** "Tenon Super Terminal" is an Electron desktop app (tray-resident, shipped as a single-file portable build) with the local hub built in: say one sentence and it drives programs, shell commands and devices at home.
+
+- **Real-time local voice**: always-listening with the wake words 「榫卯 / 小榫」; local **FunASR** recognition (live run: ASR `provider=funasr`, `state=listening`). One sentence → a self-built OpenClaw-style executor (DeepSeek planning) runs programs / commands / device control and feeds results back for up to 3 rounds; irreversible actions require confirmation; every step goes to the audit ledger. Live run: after the wake word, "open Notepad + set volume" executed for real (`provider=deepseek×2`, 2.4 s).
+- **Screen-text understanding without an LLM**: local **Windows system-font OCR** (`Windows.Media.Ocr`, zh-Hans-CN — not an LLM, no network); self-test 3/3 ≥90%, ~250–800 ms per real screenshot; the PC checks every 60 s and captures only on change, with an app blacklist and pause support; text stays in the local `data/voice/screen/`.
+- **Built-in daily summary at 23:00**: merges the day's voice + screen text + tasks → DeepSeek → "what I did today / what to do tomorrow / diary", stored as Markdown in `data/voice/diary/YYYY-MM-DD.md`; can also be generated on demand; live run: `provider=deepseek`, 1,383 characters, all three sections present.
+- **Phone APK 0.5**: super-terminal home with 4 tabs; record on the phone and let the PC recognise and execute; MediaProjection screen capture posts to the same endpoint; one-tap device bind / unbind. APK at `public/download/tenon-android-0.5.0-debug.apk` (1,230,154 B; versionName 0.5.0 / versionCode 5; **no real-device test yet** — build + lint + static checks only).
+- **Two-line duplicate captions fixed**: on mobile `/m/live`, 6 rows with the same sentence twice → now exactly one final caption with 0 JS errors; the desktop home's single-line caption (`#sub-final`) is unique (injecting two lines shows only the latest).
+- **Privacy boundary**: audio, screen text and diaries stay on this machine; only the post-wake command text and the daily summary are sent to DeepSeek (local fallback when no key or offline).
+
+### How to start
+
+1. **Double-click the single-file portable build** `desktop/release/TenonSuperTerminal-0.5.0-portable.exe` (~120 MB; Lead verified it launches);
+2. Double-click the desktop shortcut "榫卯超级终端";
+3. `启动超级终端.cmd` in the repo root (runs from the repo; needs Node.js >= 22 on the machine);
+4. Development mode: `cd desktop && npm start`.
+
+The old full console is still available at `http://127.0.0.1:7410/legacy`. The first launch starts the local hub (`127.0.0.1:7410`) and screen capture automatically; closing the window hides it to the tray, where you can pause listening / pause capture / generate today's summary / enable launch-at-login / quit. The local voice-recognition and screen-OCR workers rely on a local Python 3 environment.
+
+### Phone
+
+- APK: `public/download/tenon-android-0.5.0-debug.apk`; on the same Wi-Fi the PC is auto-discovered — one tap on "use this device" binds it; the token is `operatorToken` in `data/secrets.json`.
+- Full steps and FAQ: [V4 manual](docs/使用手册-V4.md).
+
+> Regression: `npm test` **146/146** pass (run on 2026-10-30); the V4 independent acceptance (Checker API/UI final pass) will be filled into the [delivery list](docs/交付物清单.md) §11 once complete.
+
+- **Optional agent: local OpenClaw Gateway** — switch between the built-in executor and OpenClaw in Settings; OpenClaw runs open-ended tasks through its local Gateway (port 18789) and returns the result (live: 7.1 s reply "榫卯在线"); falls back to the built-in executor when unavailable (`POST /api/v2/agent/openclaw`).
+
 ## Demo video (v2.1, 60 s)
 
 [![Tenon v2.1 promo poster](docs/images/v2-promo-poster.jpg)](https://github.com/minzzj/tenon/releases/tag/v0.3.0)

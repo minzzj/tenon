@@ -2,6 +2,51 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-10-30
+
+V4：从「网页 + 多个辅助程序」收敛为**一个桌面程序「榫卯超级终端」**——托盘常驻、说话即可调动电脑程序与家里设备，屏幕文字本地识别，每天 23:00 自动写总结；手机 APK 0.5 同步简化绑定、录音送电脑识别、屏幕采集上报。
+
+### Added
+
+- **单程序桌面端（`desktop/`，Electron）**：托盘常驻的「榫卯超级终端」，窗口加载 `public/super.html`（四页签：首页/设备/今日/设置，单行字幕）；双击桌面快捷方式、单文件便携版或 `启动超级终端.cmd` 启动；自动拉起本地中枢（`127.0.0.1:7410`）与屏幕采集循环；托盘菜单支持暂停/开启语音监听、暂停/开启屏幕采集、现在生成今日总结、开机自启、打开数据目录、退出；关闭窗口收到托盘，单实例运行。
+- **实时本地语音 + 执行**：常开聆听、唤醒词「榫卯 / 小榫」；本地 FunASR 识别（live 实测 `provider=funasr`、`state=listening`）+ Windows 中文 TTS 回复；语音链路走 `server/lib/voice/`（`/api/v2/voice/*`：status/config/start/stop/command/transcribe/stream/transcripts/speak/screen/diary）。
+- **自研执行器（OpenClaw 式，`server/lib/agent/`）**：`POST /api/v2/agent/execute` 把一句话变成计划并执行，支持程序、命令、窗口、屏幕、音量、打印、场景、设备控制；DeepSeek 规划（最多 3 轮、结果回传继续判断），本地模型/规则兜底；动作白名单、不可逆动作需确认、全程审计；`/agent/status`、`/agent/actions`、`/agent/audit`、`/agent/confirm`。
+- **屏幕文字理解（本地系统字库 OCR）**：`scripts/screen/win_ocr.py` 使用 Windows.Media.Ocr（zh-Hans-CN 离线系统字库，非大模型），词级字体相似度 + 阈值；自测 3/3 ≥90%、5 张真实截图平均准确率 98.2%、单张约 250–800ms（手机图片 OCR 187ms）；`capture_loop.py` 默认 60 秒、变化才抓，支持黑名单与暂停文件；文字写入 `data/voice/screen/YYYY-MM-DD.jsonl` 与账本 `voice.screen`，不上传。
+- **每日总结（23:00 内置）**：`server/lib/voice/diary.js` 汇总当天语音转写 + 屏幕文字 + 任务 → DeepSeek → 报告与日记（今天做了什么 / 明天要做什么 / 日记），Markdown 存 `data/voice/diary/YYYY-MM-DD.md`；live 实测 `provider=deepseek`、1383 字、三部分齐全；错过会在下次启动补跑，托盘可手动生成；`GET /api/v2/voice/diary`、`/diary/list`。
+- **单文件便携版**：`desktop/release/TenonSuperTerminal-0.5.0-portable.exe`（125,872,497 B ≈ 120 MB；打包内嵌本地服务与界面，双击即启动，经 Lead 实测可启动）；旧版完整控制台保留在 `http://127.0.0.1:7410/legacy`。
+- **手机 APK 0.5.0**（`public/download/tenon-android-0.5.0-debug.apk`）：1,230,154 B（1.17 MB），SHA-256 `F105D4EAD611924C694FC7285B348B9EE5EF384BEA55A98BEB1F6257D682E829`，versionCode 5 / versionName 0.5.0；主页极简 4 页签、录音送电脑识别并执行（含待确认确认闭环）、屏幕采集上报（MediaProjection 前台服务）、设备一键绑定/一键动作；构建 + lint + 静态校验通过，**真机未实测**（无 adb 设备）。
+- **一键绑定**：同一 WiFi 自动发现，「使用这台」一键绑定 /「移除」一键解绑；扫码与 6 位配对码收进「高级」折叠，不再占主流程。
+- **node-agent 新能力**：`system.exec`、`window.list`、`window.focus`、`screen.capture`（供执行器与屏幕 OCR 使用）。
+
+### Changed
+
+- 界面收敛为 4 页签：首页 / 设备 / 今日 / 设置；首页单行实时字幕 + 结果卡；旧页面入口保留为二级页。
+- 语音、屏幕采集、执行器、每日总结默认开启（normal mode，mock 关闭）。
+
+### Fixed
+
+- **手机与 `/m/live` 的两行重复识别**：修复前 6 行、同句重复 2 次；修复后固定 1 条最终字幕 + 1 条临时槽位、0 重复、0 JS 错误，SSE 重连不重复追加；桌面首页 `#sub-final` 单行唯一。
+- **简化绑定**：去掉以扫码配对为主流程的步骤，改为同 WiFi 自动发现 + 一键绑定。
+- **手机录音可用**：录音→上传→电脑识别→执行→回复闭环打通，失败时错误可读。
+- **屏幕 OCR 落地**：不再依赖大模型/联网，本地系统字库识别并可暂停。
+- **`/api/v2/agent/execute`**：一句话多动作执行、shell 命令执行与审计、待确认流程可用。
+- **正常模式**：mock 关闭、语音与每日总结默认开启；无 DeepSeek key 时每日总结本地降级且进程不崩。
+- **APK 0.5**：修复旧版语音链路与主页入口问题，重新构建并发布到 `public/download/`。
+
+### Verified (2026-10-30)
+
+- **桌面单程序**：Electron 窗口加载 `public/super.html`（四页签：首页 / 设备 / 今日 / 设置；单行字幕 `#sub-final` 唯一）；进程存活、托盘常驻、桌面快捷方式「榫卯超级终端」存在、自动启动中枢（7410）与屏幕采集；页面 0 JS 错误；**单文件便携版** `desktop/release/TenonSuperTerminal-0.5.0-portable.exe`（125,872,497 B ≈ 120 MB）实测可启动；旧完整控制台保留在 `/legacy`。
+- **本地语音**：live 实测 ASR `provider=funasr`、`state=listening`，唤醒词「榫卯 / 小榫」生效；唤醒后执行「打开记事本 + 调音量」多动作真实成功（`provider=deepseek×2`，2.4s）。
+- **执行器**：`/api/v2/agent/execute` 16 动作白名单（含 `shell.exec` / `window.*` / `screen.capture` / `input.*`）；真实执行 notepad 成功、音量 0→60 成功；`shell.exec "echo hi"` 44ms、退出码 0；`window.list` 枚举 21 个窗口；`screen.capture` 2560×1440 PNG（341 KB）；不可逆动作需确认且幂等（重复确认 `already=true`）；`agent.executed` / `agent.shell` 审计可查；node-agent 在线能力 20 项（含 V4 4 项）。
+- **屏幕字库 OCR**：`win_ocr.py --selftest` 3/3 ≥90%；5 张真实截图字符平均准确率 **98.2%**（目标 ≥95%）；真实截图单张约 250–800ms（live 页面 OCR 166ms、手机图片 OCR 187ms）；`engine=windows-ocr`，无网络/云模型调用。
+- **屏幕采集链路**：`capture_loop.py --once` → `POST /api/v2/voice/screen` 200 → `GET` 可查、`data/voice/screen/YYYY-MM-DD.jsonl` 落盘、账本 `voice.screen` 有记录；黑名单 / 暂停文件生效，数据只存本地。
+- **每日总结**：23:00 内置调度 + 手动「现在总结」；live 实测 `provider=deepseek`、**1383 字**、三部分（今天做了什么 / 明天要做什么 / 日记）齐全，Markdown 落盘 `data/voice/diary/YYYY-MM-DD.md`。
+- **两行重复修复**：手机 `/m/live` 修复前 **6 行、同句重复 2 次** → 修复后固定 1 条最终字幕 + 1 条临时槽位、0 重复、0 JS 错误；桌面首页 `#sub-final` 单行唯一（注入两条只显示最新）。
+- **手机 APK 0.5**：构建成功；1,230,154 B（1.17 MB）；SHA-256 `F105D4EAD611924C694FC7285B348B9EE5EF384BEA55A98BEB1F6257D682E829`；versionCode 5 / versionName 0.5.0；权限含 RECORD_AUDIO / FOREGROUND_SERVICE_MEDIA_PROJECTION 等；lint 0 errors / 78 warnings；**未真机实测**（无 adb 设备）。
+- **回归**：`npm test` **146/146 PASS**（0.87s，2026-10-30 实跑）；V4 独立验收（Checker API/UI 终验）进行中，PASS 后补记。
+
+- **可选执行智能体：本机 OpenClaw（小龙虾）Gateway**：设置页可切换；`POST /api/v2/agent/openclaw`，实测 7.1s 返回「榫卯在线」，失败回退自研执行器。
+
 ## [0.2.0] - 2026-10-25
 
 ### Added

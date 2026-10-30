@@ -12,6 +12,8 @@
     <!-- 剪贴板/通知同步前台服务 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 屏幕内容采集（MediaProjection 前台服务，Android 14 必须声明类型） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -61,6 +63,23 @@
             android:exported="false"
             android:label="@string/title_assets" />
 
+        <!-- 通用二级页：设备绑定 / 手机遥控 / 素材库（WebView，内嵌 hub 页面） -->
+        <activity
+            android:name=".WebPageActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <!-- V4 单程序四页签：设备 / 今日（首页与设置复用 MainActivity/SettingsActivity） -->
+        <activity
+            android:name=".DevicesActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <activity
+            android:name=".TodayActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
         <!-- 分享目标：从相册/文件管理器直接分享到榫卯 -->
         <activity
             android:name=".ShareActivity"
@@ -84,6 +103,12 @@
             android:name=".service.ClipboardSyncService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- 屏幕内容采集（每 interval 截屏 JPEG → POST /api/v2/voice/screen） -->
+        <service
+            android:name=".service.ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <service
             android:name=".service.TenonNotificationListener"

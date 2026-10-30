@@ -1,6 +1,6 @@
 {
   "name": "tenon",
-  "version": "0.3.1",
+  "version": "0.5.0",
   "description": "Tenon (榫卯) — a consumer super terminal: one small app to drive every device and program at home, by voice/AI, with device binding, one-click install, phone remote and phone-to-desktop handoff",
   "type": "module",
   "private": true,

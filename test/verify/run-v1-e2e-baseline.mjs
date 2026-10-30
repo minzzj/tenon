@@ -334,7 +334,7 @@ async function main() {
     }, 20000, 250, '回执产生');
     record('A2', '手机一句话→五段草案→节点真实执行→回执', true, `task=${done.id} status=${done.status} channel=${delivered.delivery.channel}`, shotDraft);
 
-    await desktop.navigate(BASE + '/#/tasks/' + done.id);
+    await desktop.navigate(BASE + '/legacy#/tasks/' + done.id);
     const detail = await waitFor(async () => {
       const t = await desktop.text();
       return t.includes('时间线') && t.includes('9 张成功，1 张失败') ? t : null;
@@ -360,7 +360,7 @@ async function main() {
     assert(pending.risk && pending.risk.level === 'irreversible', '风险等级不是不可逆');
     assert(!pending.delivery, '未确认就产生了回执');
     const shotPending = await mobile.shot('A3-phone-irreversible-pending.png');
-    await desktop.navigate(BASE + '/#/tasks/' + pending.id);
+    await desktop.navigate(BASE + '/legacy#/tasks/' + pending.id);
     await waitFor(async () => (await desktop.text()).includes('拒绝'), 12000, 250, '任务详情渲染');
     await desktop.click('[data-testid="btn-reject"]');
     const rejected = await waitFor(async () => {
@@ -375,7 +375,7 @@ async function main() {
 
   // A6 + A5：影响预览三级、取消零变化、断开后 3 条任务降级（<10s）
   {
-    await desktop.navigate(BASE + '/#/devices');
+    await desktop.navigate(BASE + '/legacy#/devices');
     await waitFor(async () => (await desktop.text()).includes('打印服务器'), 12000, 250, '设备页渲染');
     const shotSig = async () => (await state()).nodes.map((n) => [n.id, n.disconnected, n.online].join(':')).join('|');
     const sigBefore = await shotSig();
@@ -412,7 +412,7 @@ async function main() {
 
   // A4：消息收件箱只有摘要+链接；回执正文需登录
   {
-    await desktop.navigate(BASE + '/#/messages');
+    await desktop.navigate(BASE + '/legacy#/messages');
     const msgText = await waitFor(async () => {
       const t = await desktop.text();
       return t.includes('查看回执') ? t : null;
@@ -423,14 +423,15 @@ async function main() {
     const receiptTask = st.tasks.filter((t) => t.delivery && t.delivery.link).slice(-1)[0];
     assert(receiptTask, '没有可打开的回执任务');
     const guest = await newPage({ width: 1280, height: 800 });
-    await guest.navigate(BASE + receiptTask.delivery.link);
+    const legacyPath = (u) => (String(u).startsWith('/#/') ? '/legacy' + String(u) : String(u));
+    await guest.navigate(BASE + legacyPath(receiptTask.delivery.link));
     const gate = await guest.text();
     assert(gate.includes('需要登录查看正文'), '未登录回执没有登录门禁');
     const shotGate = await guest.shot('A4-receipt-gate.png');
     // 回执正文由服务端按 cookie 鉴权：通过真实浏览器 fetch 登录一次（与用户点登录等效）
     await desktop.eval('fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: ' + JSON.stringify(token) + ' }) }).then(function (r) { return r.ok; })');
     await sleep(300);
-    await desktop.navigate(BASE + receiptTask.delivery.link);
+    await desktop.navigate(BASE + legacyPath(receiptTask.delivery.link));
     const body = await waitFor(async () => {
       const t = await desktop.text();
       return t.includes('时间线') ? t : null;
@@ -442,7 +443,7 @@ async function main() {
 
   // A7：断网演练（外联关闭、本地功能不减）与恢复
   {
-    await desktop.navigate(BASE + '/#/drills');
+    await desktop.navigate(BASE + '/legacy#/drills');
     await waitFor(async () => (await desktop.text()).includes('断网'), 12000, 250, '演练页');
     await desktop.click('[data-testid="drill-offline"]');
     const degraded = await waitFor(async () => {

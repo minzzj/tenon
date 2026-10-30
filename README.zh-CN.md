@@ -192,6 +192,35 @@ docs/         使用手册、测试方法、测试证据、产品截图、样例
 榫卯**不**实现 Matter/Thread 配网，**不**做云端自动化 SaaS，**不**做网盘或聊天，**不**做 GUI 点击机器人。它站在这些东西之上：给你已有的设备、软件和模型加一层「任务与责任」。
 
 
+## V4 超级终端（v0.5.0，2026-10-30）
+
+**一个桌面程序就够了。** 「榫卯超级终端」是一个 Electron 桌面应用（托盘常驻，有单文件便携版），本地服务内嵌其中：说一句话，就能调动电脑上的程序、命令与家里的设备。
+
+- **实时本地语音**：常开聆听，唤醒词「榫卯 / 小榫」；本地 **FunASR** 识别（live 实测 ASR `provider=funasr`、`state=listening`）。说完一句 → 自研 OpenClaw 式执行器（DeepSeek 规划）执行程序 / 命令 / 设备控制，结果回传继续判断（最多 3 轮），不可逆动作必须确认，每一步写入审计账本。live 实测：唤醒后「打开记事本 + 调音量」多动作真实执行成功（`provider=deepseek×2`，2.4s）。
+- **屏幕文字理解（非大模型）**：本地 **Windows 系统字库 OCR**（`Windows.Media.Ocr`，zh-Hans-CN，非大模型、不联网）；自测 3/3 ≥90%，真实截图单张约 250–800ms；电脑每 60 秒检查一次、变化才抓，支持黑名单与暂停；文字只存本机 `data/voice/screen/`。
+- **每天 23:00 内置总结**：汇总当天语音 + 屏幕文字 + 任务 → DeepSeek → 「今天做了什么 / 明天要做什么 / 日记」，Markdown 存 `data/voice/diary/YYYY-MM-DD.md`；可手动「现在总结」；live 实测 `provider=deepseek`、1383 字、三部分齐全。
+- **手机 APK 0.5**：主页超级终端 + 4 页签；录音送电脑识别并执行；屏幕采集（MediaProjection）上报同一接口；设备一键绑定 / 移除。APK 位于 `public/download/tenon-android-0.5.0-debug.apk`（1,230,154 B；versionName 0.5.0 / versionCode 5；**未真机实测**，以构建 + lint + 静态校验为准）。
+- **两行重复识别已修复**：手机 `/m/live` 修复前 6 行、同句重复 2 次 → 修复后仅 1 条最终字幕、0 JS 错误；桌面首页单行字幕 `#sub-final` 唯一（注入两条也只显示最新）。
+- **隐私边界**：音频、屏幕文字、日记只存本机；只有唤醒后的命令文本与每日总结会发 DeepSeek（不配置 key 或断网时本地降级）。
+
+### 启动方式
+
+1. **双击单文件便携版** `desktop/release/TenonSuperTerminal-0.5.0-portable.exe`（约 120 MB；Lead 实测可启动）；
+2. 双击桌面「榫卯超级终端」快捷方式；
+3. 仓库根 `启动超级终端.cmd`（仓库内运行，需本机 Node.js >= 22）；
+4. 开发模式：`cd desktop && npm start`。
+
+旧版完整控制台保留在 `http://127.0.0.1:7410/legacy`。首次启动会自动拉起本地中枢（`127.0.0.1:7410`）与屏幕采集；关闭窗口收到托盘，托盘可暂停监听 / 暂停采集 / 现在生成今日总结 / 开机自启 / 退出。本地语音识别与屏幕 OCR 的 worker 依赖本机 Python 3 环境。
+
+### 手机端
+
+- APK：`public/download/tenon-android-0.5.0-debug.apk`；安装后与电脑同一 WiFi 自动发现，点「使用这台」一键绑定；令牌在 `data/secrets.json` 的 `operatorToken`。
+- 完整操作步骤与常见问题见 [使用手册 V4](docs/使用手册-V4.md)。
+
+> 回归：`npm test` **146/146** 通过（2026-10-30 实跑）；V4 独立验收（Checker API/UI 终验）完成后在[交付物清单](docs/交付物清单.md) §11 回填 PASS 与证据。
+
+- **可选执行智能体：本机 OpenClaw（小龙虾）Gateway** — 设置页可在「自研执行器 / OpenClaw」之间切换；OpenClaw 通过本机 Gateway（端口 18789）执行开放式任务并回传结果（实测 7.1s 返回「榫卯在线」）；不可用时自动回退自研执行器（`POST /api/v2/agent/openclaw`）。
+
 ## 宣传片（v2.1，60 秒）
 
 [![榫卯 v2.1 宣传片海报](docs/images/v2-promo-poster.jpg)](https://github.com/minzzj/tenon/releases/tag/v0.3.0)

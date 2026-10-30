@@ -17,6 +17,7 @@ import { capabilities, manifest } from './capabilities.js';
 import { actionCapabilities, actionsManifest } from './actions.js';
 import { appCapabilities, appsManifest } from './apps.js';
 import { inputCapabilities, inputManifest } from './input.js';
+import { v4Capabilities, v4Manifest } from './v4.js';
 import { loadSecrets, HubClient, subscribeEvents } from './hub.js';
 import { createClipboardSync } from './clipboard.js';
 import { createNotifier } from './notifier.js';
@@ -109,6 +110,39 @@ export function readNodeState() {
   return { done: {}, updatedAt: null };
 }
 
+// 能力结果 → 任务结果：summary/items/partial 之外，透传执行器需要的结构化字段（stdout/exitCode/path/windows…）
+// 注意：超过 300KB 时收缩（去掉内联 base64 / 大 data），避免账本事件过大。
+const RESULT_PASSTHROUGH_KEYS = [
+  'data', 'ok', 'exitCode', 'stdout', 'stderr', 'durationMs', 'timeout', 'truncated',
+  'windows', 'count', 'foreground', 'focused', 'path', 'width', 'height', 'bytes', 'mime',
+  'encoded', 'rejected', 'command', 'cwd', 'originalLength', 'screen',
+];
+
+function buildTaskResult(result) {
+  const base = { summary: result.summary, items: Array.isArray(result.items) ? result.items : [], partial: !!result.partial };
+  const merged = { ...base };
+  for (const key of RESULT_PASSTHROUGH_KEYS) {
+    if (result[key] !== undefined) merged[key] = result[key];
+  }
+  try {
+    if (JSON.stringify(merged).length > 300000) {
+      if (merged.data && typeof merged.data === 'object') {
+        const slim = { ...merged.data };
+        delete slim.base64;
+        merged.data = slim;
+      }
+      if (Array.isArray(merged.windows) && merged.windows.length > 50) merged.windows = merged.windows.slice(0, 50);
+      if (JSON.stringify(merged).length > 300000) {
+        const fallback = { ...base, exitCode: merged.exitCode, durationMs: merged.durationMs, path: merged.path, width: merged.width, height: merged.height, bytes: merged.bytes, count: merged.count };
+        return fallback;
+      }
+    }
+  } catch {
+    return base;
+  }
+  return merged;
+}
+
 function pruneDone(done) {
   const keys = Object.keys(done);
   if (keys.length <= DONE_KEEP) return done;
@@ -132,8 +166,8 @@ export class NodeAgent {
     this.token = this.secrets.nodeToken || loadNodeToken();
     this.operatorToken = this.secrets.operatorToken || '';
     this.v2Enabled = options.v2Enabled !== undefined ? !!options.v2Enabled : V2_ENABLED;
-    this.activeCapabilities = this.v2Enabled ? [...capabilities, ...actionCapabilities, ...appCapabilities, ...inputCapabilities] : capabilities;
-    this.activeManifest = this.v2Enabled ? [...manifest, ...actionsManifest, ...appsManifest, ...inputManifest] : manifest;
+    this.activeCapabilities = this.v2Enabled ? [...capabilities, ...actionCapabilities, ...appCapabilities, ...inputCapabilities, ...v4Capabilities] : capabilities;
+    this.activeManifest = this.v2Enabled ? [...manifest, ...actionsManifest, ...appsManifest, ...inputManifest, ...v4Manifest] : manifest;
     this.v2 = { hub: null, clipboard: null, notifier: null, link: null, stopStream: null, started: false, errors: [], lastInboundKick: 0 };
     this.registered = false;
     this.stopping = false;
@@ -428,10 +462,7 @@ export class NodeAgent {
       if (!result || typeof result !== 'object' || typeof result.summary !== 'string') {
         throw new Error(`能力 ${capabilityId} 返回结果不合法（缺 summary）`);
       }
-      outcome = {
-        status: 'succeeded',
-        result: { summary: result.summary, items: Array.isArray(result.items) ? result.items : [], partial: !!result.partial },
-      };
+      outcome = { status: 'succeeded', result: buildTaskResult(result) };
     } catch (err) {
       outcome = { status: 'failed', error: String(err && err.message ? err.message : err).slice(0, 300) };
     }
@@ -541,7 +572,7 @@ export class NodeAgent {
       onError: (err) => log(`[v2] 事件订阅断开（自动重连）：${err && err.message ? err.message : err}`),
     });
     this.v2.started = true;
-    log(`v2 模块就绪：受控动作 ${actionCapabilities.length} 项 + 超级终端动作 ${appCapabilities.length} 项 + 手机遥控输入 ${inputCapabilities.length} 项（input.mouse / input.key / input.media）已随注册上报；接收目录 ${receiveDir}`);
+    log(`v2 模块就绪：受控动作 ${actionCapabilities.length} 项 + 超级终端动作 ${appCapabilities.length} 项 + 手机遥控输入 ${inputCapabilities.length} 项 + 执行器能力 ${v4Capabilities.length} 项（system.exec / window.list / window.focus / screen.capture）已随注册上报；接收目录 ${receiveDir}`);
   }
 
   async stopV2() {

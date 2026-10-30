@@ -1,0 +1,198 @@
+// 榫卯超级终端 · Electron 桌面主进程（V4 单程序）
+// 功能：托盘常驻；启动本地中枢（复用 server/start.js）；启动屏幕文字采集；加载超级终端界面；托盘菜单控制监听/采集/总结/退出。
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain } = require('electron');
+const { spawn } = require('node:child_process');
+const path = require('node:path');
+const fs = require('node:fs');
+const http = require('node:http');
+
+function resolveRoot() {
+  const tryDir = (dir) => fs.existsSync(path.join(dir, 'server', 'start.js')) && fs.existsSync(path.join(dir, 'public', 'index.html'));
+  // 1) 显式环境变量
+  if (process.env.TENON_ROOT && tryDir(process.env.TENON_ROOT)) return process.env.TENON_ROOT;
+  // 2) 便携版解压目录 / 安装目录：向上找仓库（exe 放在仓库根时直接用仓库）
+  let d = path.dirname(app.getPath('exe'));
+  for (let i = 0; i < 6; i += 1) {
+    if (tryDir(d)) return d;
+    const parent = path.dirname(d);
+    if (parent === d) break;
+    d = parent;
+  }
+  // 3) 打包资源目录（extraResources 放在 resourcesPath 根）
+  if (app.isPackaged && tryDir(process.resourcesPath)) return process.resourcesPath;
+  return path.resolve(__dirname, '..');
+}
+const ROOT = resolveRoot();
+const DATA_DIR = app.isPackaged && !fs.existsSync(path.join(ROOT, 'data')) ? path.join(app.getPath('userData'), 'data') : path.join(ROOT, 'data');
+const HUB = process.env.TENON_DESKTOP_HUB || 'http://127.0.0.1:7410';
+const PORT = Number(process.env.TENON_DESKTOP_PORT || 7410);
+const PAUSE_FILE = path.join(DATA_DIR, 'voice', 'screen.pause');
+const LOG_DIR = path.join(ROOT, 'logs');
+const LOG_FILE = path.join(LOG_DIR, 'desktop.log');
+let win = null, tray = null, hubChild = null, captureChild = null, quitting = false;
+let token = '';
+let state = { voiceListening: false, screenCapture: true };
+
+function log(...a) {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    fs.appendFileSync(LOG_FILE, new Date().toISOString() + ' ' + a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ') + '\n');
+  } catch (_) {}
+}
+function readToken() {
+  try {
+    const sec = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'secrets.json'), 'utf8'));
+    token = sec.operatorToken || '';
+  } catch (_) {}
+  return token;
+}
+function api(method, p, body) {
+  return new Promise((resolve) => {
+    try {
+      const data = body ? Buffer.from(JSON.stringify(body)) : null;
+      const req = http.request(HUB + p, { method, headers: Object.assign({ 'x-tenon-token': readToken(), 'Content-Type': 'application/json' }, data ? { 'Content-Length': data.length } : {}) }, (res) => {
+        let buf = '';
+        res.on('data', (c) => (buf += c));
+        res.on('end', () => { try { resolve({ status: res.statusCode, json: JSON.parse(buf || '{}') }); } catch (_) { resolve({ status: res.statusCode, text: buf }); } });
+      });
+      req.on('error', (e) => resolve({ status: -1, error: String(e.message || e) }));
+      req.setTimeout(120000, () => { req.destroy(); resolve({ status: -1, error: 'timeout' }); });
+      if (data) req.write(data);
+      req.end();
+    } catch (e) { resolve({ status: -1, error: String(e.message || e) }); }
+  });
+}
+function hubAlive() {
+  return new Promise((resolve) => {
+    const req = http.get(HUB + '/api/v2/health', { timeout: 1500 }, (res) => { res.resume(); resolve(res.statusCode === 200); });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+async function waitHub(ms = 45000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (await hubAlive()) return true;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return false;
+}
+function startHub() {
+  if (hubChild) return;
+  log('starting hub');
+  const isPackaged = app.isPackaged;
+  const exe = isPackaged ? process.execPath : (process.platform === 'win32' ? 'node.exe' : 'node');
+  const env = Object.assign({}, process.env, { TENON_HOST: '0.0.0.0', TENON_PORT: String(PORT), TENON_DATA_DIR: DATA_DIR });
+  if (isPackaged) env.ELECTRON_RUN_AS_NODE = '1';
+  hubChild = spawn(exe, ['server/start.js'], { cwd: ROOT, windowsHide: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  hubChild.stdout.on('data', (d) => log('[hub]', String(d).trim().slice(0, 400)));
+  hubChild.stderr.on('data', (d) => log('[hub:err]', String(d).trim().slice(0, 400)));
+  hubChild.on('exit', (code) => log('hub exited', code));
+}
+function findPython() {
+  const candidates = [process.env.TENON_PYTHON, 'python.exe', 'python'];
+  return candidates.find((c) => c) || 'python';
+}
+function startCapture() {
+  if (captureChild) return;
+  if (fs.existsSync(PAUSE_FILE)) { state.screenCapture = false; }
+  log('starting capture');
+  captureChild = spawn(findPython(), ['scripts/screen/capture_loop.py', '--hub', HUB, '--token', readToken()], {
+    cwd: ROOT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  captureChild.stdout.on('data', (d) => log('[capture]', String(d).trim().slice(0, 300)));
+  captureChild.stderr.on('data', (d) => log('[capture:err]', String(d).trim().slice(0, 300)));
+  captureChild.on('exit', (code) => { log('capture exited', code); captureChild = null; });
+}
+function toggleScreen() {
+  try {
+    if (fs.existsSync(PAUSE_FILE)) { fs.unlinkSync(PAUSE_FILE); state.screenCapture = true; }
+    else { fs.mkdirSync(path.dirname(PAUSE_FILE), { recursive: true }); fs.writeFileSync(PAUSE_FILE, String(Date.now())); state.screenCapture = false; }
+  } catch (e) { log('toggleScreen err', e.message); }
+  rebuildTray();
+  return state.screenCapture;
+}
+async function toggleVoice() {
+  const r = state.voiceListening ? await api('POST', '/api/v2/voice/stop') : await api('POST', '/api/v2/voice/start');
+  state.voiceListening = !state.voiceListening;
+  log('toggleVoice ->', state.voiceListening, r.status);
+  rebuildTray();
+  sendToRenderer();
+  return state.voiceListening;
+}
+function sendToRenderer() {
+  if (win && !win.isDestroyed()) { try { win.webContents.send('desktop:state', publicState()); } catch (_) {} }
+}
+function publicState() {
+  return { isDesktop: true, version: app.getVersion(), hub: HUB, voiceListening: state.voiceListening, screenCapture: state.screenCapture, pauseFile: PAUSE_FILE };
+}
+function trayImage() {
+  try { return nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png')); } catch (_) { return nativeImage.createEmpty(); }
+}
+function rebuildTray() {
+  if (!tray) return;
+  const voiceLabel = state.voiceListening ? '暂停语音监听' : '开启语音监听';
+  const screenLabel = state.screenCapture ? '暂停屏幕采集' : '开启屏幕采集';
+  const auto = app.getLoginItemSettings().openAtLogin;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开超级终端', click: () => showWindow() },
+    { label: '打开完整控制台（旧版）', click: () => { showWindow(); if (win) win.loadURL(HUB + '/?desktop=1#/super'); } },
+    { type: 'separator' },
+    { label: voiceLabel, click: () => toggleVoice() },
+    { label: screenLabel, click: () => toggleScreen() },
+    { label: '现在生成今日总结', click: async () => { const r = await api('POST', '/api/v2/voice/diary/generate', { force: true }); log('diary', r.status); if (win) { showWindow(); win.loadURL(HUB + '/?desktop=1#/today'); } } },
+    { type: 'separator' },
+    { label: '开机自启', type: 'checkbox', checked: auto, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+    { label: '打开数据目录', click: () => shell.openPath(path.join(ROOT, 'data')) },
+    { type: 'separator' },
+    { label: '退出榫卯', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.setToolTip('榫卯超级终端 · ' + (state.voiceListening ? '正在聆听' : '待机'));
+}
+function showWindow() {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+}
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1180, height: 820, minWidth: 860, minHeight: 620,
+    title: '榫卯 · 超级终端', backgroundColor: '#0b0f14',
+    icon: path.join(__dirname, 'assets', 'icon.png'),
+    autoHideMenuBar: true, show: false,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  win.loadURL(HUB + '/super.html?desktop=1');
+  win.once('ready-to-show', () => win.show());
+  win.on('close', (e) => { if (!quitting) { e.preventDefault(); win.hide(); } });
+  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+}
+async function bootstrap() {
+  const already = await hubAlive();
+  if (!already) startHub();
+  const ok = await waitHub();
+  log('hub ready', ok);
+  readToken();
+  if (!captureChild && state.screenCapture) startCapture();
+  await new Promise((r) => setTimeout(r, 500));
+  const st = await api('GET', '/api/v2/voice/status');
+  if (st && st.json && st.json.enabled) state.voiceListening = st.json.state !== 'idle' || !!st.json.startedAt;
+  createWindow();
+  tray = new Tray(trayImage());
+  tray.on('click', () => (win && win.isVisible() ? win.hide() : showWindow()));
+  rebuildTray();
+  setInterval(async () => { const j = await api('GET', '/api/v2/voice/status'); if (j && j.json) { state.voiceListening = !!j.json.enabled; rebuildTray(); sendToRenderer(); } }, 15000);
+}
+app.requestSingleInstanceLock();
+app.on('second-instance', () => showWindow());
+app.whenReady().then(bootstrap);
+app.on('window-all-closed', () => { /* 托盘常驻，不退出 */ });
+app.on('before-quit', () => {
+  quitting = true;
+  for (const c of [captureChild, hubChild]) { try { if (c && !c.killed) c.kill(); } catch (_) {} }
+});
+ipcMain.handle('desktop:getState', () => publicState());
+ipcMain.handle('desktop:toggleVoice', () => toggleVoice());
+ipcMain.handle('desktop:toggleScreen', () => toggleScreen());
+ipcMain.handle('desktop:getToken', () => readToken());
+ipcMain.handle('desktop:generateDiary', () => api('POST', '/api/v2/voice/diary/generate', { force: true }));

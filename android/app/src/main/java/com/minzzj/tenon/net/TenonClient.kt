@@ -164,6 +164,65 @@ object TenonClient {
         return DownloadResult(out.absolutePath, out.length(), sha)
     }
 
+    // ---------- v3 语音管家（/api/v2/voice/*） ----------
+
+    /** 语音接口 HTTP 异常：区分 401（令牌）与其他错误，便于 UI 引导。 */
+    class VoiceHttpException(val code: Int, val body: String) :
+        IOException("HTTP " + code + " " + body.take(160)) {
+        val isAuth: Boolean get() = code == 401 || code == 403
+    }
+
+    private fun asJson(resp: TenonHttp.Resp, what: String): JSONObject {
+        if (resp.code !in 200..299) throw VoiceHttpException(resp.code, resp.body)
+        if (resp.body.isBlank()) throw IOException(what + " 返回空")
+        return try { JSONObject(resp.body) } catch (e: Exception) { throw IOException(what + " 返回非 JSON：" + resp.body.take(120)) }
+    }
+
+    /** 中枢语音管家状态（公开读，无需令牌）。 */
+    fun voiceStatus(): JSONObject {
+        val resp = TenonHttp.json("GET", "$API/voice/status", timeoutMs = 12000)
+        return asJson(resp, "voice/status")
+    }
+
+    /** 中枢语音管家配置（公开读）。 */
+    fun voiceConfig(): JSONObject {
+        val resp = TenonHttp.json("GET", "$API/voice/config", timeoutMs = 12000)
+        return asJson(resp, "voice/config")
+    }
+
+    /** 修改中枢语音管家配置（需要写令牌；PATCH 只允许白名单键）。 */
+    fun patchVoiceConfig(patch: JSONObject): JSONObject {
+        val resp = TenonHttp.json("PATCH", "$API/voice/config", patch.toString(), timeoutMs = 20000)
+        return asJson(resp, "voice/config")
+    }
+
+    /** 录音 WAV → 中枢本地 ASR 转写。返回 {text, provider, ms, wake...}。 */
+    fun voiceTranscribe(wav: java.io.File): JSONObject {
+        val resp = TenonHttp.postMultipart("$API/voice/transcribe", wav, "file", "voice.wav", timeoutMs = 30000)
+        return asJson(resp, "voice/transcribe")
+    }
+
+    /** 一句话 → 中枢执行（AI 计划 + 步骤）。返回 {say, provider, steps, actions, needConfirm...}。 */
+    fun voiceCommand(text: String): JSONObject {
+        val req = JSONObject().put("text", text.trim()).put("source", "android")
+        val resp = TenonHttp.json("POST", "$API/voice/command", req.toString(), timeoutMs = 30000)
+        return asJson(resp, "voice/command")
+    }
+
+    /** 今日转写记录（用于主页今日摘要）。 */
+    fun voiceTranscripts(date: String): JSONObject? {
+        val resp = TenonHttp.json("GET", "$API/voice/transcripts?date=" + java.net.URLEncoder.encode(date, "UTF-8") + "&limit=100", timeoutMs = 12000)
+        if (resp.code !in 200..299 || resp.body.isBlank()) return null
+        return try { JSONObject(resp.body) } catch (_: Exception) { null }
+    }
+
+    /** 中枢汇总状态（在线设备数 / 绑定数）。 */
+    fun hubState(): JSONObject? {
+        val resp = TenonHttp.json("GET", "/api/state", timeoutMs = 12000)
+        if (resp.code !in 200..299 || resp.body.isBlank()) return null
+        return try { JSONObject(resp.body) } catch (_: Exception) { null }
+    }
+
     // ---------- v2.1 超级终端（消费级主线：AI 指令 / 流转） ----------
 
     /** 一句话指令 → AI 计划。POST /api/v2/super/ask {text}，返回 {say, plan, result...}。 */
@@ -297,6 +356,56 @@ object TenonClient {
     fun stats(): JSONObject? {
         val resp = TenonHttp.json("GET", "$API/assets/stats")
         if (!resp.ok || resp.body.isBlank()) return null
+        return try { JSONObject(resp.body) } catch (_: Exception) { null }
+    }
+
+    // ---------- V4：设备一键绑定 / 屏幕采集 / 待确认 / 今日 ----------
+
+    private fun enc(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
+
+    fun devicesList(): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/devices", timeoutMs = 15000), "devices")
+
+    fun deviceBind(id: String): JSONObject =
+        asJson(TenonHttp.json("POST", "$API/devices/" + enc(id) + "/bind", "{}", timeoutMs = 20000), "device/bind")
+
+    fun deviceUnbind(id: String): JSONObject =
+        asJson(TenonHttp.json("POST", "$API/devices/" + enc(id) + "/unbind", "{}", timeoutMs = 20000), "device/unbind")
+
+    fun deviceAction(id: String, action: String): JSONObject {
+        val body = JSONObject().put("action", action)
+        return asJson(TenonHttp.json("POST", "$API/devices/" + enc(id) + "/action", body.toString(), timeoutMs = 20000), "device/action")
+    }
+
+    /** 手机屏幕内容上报（V4）：优先 imageBase64；服务端未就绪时由 UI 显示可读错误。 */
+    fun voiceScreen(imageBase64: String, app: String, title: String, text: String, blacklist: String = ""): JSONObject {
+        val req = JSONObject()
+            .put("app", app)
+            .put("title", title)
+            .put("text", text)
+            .put("source", "phone")
+            .put("ts", System.currentTimeMillis())
+            .put("imageBase64", imageBase64)
+            .put("blacklist", blacklist)
+        return asJson(TenonHttp.json("POST", "$API/voice/screen", req.toString(), timeoutMs = 30000), "voice/screen")
+    }
+
+    /** needConfirm 确认闭环：yes=true 执行，false 取消。 */
+    fun voiceConfirm(confirmId: String, yes: Boolean): JSONObject {
+        val req = JSONObject().put("confirmId", confirmId).put("yes", yes)
+        return asJson(TenonHttp.json("POST", "$API/voice/confirm", req.toString(), timeoutMs = 30000), "voice/confirm")
+    }
+
+    fun voiceDiary(date: String): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/voice/diary?date=" + enc(date), timeoutMs = 20000), "voice/diary")
+
+    fun voiceDiaryGenerate(): JSONObject =
+        asJson(TenonHttp.json("POST", "$API/voice/diary/generate", "{}", timeoutMs = 120000), "voice/diary/generate")
+
+    /** 屏幕文本记录（服务端未实现时返回 null）。 */
+    fun voiceScreenList(date: String): JSONObject? {
+        val resp = TenonHttp.json("GET", "$API/voice/screen?date=" + enc(date), timeoutMs = 12000)
+        if (resp.code !in 200..299 || resp.body.isBlank()) return null
         return try { JSONObject(resp.body) } catch (_: Exception) { null }
     }
 

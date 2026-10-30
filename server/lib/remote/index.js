@@ -29,6 +29,18 @@ const TYPE_MAP = {
   app: 'app.launch',
   launch: 'app.launch',
   'app.launch': 'app.launch',
+  // V4 执行器能力（node-agent v4）
+  exec: 'system.exec',
+  shell: 'system.exec',
+  'shell.exec': 'system.exec',
+  'system.exec': 'system.exec',
+  window: 'window.list',
+  windows: 'window.list',
+  'window.list': 'window.list',
+  'window.focus': 'window.focus',
+  screen: 'screen.capture',
+  screenshot: 'screen.capture',
+  'screen.capture': 'screen.capture',
 };
 
 const CAP_NAME = {
@@ -36,7 +48,22 @@ const CAP_NAME = {
   'input.key': '手机键盘',
   'input.media': '媒体/音量键',
   'app.launch': '远程启动程序',
+  'system.exec': '执行命令',
+  'window.list': '窗口列表',
+  'window.focus': '聚焦窗口',
+  'screen.capture': '屏幕截图',
 };
+
+// 遥控/执行器相关能力 id（用于状态队列过滤与设备能力展示）
+const REMOTE_CAPABILITY_IDS = new Set([
+  'input.mouse', 'input.key', 'input.media', 'app.launch',
+  'system.exec', 'window.list', 'window.focus', 'screen.capture',
+]);
+
+function riskOf(capabilityId) {
+  if (capabilityId === 'system.exec') return { level: 'irreversible', reasons: ['执行任意命令可能修改系统，需用户确认后执行'] };
+  return { level: 'reversible', reasons: [] };
+}
 
 const MOUSE_ACTIONS = ['move', 'click', 'down', 'up', 'wheel'];
 const MEDIA_ACTIONS = ['play-pause', 'next', 'prev', 'mute', 'vol-up', 'vol-down'];
@@ -209,6 +236,38 @@ export function createRemoteService(opts = {}) {
       if (Array.isArray(p.args) && p.args.length) out.args = p.args.slice(0, 5).map((a) => String(a).slice(0, 200));
       return out;
     }
+    if (capabilityId === 'system.exec') {
+      const command = String(p.command || '').trim();
+      if (!command) throw httpError(400, '缺少 command（要执行的 Windows 命令）', 'INVALID_COMMAND');
+      if (command.length > 2000) throw httpError(400, 'command 过长（上限 2000 字符）', 'INVALID_COMMAND');
+      if (/[\u0000]/.test(command)) throw httpError(400, 'command 含非法字符', 'INVALID_COMMAND');
+      const out = { command };
+      if (p.cwd !== undefined) out.cwd = String(p.cwd).slice(0, 400);
+      if (p.timeoutMs !== undefined) out.timeoutMs = clampInt(p.timeoutMs, 1000, 120000) || 15000;
+      return out;
+    }
+    if (capabilityId === 'window.list') return {};
+    if (capabilityId === 'window.focus') {
+      const title = String(p.title || '').trim();
+      const processName = String(p.process || p.processName || p.app || '').trim();
+      if (!title && !processName) throw httpError(400, 'window.focus 需要 title 或 process', 'INVALID_WINDOW_FOCUS');
+      if (title.length > 200 || processName.length > 200) throw httpError(400, 'title/process 过长', 'INVALID_WINDOW_FOCUS');
+      const out = {};
+      if (title) out.title = title;
+      if (processName) out.process = processName;
+      return out;
+    }
+    if (capabilityId === 'screen.capture') {
+      const out = {};
+      if (p.region && typeof p.region === 'object') {
+        const nums = ['x', 'y', 'width', 'height'].map((key) => Number(p.region[key]));
+        if (!nums.every((n) => Number.isFinite(n))) throw httpError(400, 'region 需要数字 x/y/width/height', 'INVALID_REGION');
+        if (nums[2] < 1 || nums[3] < 1 || nums[2] > 20000 || nums[3] > 20000) throw httpError(400, 'region 宽高不合法（1-20000）', 'INVALID_REGION');
+        out.region = { x: Math.floor(nums[0]), y: Math.floor(nums[1]), width: Math.floor(nums[2]), height: Math.floor(nums[3]) };
+      }
+      if (p.base64 === true || p.base64 === 'true') out.base64 = true;
+      return out;
+    }
     throw httpError(400, '未知 type', 'UNKNOWN_TYPE');
   }
 
@@ -220,6 +279,10 @@ export function createRemoteService(opts = {}) {
     }
     if (capabilityId === 'input.key') return payload.text ? `手机键盘：输入 ${String(payload.text).slice(0, 30)}` : `手机键盘：组合键 ${payload.combo}`;
     if (capabilityId === 'input.media') return '手机遥控：媒体键 ' + payload.action;
+    if (capabilityId === 'system.exec') return '执行命令：' + String(payload.command || '').slice(0, 60);
+    if (capabilityId === 'window.list') return '列出电脑可见窗口';
+    if (capabilityId === 'window.focus') return '切换到窗口 ' + (payload.title || payload.process || '');
+    if (capabilityId === 'screen.capture') return payload.region ? `截取屏幕区域 ${payload.region.width}×${payload.region.height}` : '截取全屏';
     return '手机遥控：打开程序 ' + (payload.app || '');
   }
 
@@ -231,7 +294,7 @@ export function createRemoteService(opts = {}) {
       capabilities: [{ id: capabilityId, name: CAP_NAME[capabilityId] || capabilityId, risk: 'reversible', manualOnly: false, version: REMOTE_VERSION, evidence: 'confirmed' }],
       targetDevice: { id: deviceId, name: (currentState().nodes[deviceId] || {}).name || deviceId },
       params: payload,
-      risk: { level: 'reversible', reasons: [] },
+      risk: riskOf(capabilityId),
       missing: [],
     };
     const at = new Date().toISOString();
@@ -275,7 +338,7 @@ export function createRemoteService(opts = {}) {
   function dispatchInput(deviceId, type, payload) {
     if (readOnly) throw httpError(423, '另一窗口为只读，遥控已暂停', 'READ_ONLY');
     const capabilityId = TYPE_MAP[String(type || '').toLowerCase()];
-    if (!capabilityId) throw httpError(400, '未知遥控类型：' + type + '（支持 mouse/key/media/app）', 'UNKNOWN_TYPE');
+    if (!capabilityId) throw httpError(400, '未知遥控类型：' + type + '（支持 mouse/key/media/app/exec/window.list/window.focus/screen.capture）', 'UNKNOWN_TYPE');
     const target = resolveTarget(deviceId);
     if (!target.caps.includes(capabilityId)) {
       throw httpError(409, '目标电脑还没有「' + (CAP_NAME[capabilityId] || capabilityId) + '」能力：请升级/重启电脑端 node-agent', 'CAPABILITY_MISSING');
@@ -318,7 +381,7 @@ export function createRemoteService(opts = {}) {
     for (const node of Object.values(state.nodes || {})) {
       if (!node || node.kind === 'hub' || node.disconnected || node.hidden) continue;
       const caps = nodeCapabilities(node);
-      if (!caps.includes('input.mouse') && !caps.includes('input.key') && !caps.includes('app.launch')) continue;
+      if (!caps.some((id) => REMOTE_CAPABILITY_IDS.has(id))) continue;
       out.push({
         id: node.id,
         name: node.name || node.id,
@@ -340,7 +403,7 @@ export function createRemoteService(opts = {}) {
     const caps = nodeCapabilities(node);
     const tasks = Object.values(state.tasks || {});
     const remoteTasks = tasks
-      .filter((t) => String(t.nodeId || '') === String(deviceId) && /^input\./.test(String(t.capabilityId || (t.draft && t.draft.capabilities && t.draft.capabilities[0] && t.draft.capabilities[0].id) || '')))
+      .filter((t) => String(t.nodeId || '') === String(deviceId) && REMOTE_CAPABILITY_IDS.has(String(t.capabilityId || (t.draft && t.draft.capabilities && t.draft.capabilities[0] && t.draft.capabilities[0].id) || '')))
       .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
       .slice(0, 6)
       .map((t) => ({
@@ -350,6 +413,8 @@ export function createRemoteService(opts = {}) {
         updatedAt: t.updatedAt,
         startedAt: t.startedAt || null,
         summary: (t.result && t.result.summary) || (t.draft && t.draft.summary) || '',
+        result: t.result || null,
+        error: t.error || null,
       }));
     const lastLocal = recent.find((r) => String(r.deviceId) === String(deviceId));
     const lastTask = remoteTasks.find((t) => t.taskId === (lastLocal && lastLocal.taskId)) || remoteTasks[0] || null;
@@ -375,12 +440,35 @@ export function createRemoteService(opts = {}) {
     };
   }
 
+  function taskDetail(deviceId, taskId) {
+    const state = currentState();
+    const node = nodeOf(state, deviceId);
+    if (!node || node.kind === 'hub') throw httpError(404, '设备不存在：' + deviceId, 'DEVICE_NOT_FOUND');
+    const task = (state.tasks || {})[taskId];
+    if (!task) throw httpError(404, '任务不存在：' + taskId, 'TASK_NOT_FOUND');
+    if (String(task.nodeId || '') !== String(deviceId)) throw httpError(404, '任务不属于该设备', 'TASK_NOT_FOUND');
+    const capabilityId = task.capabilityId || (task.draft && task.draft.capabilities && task.draft.capabilities[0] && task.draft.capabilities[0].id) || null;
+    return {
+      ok: true,
+      taskId,
+      deviceId,
+      capabilityId,
+      status: task.status,
+      summary: (task.result && task.result.summary) || (task.draft && task.draft.summary) || '',
+      result: task.result || null,
+      error: task.error || null,
+      steps: (task.steps || []).slice(-10),
+      updatedAt: task.updatedAt || null,
+    };
+  }
+
   const service = {
     root,
     dataDir,
     readOnly,
     version: REMOTE_VERSION,
     dispatchInput,
+    taskDetail,
     listDevices,
     status,
     recent: () => recent.slice(0, 20),
@@ -413,8 +501,8 @@ function paramsOf(ctx, req) {
   if (ctx && ctx.params && typeof ctx.params === 'object') return ctx.params;
   try {
     const url = new URL(req.url, 'http://placeholder');
-    const m = url.pathname.match(/^\/api\/v2\/remote\/([^/]+)(?:\/(input|command|status))?$/);
-    return m ? { deviceId: decodeURIComponent(m[1]), action: m[2] } : {};
+    const m = url.pathname.match(/^\/api\/v2\/remote\/([^/]+)(?:\/(input|command|status|task))?(?:\/([^/]+))?$/);
+    return m ? { deviceId: decodeURIComponent(m[1]), action: m[2], taskId: m[3] ? decodeURIComponent(m[3]) : undefined } : {};
   } catch {
     return {};
   }
@@ -455,6 +543,14 @@ export function createRemoteRoutes(service) {
       }),
     },
     {
+      method: 'GET',
+      path: '/api/v2/remote/:deviceId/task/:taskId',
+      handler: wrap(async (req, res, ctx) => {
+        const params = paramsOf(ctx, req, 2);
+        sendJson(res, 200, service.taskDetail(params.deviceId, params.taskId));
+      }),
+    },
+    {
       method: 'POST',
       path: '/api/v2/remote/:deviceId/command',
       handler: wrap(async (req, res, ctx) => {
@@ -471,6 +567,7 @@ export function createRemoteRoutes(service) {
 export const ROUTES = [
   { method: 'GET', path: '/api/v2/remote/devices' },
   { method: 'GET', path: '/api/v2/remote/:deviceId/status' },
+  { method: 'GET', path: '/api/v2/remote/:deviceId/task/:taskId' },
   { method: 'POST', path: '/api/v2/remote/:deviceId/input' },
   { method: 'POST', path: '/api/v2/remote/:deviceId/command' },
 ];

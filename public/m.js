@@ -423,7 +423,11 @@
     api('/api/tasks/' + encodeURIComponent(S.draft.taskId) + '/confirm', { method: 'POST', body: { note: '手机确认执行' }, token: tok }).then(function (res) {
       S.busy = false;
       if (res.ok) {
-        toast('已确认：任务已派发，回执会出现在「最近回执」', 'ok');
+        if (res.data && res.data.already) {
+          toast((res.data.message || '该任务已处理过，无需再次确认'), 'ok');
+        } else {
+          toast('已确认：任务已派发，回执会出现在「最近回执」', 'ok');
+        }
         clearDraft();
         load();
       } else {

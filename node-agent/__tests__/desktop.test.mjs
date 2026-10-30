@@ -108,7 +108,7 @@ test('剪贴板：PowerShell 写→读真实回读（中文/emoji）', { skip: !
 test('剪贴板：本机变化会上报中枢 v2（防重复上报）', { skip: !WIN }, async () => {
   const client = makeHubClient();
   const sync = createClipboardSync({ hub: client, deviceId: 'node-local', pollMs: 200, log: () => {} });
-  const marker = `TENON-LOCAL-${Date.now()}`;
+  const marker = `TENON-LOCAL-${Date.now().toString(36)}`;
   await writeClipboardText(marker);
   const before = hub.state.clipboardPosts.length;
   const first = await sync.syncOnce();
@@ -126,7 +126,7 @@ test('剪贴板：中枢最新（来自手机）→ 写回本机；写回后不�
   const sync = createClipboardSync({ hub: client, deviceId: 'node-local', pollMs: 200, log: () => {} });
   // 先把本机当前内容同步出去（真实时序：手机内容通常在本机上报之后到达）
   await sync.syncOnce();
-  const remoteText = `来自手机的剪贴板-${Date.now()}`;
+  const remoteText = `来自手机的剪贴板-${Date.now().toString(36)}`;
   hub.state.clipboard = { at: new Date().toISOString(), from: 'phone-android', kind: 'text', text: remoteText };
   const postsBefore = hub.state.clipboardPosts.length;
   const applied = await sync.syncOnce();
@@ -254,7 +254,8 @@ test('actions：system.volume 参数校验 + 演练；file.print/system.open 缺
   const ctx = { repoRoot: AGENT_DIR, dataDir: path.join(TMP, 'actions-data'), nodeId: 'node-local', nodeName: '自测节点' };
   const volume = findAction('system.volume');
   await assert.rejects(() => volume.run({ params: {} }, ctx), /action/);
-  await assert.rejects(() => volume.run({ params: { level: 50 } }, ctx), /P1/);
+  // Round3 起 system.volume 已支持 level（CoreAudio）；这里只校验非法值，避免测试真的改用户音量
+  await assert.rejects(() => volume.run({ params: { level: 150 } }, ctx), /level/);
   process.env.TENON_ACTION_DRYRUN = '1';
   try {
     const result = await volume.run({ params: { action: 'mute' } }, ctx);
@@ -350,19 +351,19 @@ test('agent：V2_ENABLED 由 env TENON_V2 决定（默认 v0.1）', () => {
   assert.equal(typeof agentMod.NodeAgent, 'function');
 });
 
-test('agent：v0.1 注册 4 能力；TENON_V2 模式注册 13 能力（4 基础 + 4 受控动作 + 5 超级终端动作）', async () => {
+test('agent：v0.1 注册 4 能力；TENON_V2 模式注册 20 能力（4 基础 + 4 受控动作 + 5 超级终端动作 + 3 手机遥控 + 4 V4 执行器）', async () => {
   const v1 = new agentMod.NodeAgent({ hubUrl, v2Enabled: false });
   assert.equal(v1.activeManifest.length, 4);
   await v1.register();
   const v1Body = hub.state.registerBodies[hub.state.registerBodies.length - 1];
   assert.equal(v1Body.capabilities.length, 4);
   const v2 = new agentMod.NodeAgent({ hubUrl, v2Enabled: true });
-  assert.equal(v2.activeManifest.length, 13);
+  assert.equal(v2.activeManifest.length, 20);
   await v2.register();
   const v2Body = hub.state.registerBodies[hub.state.registerBodies.length - 1];
-  assert.equal(v2Body.capabilities.length, 13);
+  assert.equal(v2Body.capabilities.length, 20);
   const ids = v2Body.capabilities.map((cap) => cap.id);
-  for (const id of ['image.crop', 'file.hash', 'file.delete', 'printer.mock', 'system.open', 'system.volume', 'system.power', 'file.print', 'app.launch', 'url.open', 'media.show', 'handoff.show', 'app.list']) {
+  for (const id of ['image.crop', 'file.hash', 'file.delete', 'printer.mock', 'system.open', 'system.volume', 'system.power', 'file.print', 'app.launch', 'url.open', 'media.show', 'handoff.show', 'app.list', 'input.mouse', 'input.key', 'input.media', 'system.exec', 'window.list', 'window.focus', 'screen.capture']) {
     assert.ok(ids.includes(id), `注册能力缺 ${id}`);
   }
   assert.ok(v2Body.capabilities.every((cap) => !('run' in cap)), '注册清单不能带函数');

@@ -10,7 +10,7 @@ const EVID = path.join(HERE, 'evidence');
 fs.mkdirSync(EVID, { recursive: true });
 const files = fs.readdirSync(HERE).filter((name) => /\.test\.mjs$/.test(name)).sort().map((name) => path.join(HERE, name));
 const started = Date.now();
-const result = spawnSync(process.execPath, ['--test', '--test-force-exit', ...files], {
+const result = spawnSync(process.execPath, ['--test', '--test-force-exit', '--test-concurrency=1', ...files], {
   encoding: 'utf8',
   timeout: Number(process.env.TENON_TEST_TIMEOUT_MS || 300000),
   stdio: ['ignore', 'pipe', 'pipe'],

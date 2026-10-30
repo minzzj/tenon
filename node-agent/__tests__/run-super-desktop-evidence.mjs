@@ -2,7 +2,7 @@
 // 运行：node node-agent/__tests__/run-super-desktop-evidence.mjs
 // 覆盖：app.list / app.launch("notepad")（进程+截屏）/ url.open(https://github.com)（浏览器+截屏）/
 //       media.show(示例空间/样品图/样品01.png)（默认程序+截屏）/ handoff.show（#/handoff 页面+截屏）/
-//       全屏 url.open / 任务 pull 派发 app.list+app.launch / 真实中枢注册 13 能力（隔离 7439）
+//       全屏 url.open / 任务 pull 派发 app.list+app.launch / 真实中枢注册 20 能力（隔离 7439）
 // 产出：node-agent/__tests__/evidence/super-desktop-evidence.md/.json + 截屏 super-0x-*.png
 import fs from 'node:fs';
 import path from 'node:path';
@@ -252,7 +252,7 @@ async function main() {
   // ---------- G. 走现有 task pull 派发（stub 中枢 + 真 agent 子进程） ----------
   await runTaskPullCase();
 
-  // ---------- H. 真实中枢（隔离 7439）注册 13 能力 ----------
+  // ---------- H. 真实中枢（隔离 7439）注册 20 能力 ----------
   await runRealHubCase();
 }
 
@@ -285,7 +285,7 @@ async function runTaskPullCase() {
   await waitFor(() => stub.state.registerBodies.some((body) => body.name === '拉任务证据节点'), '拉任务节点注册', 20000);
   const register = stub.state.registerBodies.find((body) => body.name === '拉任务证据节点');
   section.registerCapabilities = register.capabilities.map((cap) => cap.id);
-  check('task-pull-register', 'agent 注册 13 能力（含 5 个超级终端动作）', register.capabilities.length === 13, register.capabilities.map((cap) => cap.id).join(','));
+  check('task-pull-register', 'agent 注册 20 能力（含 5 个超级终端动作）', register.capabilities.length === 20, register.capabilities.map((cap) => cap.id).join(','));
   stub.state.pullQueue.push({ id: 'super_task_applist', text: '列出电脑上的程序', capabilityId: 'app.list', params: {}, retries: 0 });
   stub.state.pullQueue.push({ id: 'super_task_applaunch', text: '打开记事本', capabilityId: 'app.launch', params: { app: 'notepad' }, retries: 0 });
   await waitFor(() => stub.state.nodeEvents.filter((event) => event.type === 'task.succeeded').length >= 2, '两个任务执行完成', 30000);
@@ -390,10 +390,10 @@ async function runRealHubCase() {
   const node = await waitFor(async () => {
     const state = await api('/api/state', { token: '' });
     const found = (state.nodes || []).find((item) => item.id === 'node-local' && item.name === '超级终端真实节点');
-    return found && found.capabilities && found.capabilities.length === 13 ? found : null;
-  }, '真实中枢注册 13 能力', 30000);
+    return found && found.capabilities && found.capabilities.length === 20 ? found : null;
+  }, '真实中枢注册 20 能力', 30000);
   section.node = { id: node.id, name: node.name, online: node.online, capabilities: node.capabilities.map((cap) => cap.id) };
-  check('real-hub-register', '真实中枢 /api/state 可见 13 能力', node.capabilities.length === 13, node.capabilities.map((cap) => cap.id).join(','));
+  check('real-hub-register', '真实中枢 /api/state 可见 20 能力', node.capabilities.length === 20, node.capabilities.map((cap) => cap.id).join(','));
   // 可选：super 服务路由（server/lib/super 由另一位队友并行交付，未就绪不影响本卡验收）
   try {
     const programs = await api('/api/v2/super/programs', { token: operatorToken });

@@ -1,51 +1,155 @@
-# 榫卯 Tenon · Android 原生 App（v2.1 消费级超级终端）
+# 榫卯 Tenon · Android 原生 App（v0.5 单程序超级终端）
 
-**包名** `com.minzzj.tenon` · **Kotlin** · minSdk 26 / targetSdk 34 · versionName `0.2.0`
-**一句话**：一个小软件调动家里所有设备与程序——**手机往前一倾，页面自动滑到电脑**；**按住说话**，AI 拆成计划在电脑上执行。
-本目录是 v2.1 消费级超级终端 Android 客户端（对应 task-23；v2 P0 基础能力对应 `_internal/契约-v2-P0.md` §5、`_internal/需求确认-v2-确认版.md`）。
+**包名** `com.minzzj.tenon` · **Kotlin** · minSdk 26 / targetSdk 34 · **versionName 0.5.0（versionCode 5）**
+**一句话**：打开就是「超级终端」——说一句话录音送电脑识别→执行；设备同 WiFi 自动发现、点「使用这台」一键绑定；手机屏幕每 120 秒截屏上报电脑做内容总结。
 
-## v0.2.0 新增（消费级超级终端）
+## v0.5.0 本次更新（用户 10-30 确认：简化绑定 / 一键执行 / 屏幕内容采集 / 语音送电脑）
 
-1. **倾斜甩屏**（首页「流转」区）：`SensorManager` 加速度计 + 低通滤波求前倾角；检测到「前倾角 ≥ 灵敏度（默认 25°）且 1.2 秒内变化 ≥15°」→ 显示「正在甩到电脑…」→ `POST /api/v2/super/handoff {kind:'page',url:'tenon://android/page',text:'手机页面（手机前倾甩屏）'}`；2 秒冷却防抖；另提供显式「甩到电脑（手动）」按钮与「拉取流转状态」。
-2. **语音指令**：`SpeechRecognizer`（zh-CN，`RECORD_AUDIO`）**按住说话 → 识别 → `POST /api/v2/super/ask {text}` → 展示 AI 回复与计划步骤**；无语音引擎/无权限/识别失败时自动降级到文字输入（文字框始终可用）。
-3. **快捷程序面板**：打开微信 / 打开 Chrome / 打开记事本 / 放首歌 / 回家模式 五个一键指令（点击 = 发送一句 ask）。
-4. **设置页新增**：中枢地址、配对状态（peerId / 令牌是否已填）、语音权限与语音引擎状态、倾斜甩屏灵敏度（低 20° / 中 25° / 高 30°）。
-5. **从电脑端接收流转**：Android 侧可忽略（电脑节点 `handoff.show` 会把内容打开在浏览器 `#/handoff`）；App 可 `GET /api/v2/super/state` 拉取最近流转状态。
+### 1) 主页面只留「超级终端」（4 页签：首页 / 设备 / 今日 / 设置）
+- 顶部：在线/离线圆点 + 语音管家状态 + 屏幕采集开关状态 + 设备名；徽标「本地识别 funasr · 云端理解 deepseek · AI deepseek-chat」；
+- 中央大麦克风（点击开始/结束录音，16kHz 单声道 WAV）：录音 → `POST /api/v2/voice/transcribe` → `POST /api/v2/voice/command`；
+- **最近一句单行字幕**（只 1 行，`maxLines=1` + 省略号，不再两行重复）；
+- 结果卡：`say` 大字 + 步骤 ✅/📤/❌/⏳/⚠️ + provider/延迟；**needConfirm 时出现「✅ 确认执行 / 取消」按钮**（走 `/api/v2/voice/confirm` 闭环，10 分钟有效）；
+- 今日摘要：语音 N 条 · 屏幕 N 条（或本机上报次数）· 在线节点/绑定数 · 最近回复 · 每晚总结时间；
+- 文字兜底输入（主页可直接打字发送）；底部 4 页签。
 
-## 一、环境与工具链（本机已安装）
+### 2) 设备页简化（`DevicesActivity`）
+- 进入即 `GET /api/v2/devices` 自动列出设备卡：名称/平台/在线/已绑定；
+- 一键「使用这台」= `POST /devices/{id}/bind`，「移除」= `/unbind`；每卡最多 3 个一键动作（来自设备能力：打招呼 / 体检 / 打开控制台 = `POST /devices/{id}/action`）；手动刷新；
+- 扫码/6 位配对码等旧流程收进底部「高级 ▾」折叠（WebView 打开 `#/link`），不再占主流程。
 
-| 工具 | 版本 / 路径 |
+### 3) 屏幕内容采集（新增 `ScreenCaptureService`，MediaProjection 前台服务）
+- 设置页开关 + 间隔（60/120/300 秒，默认 120）+ 黑名单输入；「授权并开启采集」拉起系统「共享屏幕」授权弹窗（真实权限流程），授权后前台服务运行，可随时「暂停采集」；
+- 每间隔截屏一次 → 缩放至宽 ≤960px → JPEG(55) → `POST /api/v2/voice/screen`：
+  `{source:"phone", app:"phone", title:"手机屏幕 · <机型>", text:"", ts, imageBase64, blacklist}`；
+- 通知栏常驻显示「已上报 N 次 · 每 X 秒采集」；设置页显示状态/间隔/本机今日上报次数/最近错误；
+- Android 14 合规：Manifest 声明 `FOREGROUND_SERVICE_MEDIA_PROJECTION` + `foregroundServiceType="mediaProjection"`，`startForeground(..., FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)`；
+- 说明：当前中枢 `/api/v2/voice/screen` 若尚未实现（404），App 会显示可读错误并保留本机计数；端点在 operator 侧就绪后无需改 App 即可开始入账。
+
+### 4) 设置页（全部集中）
+中枢地址/令牌、语音管家（唤醒词/24-7/电脑 TTS/每晚总结/保留天数）、**语音来源（默认送电脑识别，手机离线 ASR 为 P1 暂未提供）**、**屏幕内容采集（开关/间隔/黑名单/授权开启/暂停）**、本机（手机朗读回复、清空本机记录、恢复默认）、设备与二级页入口、关于/隐私（含屏幕采集隐私说明）。
+
+## 本机构建结果（2026-10-30 实测，v0.5.0）
+
+| 项 | 结果 |
 |---|---|
-| JDK | 17.0.20（`C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot`）；本机另有 jdk-21，构建已用 JDK17 |
-| Android SDK | `C:\Android\Sdk`（commandline-tools 11076708 / cmdline-tools 12.0） |
-| SDK 包 | platform-tools 37.0.1、platforms;android-34、build-tools;34.0.0 |
-| Gradle | **8.7**（wrapper 已生成；distributionUrl 指向腾讯镜像 `mirrors.cloud.tencent.com/gradle/gradle-8.7-bin.zip`，与官方 8.7-bin.zip SHA256 一致：`544c35d6…961d`） |
-| Android Gradle Plugin | 8.5.2（`google()` 仓库） |
-| Kotlin | 1.9.24 |
-| 唯一第三方依赖 | `com.google.zxing:core:3.5.3`（本地二维码生成/解码，无相机第三方库、无 okhttp） |
+| 构建 | `.\gradlew.bat --no-daemon assembleDebug` → **BUILD SUCCESSFUL**（首次 36s，最终增量 19s） |
+| APK 分发包 | `public/download/tenon-android-0.5.0-debug.apk`（gitignored，仅分发） |
+| 大小 | **1,230,154 B（1.17 MB）** |
+| SHA-256 | `F105D4EAD611924C694FC7285B348B9EE5EF384BEA55A98BEB1F6257D682E829` |
+| 包信息（aapt2 badging） | `com.minzzj.tenon` · versionCode **5** · versionName **0.5.0** · minSdk 26 / targetSdk 34 / compileSdk 34 · launchable `MainActivity` |
+| 权限清单 | INTERNET / ACCESS_NETWORK_STATE / ACCESS_WIFI_STATE / CAMERA / RECORD_AUDIO / FOREGROUND_SERVICE / FOREGROUND_SERVICE_DATA_SYNC / **FOREGROUND_SERVICE_MEDIA_PROJECTION** / POST_NOTIFICATIONS / WAKE_LOCK |
+| 组件校验 | Manifest 含 `DevicesActivity`、`TodayActivity`、`ScreenCaptureService(foregroundServiceType=mediaProjection 0x20)`（aapt2 xmltree 实测） |
+| lint | `lintDebug` → **0 errors / 78 warnings**（非阻断：中文硬编码 i18n、局域网明文 HTTP、未用资源、WebView JS 等） |
+| 敏感信息扫描（解压 dex 实测） | **无 DeepSeek key、无 nodeToken、无 "sk-"**；内置默认 `operatorToken` 与局域网 IP 为 `local.properties`(gitignore) 注入的体验默认值，仅本机分发（正式对外分发需删除默认令牌重构建） |
+| 默认中枢/令牌注入 | `local.properties` 的 `tenon.defaultHub` / `tenon.defaultToken` → `BuildConfig.DEFAULT_HUB/DEFAULT_TOKEN`；不写入仓库跟踪文件 |
+| 真机 | **未实测**（无 adb 设备）：以构建成功 + lint + 静态校验为准；屏幕采集为系统授权 UI，需用户在手机上点「开始录制」 |
 
-> SDK 安装命令（供复现）：
-> ```powershell
-> $env:JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot'
-> C:\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat --sdk_root=C:\Android\Sdk --licenses
-> C:\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat --sdk_root=C:\Android\Sdk `
->   "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-> ```
+## 安装 / 权限 / 屏幕采集说明
 
-## 二、构建
+1. 手机与电脑同一 WiFi；电脑端启动中枢（默认 7410）。
+2. 安装 `public/download/tenon-android-0.5.0-debug.apk`（需允许未知来源）。
+3. 首次打开默认已带中枢地址与体验令牌；顶部显示「中枢在线」即可按住/点击大麦克风说话（首次请求麦克风权限）。
+4. 设备页：进页面即自动发现，点「使用这台」一键绑定；「高级」里保留旧扫码/配对码。
+5. 屏幕内容采集：设置 → 「04 屏幕内容采集」→ 选间隔 →「授权并开启采集」→ 系统弹窗选「开始录制/共享屏幕」；通知栏常驻显示采集状态；「暂停采集」随时停止。需通知权限（Android 13+）。
+6. 今日页：时间线（语音转写/屏幕/执行）+「现在总结」生成今日日报 + 前后日期切换。
+
+## 构建复跑
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot'
 $env:ANDROID_HOME='C:\Android\Sdk'
-$env:ANDROID_SDK_ROOT='C:\Android\Sdk'
 cd H:\minzzj文件\技术部\项目\官方\榫卯\android
-.\gradlew.bat --no-daemon assembleDebug
+.\gradlew.bat --no-daemon assembleDebug   # -> app/build/outputs/apk/debug/app-debug.apk
+.\gradlew.bat --no-daemon lintDebug      # 0 errors / 78 warnings
 ```
 
-- 产物：`app/build/outputs/apk/debug/app-debug.apk`
-- 首次构建会由 wrapper 下载 Gradle 8.7 发行版（镜像），再由 Gradle 拉取 AGP/Kotlin/zxing 依赖；之后走缓存。
-- `local.properties` 已写 `sdk.dir=C:/Android/Sdk`（本机路径；换机器改这里或设 `ANDROID_HOME`）。
-- 只读静态检查：`.\gradlew.bat --no-daemon lint`（可选）。
+## 关键文件（v0.5.0）
+
+```text
+android/app/src/main/java/com/minzzj/tenon/
+├── MainActivity.kt            # 主页超级终端（状态/大麦克风/单行字幕/结果+确认/今日摘要/4 页签）
+├── DevicesActivity.kt         # 简化设备页（自动发现/使用这台/移除/每卡3动作/高级折叠）
+├── TodayActivity.kt           # 今日时间线 + 现在总结 + 历史日期
+├── SettingsActivity.kt        # 全部设置（中枢/令牌/语音管家/语音来源/屏幕采集/本机/入口/隐私）
+├── service/ScreenCaptureService.kt  # MediaProjection 前台服务（截屏 JPEG → /voice/screen）
+├── VoiceRecorder.kt           # 16kHz 单声道 WAV 录音
+├── net/TenonClient.kt         # voice/status|config|transcribe|command|confirm|diary|screen + devices + 状态
+├── net/TenonHttp.kt            # JSON + multipart（30s 超时）
+├── App.kt                     # 配置/SharedPreferences（默认 hub/token 来自 BuildConfig；屏幕采集偏好）
+└── WebPageActivity.kt         # 二级页 WebView（旧版互联/素材等）
+```
+
+## 版本历史
+
+- 0.5.0（2026-10-30）：单程序超级终端（4 页签）+ 极简设备一键绑定 + 语音送电脑 + 屏幕采集上报 + needConfirm 确认闭环；构建成功。
+- 0.4.0（2026-10-26）：主页面极简超级终端 + 语音输入/执行 + 设置页集中；构建成功。
+- 0.2.0（2026-10-25）：倾斜甩屏 + 系统语音识别指令 + 快捷程序面板。
+- 0.1.0（2026-10-25）：v2 P0 基础（发现/配对/传输/剪贴板/通知/素材 WebView/分享目标）。
+
+---
+
+## 以下为 0.4.0 历史构建记录（保留）
+
+## 本机构建结果（2026-10-26 实测，v0.4.0）
+
+| 项 | 结果 |
+|---|---|
+| 构建命令 | `.\gradlew.bat --no-daemon assembleDebug`（JDK17 + Android SDK 34） |
+| 结果 | **BUILD SUCCESSFUL in 1m 35s**（37 tasks，18 executed） |
+| APK | `app/build/outputs/apk/debug/app-debug.apk`，**1,181,173 B（1.13 MB）** |
+| 分发包 | `public/download/tenon-android-0.4.0-debug.apk`（该目录 gitignored，仅供分发给用户） |
+| SHA-256 | `31D7C3895DB0AC99049DA9D8076A27870BDFB4060AC4E948E1914C91791F05EC` |
+| 包信息（aapt2） | `com.minzzj.tenon`，versionCode **4** / versionName **0.4.0**，minSdk 26 / targetSdk 34 / compileSdk 34，launchable Activity `MainActivity`，含 `RECORD_AUDIO` 权限 |
+| 静态检查（lintDebug） | **0 errors / 58 warnings**（均为非阻断：中文硬编码 i18n、局域网明文 HTTP、未用资源、WebView JS、权限提示等） |
+| 默认中枢/令牌注入 | 从 `local.properties`（已 gitignore）读取 `tenon.defaultHub` / `tenon.defaultToken` → BuildConfig；**不写入仓库跟踪文件**，APK 内置仅用于本机体验 |
+| 语音接口契约自测 | 无令牌 → 401「需要登录令牌」；带令牌 multipart WAV → **200**，返回 `{"text":"嗯。","provider":"funasr-sensevoice","ms":317,...}`（真机录音链路字段/鉴权已验证） |
+| 真机 | **未实测**：`adb devices` 无设备；以构建成功 + lint + 真实语音接口契约自测为准，用户自行安装 |
+
+## 安装 / 第一次使用
+
+1. 手机与电脑同一 WiFi；电脑端启动中枢（默认 7410）。
+2. `adb install -r public/download/tenon-android-0.4.0-debug.apk`（或直接把 APK 发到手机安装；首次安装需允许「未知来源」）。
+3. 打开 App：默认已内置中枢地址与体验令牌（本机 APK），顶部显示「中枢在线」即可说话；若显示离线 → 设置 → 01 中枢连接 改成电脑局域网 IP:7410，并可粘贴 `data/secrets.json` 的 operatorToken。
+4. 按住中央大按钮说话（首次会申请麦克风权限），松手后自动：本地转写 → 云端理解 → 执行 → 显示回复与步骤；电脑端 TTS 会播报（可在设置关闭）。
+5. 所有设置都在「设置」页：中枢/令牌、唤醒词、24/7 记录、TTS、每晚总结时间、保留天数、设备绑定/一键安装入口、清空本机记录、关于/隐私。
+
+## 构建复跑
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot'
+$env:ANDROID_HOME='C:\Android\Sdk'
+cd H:\minzzj文件\技术部\项目\官方\榫卯\android
+.\gradlew.bat --no-daemon assembleDebug     # -> app/build/outputs/apk/debug/app-debug.apk
+.\gradlew.bat --no-daemon lintDebug        # 0 errors / 58 warnings
+```
+
+> `local.properties`（gitignore）需包含 `sdk.dir`、`tenon.defaultHub`、`tenon.defaultToken` 才能在首次安装时直接连上本机 hub；缺省时 App 内填即可。
+
+## 目录结构（v0.4.0 关键文件）
+
+```text
+android/app/src/main/java/com/minzzj/tenon/
+├── MainActivity.kt           # 极简超级终端主页（连接状态/大语音按钮/回复/今日摘要/三入口）
+├── SettingsActivity.kt       # 全部设置集中（中枢/令牌/唤醒词/24-7/TTS/总结时间/保留天数/入口/隐私）
+├── VoiceRecorder.kt          # 16kHz 单声道 WAV 录音
+├── WebPageActivity.kt        # 二级页 WebView（设备绑定/遥控/素材）
+├── App.kt                    # 配置与 SharedPreferences（默认 hub/token 来自 BuildConfig）
+├── net/TenonClient.kt        # voice/status|config|transcribe|command|transcripts + hub 状态
+├── net/TenonHttp.kt          # JSON + multipart 上传（30s 超时）
+├── ScanActivity / ShareActivity / AssetsActivity / ClipboardSyncService / TenonNotificationListener 等（0.2.0 能力保留）
+└── ...
+```
+
+## 版本历史
+
+- 0.4.0（2026-10-26）：主页面极简超级终端 + 语音输入/执行 + 设置页集中；构建成功。
+- 0.2.0（2026-10-25）：倾斜甩屏 + 语音指令（系统 SpeechRecognizer）+ 快捷程序面板。
+- 0.1.0（2026-10-25）：v2 P0 基础（发现/配对/传输/剪贴板/通知/素材 WebView/分享目标）。
+
+---
+
+## 以下为 0.2.0 历史构建记录（保留）
 
 ## 本机构建结果（2026-10-25 实测）
 

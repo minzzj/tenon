@@ -15,6 +15,7 @@ v2-P0 在同一进程里增加「剪贴板双向同步、文件收发、通知�
 | `files.js` | 扫描目录、调用中枢入库、打开文件/文件夹、Windows 打印 |
 | `notifier.js` | Windows 通知（WinRT Toast → NotifyIcon → msg → 日志兜底），订阅 SSE 做手机通知镜像 |
 | `hub.js` | 中枢 HTTP 客户端（v2 用 operatorToken，节点接口用 nodeToken）+ SSE 订阅 |
+| `v4.js` | V4 执行器能力：`system.exec`（命令执行/危险词拒绝/超时杀进程树/审计）/ `window.list` / `window.focus` / `screen.capture`（截图供 OCR） |
 | `lib/ps.js` | PowerShell 桥（`-EncodedCommand`，临时 JSON 文件回传，避免中文/引号问题） |
 | `lib/png.js` | v0.1 纯 Node PNG 解码/居中裁剪/编码（自实现 CRC32） |
 
@@ -63,6 +64,7 @@ node --test --test-force-exit node-agent/__tests__/*.test.mjs  # 单测（27 条
 node node-agent/__tests__/run-tests.mjs                     # 同上（日志写 evidence/test-run.log，只打印摘要）
 node node-agent/__tests__/run-desktop-evidence.mjs        # 本机真实证据（剪贴板双向/扫描入库/受控动作/agent 端到端）
 node node-agent/__tests__/run-super-desktop-evidence.mjs  # v2.1 超级终端真实证据（打开程序/网页/媒体/流转 + 截屏 + task pull）
+node node-agent/__tests__/run-v4-evidence.mjs          # V4 执行器真实证据（隔离中枢：system.exec/window.list/window.focus/screen.capture + 审计，11 项）
 ```
 
 ## 安全边界
@@ -71,3 +73,30 @@ node node-agent/__tests__/run-super-desktop-evidence.mjs  # v2.1 超级终端真
 - `file.print` / `file.delete` 标为不可逆，走任务引擎确认；`system.open` 只允许存在的路径或 http(s) 链接。
 - 剪贴板只同步文本/链接（图片/文件走传输通道，P1），超过 20 万字符不上报，防止刷爆账本。
 - 令牌只从 `data/secrets.json` 读，不在命令行/日志打印。
+## V4 执行器能力（TENON_V2=1 时注册，供 /api/v2/remote/input 与执行器任务队列调用）
+
+| 能力 | 参数 | 行为 |
+|---|---|---|
+| `system.exec` | `{command, cwd?, timeoutMs?}` | Windows `cmd.exe /d /s /c` 执行；危险操作黑名单直接拒绝；超时 kill 进程树；stdout/stderr 各截断 4000 字；本地 `data/exec-audit.log` 审计；返回 `{ok,exitCode,stdout,stderr,durationMs}` |
+| `window.list` | `{}` | Win32 EnumWindows 枚举可见顶层窗口（标题/进程/PID/是否前台/是否最小化），最多 50 条 |
+| `window.focus` | `{title?, process?}` | 按窗口标题（模糊）或进程名激活窗口（ShowWindow + SetForegroundWindow，AppActivate 兜底），失败给可读错误 + 窗口示例 |
+| `screen.capture` | `{region?, base64?}` | 截全屏/多屏虚拟桌面，或截 `{x,y,width,height}` 区域；PNG 保存到 `data/screen/`，返回路径+宽高+字节；`base64:true` 时 ≤512KB 内联 |
+
+调用示例（中枢 7410 + 已绑定电脑；任务走队列，结果用 taskId 查）：
+
+```powershell
+$token = (Get-Content data/secrets.json -Raw | ConvertFrom-Json).operatorToken
+$H = @{ "x-tenon-token" = $token; "Content-Type" = "application/json" }
+# 1) 执行命令
+Invoke-RestMethod -Method POST "http://127.0.0.1:7410/api/v2/remote/node-local/input" -Headers $H -Body '{"type":"system.exec","payload":{"command":"dir"}}'
+# 2) 窗口列表
+Invoke-RestMethod -Method POST "http://127.0.0.1:7410/api/v2/remote/node-local/input" -Headers $H -Body '{"type":"window.list","payload":{}}'
+# 3) 截屏（区域）
+Invoke-RestMethod -Method POST "http://127.0.0.1:7410/api/v2/remote/node-local/input" -Headers $H -Body '{"type":"screen.capture","payload":{"region":{"x":0,"y":0,"width":800,"height":600}}}'
+# 4) 取任务结果（stdout/exitCode/path/windows 在 result.data 与平铺字段里）
+Invoke-RestMethod "http://127.0.0.1:7410/api/v2/remote/node-local/task/<taskId>"
+# 或看最近队列
+Invoke-RestMethod "http://127.0.0.1:7410/api/v2/remote/node-local/status"
+```
+
+安全：`system.exec` 的 manifest risk=`irreversible`（执行器应按不可逆动作要求确认）；危险词命中即拒绝并写审计；所有命令都在本机执行、不转发到其它设备。

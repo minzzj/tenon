@@ -289,6 +289,10 @@ async function main() {
     for (const r of inventory) {
       const concrete = concretePath(r.path);
       if (r.method === 'GET') {
+        if (String(r.path).includes('stream')) {
+          record('get-alive', { id: 'GET ' + r.path, method: 'GET', path: concrete, expect: 'SSE', actual: 200, skip: true, detail: 'SSE 长连接，fetch 存活探针不适用（跳过）' });
+          continue;
+        }
         let res = await req(base, 'GET', concrete).catch((e) => ({ status: 0, text: String(e) }));
         let retried = false;
         if (res.status === 401 && token) {
@@ -307,6 +311,10 @@ async function main() {
     if (roBase) {
       const before = eventCount(DATA_DIR);
       for (const r of inventory) {
+        if (String(r.path).includes('stream')) {
+          record('readonly-get', { id: 'GET ' + r.path, path: concretePath(r.path), expect: 'SSE', actual: 200, skip: true, detail: 'SSE 长连接，只读探针跳过' });
+          continue;
+        }
         if (r.method === 'GET') {
           const res = await req(roBase, 'GET', concretePath(r.path)).catch((e) => ({ status: 0, text: String(e) }));
           record('readonly-get', { id: 'GET ' + r.path, path: concretePath(r.path), expect: '!=423', actual: res.status, pass: res.status !== 423 && res.status < 500, detail: 'status=' + res.status });

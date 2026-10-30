@@ -1,0 +1,33 @@
+=== live 7410 curl 验收 2026-10-30T19:47:37（hub 已加载 V4 remote 路由）===
+node-local online=True caps=20 v4=system.exec,window.list,window.focus,screen.capture
+POST type=system.exec body={"type":"system.exec","payload":{"command":"dir"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr1zd4fa4680a","deviceId":"node-local","type":"system.exec","summary":"执行命令：dir","at":"2026-10-30T11:47:37.801Z","coalesced":false}
+  system.exec dir -> status=succeeded exitCode=0 durationMs=32 stdoutLen=1861
+  stdout 前 4 行:  驱动器 H 中的卷是 minzzj |  卷的序列号是 3055-F789 |  H:\minzzj文件\技术部\项目\官方\榫卯 的目录 | 2026/10/25  16:13    <DIR>          .
+POST type=system.exec body={"type":"system.exec","payload":{"command":"echo TENON_V4_LIVE_OK"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr2fz95e294d9","deviceId":"node-local","type":"system.exec","summary":"执行命令：echo TENON_V4_LIVE_OK","at":"2026-10-30T11:47:38.399Z","coalesced":false}
+  system.exec echo -> status=succeeded exitCode=0 stdout=TENON_V4_LIVE_OK
+POST type=system.exec body={"type":"system.exec","payload":{"command":"shutdown /s /t 0"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr2ow62c9b85b","deviceId":"node-local","type":"system.exec","summary":"执行命令：shutdown /s /t 0","at":"2026-10-30T11:47:38.721Z","coalesced":false}
+  system.exec 危险词 -> status=failed error=命令被拒绝执行：命中危险操作黑名单「关机/重启」。如确需，请在电脑本地手动执行。
+POST type=window.list body={"type":"window.list","payload":{}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr35q9ac375b2","deviceId":"node-local","type":"window.list","summary":"列出电脑可见窗口","at":"2026-10-30T11:47:39.326Z","coalesced":false}
+  window.list -> status=succeeded count=25 foreground=无标题 - 记事本 / notepad
+  windows 前 5: notepad:无标题 - 记事本 | ApplicationFrameHost:计算器 | CalculatorApp:计算器 | Cherry Studio:Cherry Studio | ClawsGO:ClawsGO Science
+POST type=app body={"type":"app","payload":{"app":"notepad"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr48n10e97f30","deviceId":"node-local","type":"app.launch","summary":"手机遥控：打开程序 notepad","at":"2026-10-30T11:47:40.728Z","coalesced":false}
+  app.launch notepad -> succeeded | 已打开「记事本」（进程已确认运行，PID 14184）
+POST type=window.focus body={"type":"window.focus","payload":{"process":"notepad"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr72k016bda50","deviceId":"node-local","type":"window.focus","summary":"切换到窗口 notepad","at":"2026-10-30T11:47:44.397Z","coalesced":false}
+  window.focus -> status=succeeded title=无标题 - 记事本 process=notepad pid=22788
+POST type=window.focus body={"type":"window.focus","payload":{"title":"缁濆涓嶅瓨鍦ㄧ殑绐楀彛-V4-XYZ"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr85g8477b530","deviceId":"node-local","type":"window.focus","summary":"切换到窗口 绝对不存在的窗口-V4-XYZ","at":"2026-10-30T11:47:45.797Z","coalesced":false}
+  window.focus 反例 -> status=failed error=未找到匹配的窗口；当前窗口示例：无标题 - 记事本 ｜ 无标题 - 记事本 ｜ 无标题 - 记事本 ｜ C:\WINDOWS\SYSTEM32\cmd.exe ｜ 无标题 - 记事本
+POST type=screen.capture body={"type":"screen.capture","payload":{"region":{"x":0,"y":0,"width":640,"height":480}}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwr989e84f01eb","deviceId":"node-local","type":"screen.capture","summary":"截取屏幕区域 640×480","at":"2026-10-30T11:47:47.193Z","coalesced":false}
+  screen.capture -> status=succeeded 640x480 bytes=9256 magic=89504e47 path=H:\minzzj文件\技术部\项目\官方\榫卯\data\screen\screen-20261030-194747-767.png
+POST type=system.exec body={"type":"system.exec","payload":{"command":"taskkill /IM notepad.exe /F"}}
+  -> {"ok":true,"queued":true,"taskId":"task_mvuwrihfb8fb863b","deviceId":"node-local","type":"system.exec","summary":"执行命令：taskkill /IM notepad.exe /F","at":"2026-10-30T11:47:59.188Z","coalesced":false}
+  清理记事本完成
+  data/exec-audit.log lines=5
+  最后一条: {"at":"2026-10-30T11:47:59.935Z","nodeId":"node-local","taskId":"task_mvuwrihfb8fb863b","via":"node-agent","command":"taskkill /IM notepad.exe /F","cwd":"H:\\minzzj鏂囦欢\\鎶€鏈儴\\椤圭洰\\瀹樻柟\\姒嵂","timeoutMs":15000,"ok":true,"exitCode":0,"timeout":false,"durationMs":112,"stdoutPreview":"鎴愬姛: 宸茬粓姝㈣繘绋?\"notepad.exe\"锛屽叾 PID 涓?27712銆俓r\n鎴愬姛: 宸茬粓姝㈣繘绋?\"notepad.exe\"锛屽叾 PID 涓?22788銆俓r\n鎴愬姛: 宸茬粓姝㈣繘绋?\"notepad.exe\"锛屽叾 PID 涓?14184銆俓r\n鎴愬姛: 宸茬粓姝㈣繘绋?\"notepad.exe\"锛屽叾 PID 涓?35880銆俓r\n","stderrPreview":"","error":null}

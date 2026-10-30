@@ -20,6 +20,7 @@ export function replay(events) {
     org: { users: {}, policy: {}, approvals: [], denied: [] },
     super: { asks: [], handoffs: [] },
     devices: { bindings: {} },
+    voice: { transcripts: [], wake: null, commands: [], replies: [], diary: [] },
     seq: 0,
     dataAsOf: null,
     startedAt: null,
@@ -464,6 +465,37 @@ function apply(ev, s) {
       s.org.users[d.userId] = { userId: d.userId, name: d.name || d.userId, role: d.role || 'member', at: ev.at };
       break;
     }
+    case 'voice.transcript': {
+      s.voice.transcripts.push({ at: ev.at, text: d.text || '', source: d.source || 'mic', wake: !!d.wake, sensitive: !!d.sensitive });
+      if (s.voice.transcripts.length > 500) s.voice.transcripts = s.voice.transcripts.slice(-500);
+      break;
+    }
+    case 'voice.wake': {
+      s.voice.wake = { at: ev.at, word: d.word || '', text: d.text || '' };
+      break;
+    }
+    case 'voice.command': {
+      s.voice.commands.push({ at: ev.at, text: d.text || '', reply: d.reply || '', actions: d.actions || [], ok: d.ok !== false, provider: d.provider || '' });
+      if (s.voice.commands.length > 200) s.voice.commands = s.voice.commands.slice(-200);
+      break;
+    }
+    case 'voice.reply': {
+      s.voice.replies.push({ at: ev.at, text: d.text || '', tts: !!d.tts });
+      if (s.voice.replies.length > 200) s.voice.replies = s.voice.replies.slice(-200);
+      break;
+    }
+    case 'voice.diary': {
+      s.voice.diary.push({ at: ev.at, date: d.date || '', kind: d.kind || 'diary', path: d.path || '', summary: d.summary || '' });
+      if (s.voice.diary.length > 100) s.voice.diary = s.voice.diary.slice(-100);
+      break;
+    }
+    case 'voice.screen': {
+      // 24/7 屏幕/窗口文本记录（仅保留最近 300 条在内存态，全文在 data/voice/transcripts）
+      if (!s.voice.screenLog) s.voice.screenLog = [];
+      s.voice.screenLog.push({ at: ev.at, kind: d.kind || 'screen', text: (d.text || '').slice(0, 500), app: d.app || '' });
+      if (s.voice.screenLog.length > 300) s.voice.screenLog = s.voice.screenLog.slice(-300);
+      break;
+    }
     case 'device.bound': {
       s.devices.bindings[d.deviceId] = { deviceId: d.deviceId, name: d.name || d.deviceId, by: d.by || '你', at: ev.at };
       break;
@@ -613,6 +645,14 @@ export function snapshot(state, extra = {}) {
         basket: assets.basket || [],
       },
       scenes: { items: Object.values(scenes.items || {}), runs: (scenes.runs || []).slice(-10).reverse() },
+      voice: {
+        transcripts: ((state.voice && state.voice.transcripts) || []).slice(-20).reverse(),
+        screenLog: ((state.voice && state.voice.screenLog) || []).slice(-10).reverse(),
+        wake: (state.voice && state.voice.wake) || null,
+        commands: ((state.voice && state.voice.commands) || []).slice(-10).reverse(),
+        replies: ((state.voice && state.voice.replies) || []).slice(-10).reverse(),
+        diary: ((state.voice && state.voice.diary) || []).slice(-5).reverse(),
+      },
       devices: {
         bindings: Object.values((state.devices && state.devices.bindings) || {}),
         lastAction: (state.devices && state.devices.lastAction) || null,

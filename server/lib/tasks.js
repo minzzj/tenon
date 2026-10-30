@@ -93,11 +93,17 @@ export async function createDraft({ ledger, ai, state, text, source = 'desktop',
 
 export function confirmTask({ ledger, state, taskId, note }) {
   const t = state.tasks[taskId];
-  if (!t) throw new Error('任务不存在');
-  if (t.status !== 'pending') throw new Error('该任务不在待确认状态');
+  if (!t) return { ok: false, notFound: true, message: '任务不存在或已被清理' };
+  if (t.status !== 'pending') {
+    // 幂等友好：任务已被确认/执行/取消时不再报错（手机端重复点「确认」很常见）
+    const label = t.status === 'succeeded' || t.status === 'done' ? '已执行完成'
+      : t.status === 'running' ? '正在执行' : t.status === 'rejected' ? '已拒绝'
+      : t.status === 'cancelled' ? '已取消' : ('当前状态：' + t.status);
+    return { ok: true, already: true, status: t.status, message: '该任务' + label + '，无需再次确认' };
+  }
   ledger.append('task.confirmed', { taskId, confirmedBy: '你', note: note || '确认执行不可逆动作' });
   ledger.append('task.queued', { taskId, nodeId: t.nodeId, note: '确认后派发' });
-  return state.tasks[taskId];
+  return { ok: true, already: false, status: 'queued', task: state.tasks[taskId] };
 }
 
 export function rejectTask({ ledger, taskId, reason }) {

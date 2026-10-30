@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>榫卯 · 超级终端</title>
+<link rel="stylesheet" href="super-v4.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="dot" id="online-dot"></span><span class="logo">榫</span><b>榫卯</b><span class="sub">超级终端</span></div>
+    <div class="chips">
+      <span class="chip" id="chip-voice" data-testid="chip-voice">语音待机</span>
+      <span class="chip" id="chip-screen" data-testid="chip-screen">屏幕采集中</span>
+      <span class="chip" id="chip-agent" data-testid="chip-agent">自研执行器</span>
+      <button class="icon-btn" id="btn-settings" title="设置" data-testid="btn-settings">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="page-home" class="page active">
+      <div class="orb-wrap">
+        <button id="mic-orb" class="orb" data-testid="mic-orb" aria-label="语音">
+          <span class="orb-inner">🎙</span>
+          <span class="orb-ring"></span>
+        </button>
+      </div>
+      <div id="subtitle" class="subtitle" data-testid="subtitle">
+        <span id="sub-partial" class="partial"></span>
+        <span id="sub-final" class="final">说「榫卯」唤醒，或点击麦克风</span>
+      </div>
+      <div class="composer">
+        <input id="cmd-input" data-testid="cmd-input" placeholder="也可以直接输入命令，例如：打开记事本，把音量调到 60" />
+        <button id="cmd-send" class="primary" data-testid="cmd-send">发送</button>
+      </div>
+      <div id="result" class="result-card hidden" data-testid="result-card">
+        <div class="result-head"><span id="result-provider" class="badge"></span><span id="result-time" class="muted"></span></div>
+        <div id="result-say" class="say"></div>
+        <div id="result-steps" class="steps"></div>
+        <div id="result-actions" class="result-actions"></div>
+      </div>
+      <div class="quick" data-testid="quick-actions">
+        <button data-cmd="打开记事本">打开记事本</button>
+        <button data-cmd="把电脑音量调到 60">音量 60</button>
+        <button data-cmd="回家模式">回家模式</button>
+        <button data-cmd="今天都做了什么？帮我总结一下">总结今天</button>
+      </div>
+      <div class="hint" id="home-hint">提示：手机与电脑同一 WiFi；手机 App 录音后由电脑本地识别。</div>
+    </section>
+
+    <section id="page-devices" class="page">
+      <div class="page-head"><h2>设备</h2><div><button class="ghost" id="dev-refresh">刷新</button></div></div>
+      <div class="hint">同一 WiFi 自动发现；点「使用这台」即完成绑定，无需扫码。</div>
+      <div id="device-list" class="device-list" data-testid="device-list"></div>
+    </section>
+
+    <section id="page-today" class="page">
+      <div class="page-head"><h2>今日</h2><div><button class="ghost" id="diary-generate" data-testid="diary-generate">现在总结</button></div></div>
+      <div id="diary-card" class="result-card hidden" data-testid="diary-card"><div class="result-head"><span class="badge" id="diary-provider"></span><span class="muted" id="diary-time"></span></div><div id="diary-md" class="markdown"></div></div>
+      <div class="today-cols">
+        <div class="col"><h3>语音记录 <a class="link" id="today-refresh" href="#">刷新</a></h3><div id="voice-list" class="list"></div></div>
+        <div class="col"><h3>屏幕文字</h3><div id="screen-list" class="list"></div></div>
+      </div>
+    </section>
+
+    <section id="page-settings" class="page">
+      <div class="page-head"><h2>设置</h2></div>
+      <div class="settings">
+        <label>操作令牌 <input id="set-token" type="password" placeholder="中枢操作令牌（data/secrets.json）" /></label>
+        <label>执行智能体 <select id="set-agent" data-testid="set-agent"><option value="builtin">榫卯自研执行器（DeepSeek 规划）</option><option value="openclaw">OpenClaw 小龙虾（本机已部署）</option></select></label>
+        <label class="row">常驻语音监听 <input id="set-enabled" type="checkbox" /></label>
+        <label>唤醒词（逗号分隔）<input id="set-wakewords" /></label>
+        <label class="row">语音回复播报 <input id="set-tts" type="checkbox" /></label>
+        <label>每晚总结时间 <input id="set-diary-time" placeholder="23:00" /></label>
+        <label>记录保留天数 <input id="set-retention" type="number" min="1" max="365" /></label>
+        <label>屏幕采集间隔（秒，重启采集生效）<input id="set-screen-interval" type="number" min="10" /></label>
+        <div class="row btns"><button id="set-load" class="ghost">读取</button><button id="set-save" class="primary" data-testid="settings-save">保存到中枢</button><button id="set-diag" class="ghost">诊断</button></div>
+        <div id="settings-msg" class="muted"></div>
+        <div class="privacy">隐私：音频、屏幕文字、日报只存在你自己的电脑；只有「唤醒命令文本」和「每晚总结」会发给 DeepSeek。屏幕采集可随时在托盘暂停。</div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-tab="home" class="tab active" data-testid="tab-home">首页</button>
+    <button data-tab="devices" class="tab" data-testid="tab-devices">设备</button>
+    <button data-tab="today" class="tab" data-testid="tab-today">今日</button>
+    <button data-tab="settings" class="tab" data-testid="tab-settings">设置</button>
+  </nav>
+</div>
+<script src="super-v4.js"></script>
+</body>
+</html>
