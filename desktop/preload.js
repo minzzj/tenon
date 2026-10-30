@@ -10,3 +10,10 @@ contextBridge.exposeInMainWorld('tenonDesktop', {
   generateDiary: () => ipcRenderer.invoke('desktop:generateDiary'),
   onState: (cb) => { if (typeof cb === 'function') ipcRenderer.on('desktop:state', (_e, s) => cb(s)); },
 });
+// 悬浮快捷录音按钮专用
+contextBridge.exposeInMainWorld('tenonQuick', {
+  toggle: () => ipcRenderer.invoke('quick:toggle'),
+  getStatus: () => ipcRenderer.invoke('quick:getStatus'),
+  hide: () => ipcRenderer.invoke('quick:hide'),
+  onStatus: (cb) => { if (typeof cb === 'function') ipcRenderer.on('quick:status', (_e, s) => cb(s)); },
+});

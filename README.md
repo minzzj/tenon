@@ -231,6 +231,11 @@ Double-click the desktop shortcut "榫卯超级终端", the single-file portable
 
 Chinese speech recognition now defaults to **FunASR Paraformer-large** (VAD + punctuation + configurable hotwords) instead of SenseVoiceSmall, and the always-on **wake detector is separated from the recording/command pipeline**: the wake stage only transcribes 0.5–2.5 s clips and matches text/pinyin aliases (extra homophone aliases included), then the record stage opens a command session with full VAD segmentation and punctuation. Real loopback test (speaker→microphone): wake "榫卯" → "把音量调到六十" → volume changed 55→61 (rule, 492 ms). Same 11-audio benchmark: commands 6/6, wake 4/5 exact + 1/5 via pinyin alias.
 
+### 0.6.2 · quick-record floating ball + wake/record split fixes (bug-fix release)
+
+- Desktop: always-on-top floating mic ball at bottom-right. One click starts recording immediately (no wake word), AI executes the utterance directly (not a summary), reply shown in a bubble; click again to end. Global `MediaPlayPause` (headset play/pause button) and `Ctrl+Alt+Space` also trigger it; tray menu entries added.
+- Fixed: voice listening could be left disabled so ASR never ran — app now auto-enables listening on startup and lazily restarts ASR; no duplicate ASR processes; recognition caption is no longer overwritten by AI replies; input box stays an input box; live partial text while speaking; software AGC + lower VAD threshold for far-field mics; wake session window ≥8 s with auto-extension.
+
 ## V4 Super Terminal (v0.5.0, 2026-10-30)
 
 **One desktop program is enough.** "Tenon Super Terminal" is an Electron desktop app (tray-resident, shipped as a single-file portable build) with the local hub built in: say one sentence and it drives programs, shell commands and devices at home.

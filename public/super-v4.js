@@ -218,7 +218,7 @@
       if (st.lastReply && st.lastReply.at && st.lastReply.at !== S._lastReplyAt) {
         S._lastReplyAt = st.lastReply.at;
         renderResult({ say: st.lastReply.text, provider: st.lastReply.provider, latencyMs: st.lastReply.latencyMs, needConfirm: st.lastReply.needConfirm, confirmId: st.lastReply.confirmId, actions: st.lastCommand && st.lastCommand.actions });
-        setCaption(st.lastReply.text || S.lastFinal);
+        /* 修复：回复不再覆盖识别框（识别框只显示“听到的话”） */
       }
       var sc = $('chip-screen');
       if (sc) sc.textContent = (window.tenonDesktop && window.tenonDesktop.screenCapture === false) ? '屏幕采集暂停' : '屏幕采集';
@@ -1024,21 +1024,17 @@
       return;
     }
     if (S.agent === 'openclaw') {
-      setCaption('“' + cmd + '” → OpenClaw（小龙虾）执行中…');
       try {
         var r0 = await api('POST', '/api/v2/agent/openclaw', { text: cmd, timeoutMs: 180000 });
         var d0 = r0.data || {};
         renderResult({ say: d0.say || ('OpenClaw 完成（' + (d0.durationMs || 0) + 'ms）'), provider: 'openclaw · ' + (d0.model || ''), latencyMs: d0.durationMs, steps: [] });
-        setCaption(d0.say || '');
       } catch (e) { renderResult({ say: 'OpenClaw 执行失败：' + e.message + '（可到设置切回自研执行器）', error: true }); }
       return;
     }
-    setCaption('“' + cmd + '” → 电脑理解中…');
     try {
       var r = await api('POST', '/api/v2/voice/command', { text: cmd });
       var d = r.data || {};
       renderResult(d);
-      setCaption(d.say || d.text || '');
       scheduleRefreshAfterVoice();
     } catch (e) { renderResult({ say: '执行失败：' + e.message, error: true }); }
   }

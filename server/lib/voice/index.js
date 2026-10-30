@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { replay } from '../state.js';
 import { nowIso } from '../link/util.js';
 import { loadConfig, saveConfig, publicConfig, PATCHABLE_KEYS, VOICE_VERSION } from './config.js';
@@ -479,6 +479,11 @@ export function createVoiceService(opts = {}) {
   // ---------------- 生命周期 ----------------
   function start({ by = 'user' } = {}) {
     if (readOnly) throw httpError(423, '只读实例不能开启语音服务');
+    const curAsr = workers.state && workers.state.asr ? workers.state.asr.state : 'stopped';
+    if (status.enabled && (curAsr === 'running' || curAsr === 'starting')) {
+      // 已在监听：不重复拉起 worker（避免两个 ASR 进程抢麦克风）
+      return getStatus();
+    }
     status.enabled = true;
     config = saveConfig(dataDir, { ...config, enabled: true });
     hub.broadcast({ type: 'start', by, ts: Date.now() });
@@ -519,7 +524,22 @@ export function createVoiceService(opts = {}) {
     return { ok: true, config: publicConfig(config) };
   }
 
+  let lastLazyAsrAt = 0;
+  function maybeLazyStartAsr() {
+    try {
+      if (!status.enabled || readOnly) return;
+      const st = workers.state && workers.state.asr ? workers.state.asr.state : 'stopped';
+      if (st === 'running' || st === 'starting') return;
+      const now = Date.now();
+      if (now - lastLazyAsrAt < 20000) return;
+      lastLazyAsrAt = now;
+      console.log('[voice] 检测到语音监听已开启但 ASR 未运行，自动拉起');
+      workers.startAsr();
+    } catch (err) { /* ignore */ }
+  }
+
   function getStatus() {
+    maybeLazyStartAsr();
     const workerStatus = workers.getStatus();
     const providers = { ...(workerStatus.providerPlan || {}) };
     if (ai && ai.available) providers.llm = 'deepseek';
@@ -824,6 +844,26 @@ export function createVoiceService(opts = {}) {
   }
   loadPendingConfirms();
 
+  // ---- 桌面悬浮快捷录音球（轻量 Python/Tkinter 实现，随中枢启动；TENON_QUICK_BALL=0 可关闭） ----
+  let quickBallChild = null;
+  function startQuickBall() {
+    try {
+      if (readOnly) return;
+      if (process.env.TENON_QUICK_BALL === '0') return;
+      if (quickBallChild && !quickBallChild.killed) return;
+      const script = path.join(root, 'scripts', 'quick', 'quick_ball.py');
+      if (!fs.existsSync(script)) { console.warn('[voice] 悬浮球脚本不存在：' + script); return; }
+      quickBallChild = spawn(config.workers.python || 'python', [script], {
+        cwd: root, detached: true, windowsHide: true, stdio: 'ignore',
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', TENON_HUB_URL: 'http://127.0.0.1:' + (process.env.TENON_PORT || 7410) },
+      });
+      quickBallChild.on('error', (e) => console.warn('[voice] 悬浮球启动失败：' + String(e && e.message)));
+      quickBallChild.unref();
+      console.log('[voice] 桌面悬浮快捷录音球已启动（点一下直接录音→执行）');
+    } catch (err) { console.warn('[voice] 悬浮球异常：' + String((err && err.message) || err)); }
+  }
+  startQuickBall();
+
   const routes = [
     { method: 'GET', path: '/voice/status', handler: async (req, res) => sendJson(res, 200, getStatus()) },
     { method: 'GET', path: '/voice/config', handler: async (req, res) => sendJson(res, 200, { ok: true, config: publicConfig(config), versions: { voice: VOICE_VERSION } }) },
@@ -834,6 +874,31 @@ export function createVoiceService(opts = {}) {
     } },
     { method: 'POST', path: '/voice/start', handler: async (req, res, ctx) => { requireWrite(req, ctx); sendJson(res, 200, { ok: true, status: start({ by: 'user' }) }); } },
     { method: 'POST', path: '/voice/stop', handler: async (req, res, ctx) => { requireWrite(req, ctx); sendJson(res, 200, { ok: true, status: stop({ by: 'user' }) }); } },
+    { method: 'POST', path: '/voice/quick/start', handler: async (req, res, ctx) => {
+      requireWrite(req, ctx);
+      if (!status.enabled) start({ by: 'quick' });
+      // 等待 ASR worker 就绪（模型首次加载可能 20-40s；mock 模式直接可用）
+      const isMock = !!(config.mock && config.mock.enabled);
+      let ready = isMock;
+      for (let i = 0; i < 60 && !ready; i += 1) {
+        const st = workers.state && workers.state.asr ? workers.state.asr.state : 'stopped';
+        if (st === 'running') { ready = true; break; }
+        if (st === 'unavailable') break;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      const sent = ready && (isMock || typeof workers.startQuickRecord !== 'function' ? true : workers.startQuickRecord());
+      if (!sent) { sendJson(res, 200, { ok: false, error: '语音引擎未就绪，请稍等几秒再试', status: getStatus() }); return; }
+      startSession('quick');
+      setState('session');
+      hub.broadcast({ type: 'quick_start', ts: Date.now() });
+      sendJson(res, 200, { ok: true, quick: true, status: getStatus() });
+    } },
+    { method: 'POST', path: '/voice/quick/stop', handler: async (req, res, ctx) => {
+      requireWrite(req, ctx);
+      try { if (typeof workers.stopQuickRecord === 'function') workers.stopQuickRecord(); } catch (err) { /* ignore */ }
+      endSession('quick-stop');
+      sendJson(res, 200, { ok: true, status: getStatus() });
+    } },
     { method: 'POST', path: '/voice/command', handler: async (req, res, ctx) => {
       requireWrite(req, ctx);
       const body = await readJson(req);

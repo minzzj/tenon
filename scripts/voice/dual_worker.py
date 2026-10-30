@@ -114,6 +114,27 @@ class ParaformerEngine:
         return {"ok": True, "text": text, "provider": self.provider, "ms": int((time.time() - t0) * 1000),
                 "pinyin": to_pinyin(text)}
 
+def agc_bytes(data, target_rms=1400, max_gain=10.0):
+    """软件自动增益：把片段音量拉到目标 RMS 附近（远场/小音量麦克风提升识别率）"""
+    try:
+        import array
+        a = array.array("h")
+        a.frombytes(bytes(data[: len(data) // 2 * 2]))
+        if not a:
+            return bytes(data)
+        s = 0
+        for v in a:
+            s += int(v) * int(v)
+        rms = (s / len(a)) ** 0.5
+        if rms <= 1:
+            return bytes(data)
+        gain = min(max_gain, max(1.0, target_rms / rms))
+        out = array.array("h", (max(-32768, min(32767, int(v * gain))) for v in a))
+        return out.tobytes()
+    except Exception:
+        return bytes(data)
+
+
 def write_wav(path, data, sr=16000):
     with wave.open(path, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
@@ -123,6 +144,7 @@ class DualEngine:
     def __init__(self, args):
         self.args = args
         os.makedirs(TMP_DIR, exist_ok=True)
+        self.ctrl = queue.Queue()  # stdin 控制：start_session / stop_session（快捷录音用）
         self.wake_engine = ParaformerEngine(provider=args.wake_provider, punc=False)
         self.record_engine = ParaformerEngine(provider=args.record_provider, punc=True) if args.record_provider != args.wake_provider else self.wake_engine
         self.hotword = " ".join([w for w in (args.hotwords or "").split() if w])
@@ -151,6 +173,19 @@ class DualEngine:
         emit({"type": "session_end", "reason": "simulate-done"})
         return 0
 
+    def simulate_quick(self, wavs):
+        """模拟：点击悬浮按钮 → 立即记录会话（无需唤醒词）→ 每个文件出 partial/final"""
+        emit({"type": "ready", "wakeProvider": self.args.wake_provider, "recordProvider": self.args.record_provider, "mic": None, "simulate": True})
+        emit({"type": "session_start", "reason": "quick"})
+        for wav in wavs:
+            r = self.record_engine.transcribe(wav, hotword=self.hotword, use_punc=False)
+            if r.get("text"):
+                emit({"type": "partial", "text": r["text"], "provider": r["provider"], "ms": r["ms"]})
+            rr = self.record_engine.transcribe(wav, hotword=self.hotword, use_punc=True)
+            emit({"type": "final", "text": rr["text"], "pinyin": rr["pinyin"], "provider": rr["provider"], "ms": rr["ms"]})
+        emit({"type": "session_end", "reason": "quick-done"})
+        return 0
+
     # ---------- 真实麦克风 ----------
     def mic_loop(self):
         ff = DEFAULT_FFMPEG if os.path.exists(DEFAULT_FFMPEG) else "ffmpeg"
@@ -159,6 +194,26 @@ class DualEngine:
                "-ac", "1", "-ar", "16000", "-f", "s16le", "-"]
         log("[dual] mic:", mic)
         emit({"type": "ready", "wakeProvider": self.args.wake_provider, "recordProvider": self.args.record_provider, "mic": mic})
+
+        # stdin 控制线程：快捷录音按钮/耳机按键可在任意时刻强制进入「立即记录」会话（无需唤醒词）
+        def _stdin_reader():
+            try:
+                for line in sys.stdin:
+                    line = (line or "").strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    self.ctrl.put(obj)
+            except Exception:
+                pass
+        try:
+            threading.Thread(target=_stdin_reader, daemon=True).start()
+        except Exception:
+            pass
+
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         frame_ms = 100
         bpf = 16000 * 2 * frame_ms // 1000
@@ -173,12 +228,36 @@ class DualEngine:
         mode = "wake"
         seg = bytearray(); speech = False; silent = 0; frame_no = 0
         session_last = time.time()
+        last_partial_at = 0.0
+
+        def maybe_partial():
+            nonlocal last_partial_at
+            if mode != "session" or not speech:
+                return
+            now = time.time()
+            if now - last_partial_at < 1.2:
+                return
+            if len(seg) < bpf * 6:
+                return
+            last_partial_at = now
+            path = os.path.join(TMP_DIR, "dual-partial-%d.wav" % int(now * 1000))
+            try:
+                write_wav(path, agc_bytes(seg))
+                rr = self.record_engine.transcribe(path, hotword=self.hotword, use_punc=False)
+                if rr.get("text"):
+                    emit({"type": "partial", "text": rr["text"], "provider": rr["provider"], "ms": rr["ms"]})
+            except Exception:
+                pass
+            finally:
+                try: os.remove(path)
+                except Exception: pass
+
         def flush(reason):
             nonlocal seg, speech, silent
             if len(seg) < bpf * 3:
                 seg = bytearray(); speech = False; silent = 0; return
             path = os.path.join(TMP_DIR, "dual-%d.wav" % int(time.time() * 1000))
-            write_wav(path, seg)
+            write_wav(path, agc_bytes(seg))
             raw = bytes(seg); seg = bytearray(); speech = False; silent = 0
             try:
                 if mode == "wake":
@@ -216,6 +295,21 @@ class DualEngine:
             chunk = proc.stdout.read(bpf)
             if not chunk:
                 break
+            # 处理外部控制（快捷录音：立即开会话 / 结束会话）
+            while True:
+                try:
+                    ctl = self.ctrl.get_nowait()
+                except queue.Empty:
+                    break
+                cname = str((ctl or {}).get("cmd") or "")
+                if cname == "start_session":
+                    if mode != "session":
+                        mode = "session"
+                        session_last = time.time()
+                        emit({"type": "session_start", "reason": "quick"})
+                elif cname == "stop_session":
+                    if mode == "session":
+                        leave_session("remote-stop")
             buf.extend(chunk)
             while len(buf) >= bpf:
                 frame = bytes(buf[:bpf]); del buf[:bpf]
@@ -227,7 +321,9 @@ class DualEngine:
                     if not speech:
                         speech = True; silent = 0
                     seg.extend(frame); silent = 0
-                    if mode == "session": session_last = time.time()
+                    if mode == "session":
+                        session_last = time.time()
+                        maybe_partial()
                 else:
                     if speech:
                         silent += 1; seg.extend(frame)
@@ -270,13 +366,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mic", action="store_true")
     ap.add_argument("--simulate", nargs="*", default=None)
+    ap.add_argument("--simulate-quick", nargs="*", default=None)
     ap.add_argument("--devices", action="store_true")
     ap.add_argument("--mic-device", default="")
     ap.add_argument("--wake-provider", default="paraformer")
     ap.add_argument("--record-provider", default="paraformer")
     ap.add_argument("--hotwords", default="")
     ap.add_argument("--wake-words", default="")
-    ap.add_argument("--threshold", type=int, default=350)
+    ap.add_argument("--threshold", type=int, default=200)
     ap.add_argument("--wake-silence-ms", type=int, default=500)
     ap.add_argument("--wake-max-ms", type=int, default=2500)
     ap.add_argument("--record-silence-ms", type=int, default=1000)
@@ -286,6 +383,8 @@ def main():
     if args.devices:
         for d in list_devices(): print(d)
         return 0
+    if args.simulate_quick is not None:
+        return DualEngine(args).simulate_quick(args.simulate_quick)
     if args.simulate is not None:
         return DualEngine(args).simulate(args.simulate)
     if args.mic:

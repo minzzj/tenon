@@ -1,6 +1,6 @@
 // 榫卯超级终端 · Electron 桌面主进程（V4 单程序）
 // 功能：托盘常驻；启动本地中枢（复用 server/start.js）；启动屏幕文字采集；加载超级终端界面；托盘菜单控制监听/采集/总结/退出。
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain, Notification, globalShortcut, screen } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -30,6 +30,8 @@ const PAUSE_FILE = path.join(DATA_DIR, 'voice', 'screen.pause');
 const LOG_DIR = path.join(ROOT, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'desktop.log');
 let win = null, tray = null, hubChild = null, captureChild = null, quitting = false;
+let overlay = null;
+let quick = { phase: 'idle', said: '', reply: '', busy: false, active: false, lastReplyAt: 0, lastSaidAt: 0 };
 let token = '';
 let state = { voiceListening: false, screenCapture: true };
 
@@ -126,6 +128,106 @@ function sendToRenderer() {
 function publicState() {
   return { isDesktop: true, version: app.getVersion(), hub: HUB, voiceListening: state.voiceListening, screenCapture: state.screenCapture, pauseFile: PAUSE_FILE };
 }
+function overlayUrl() { return HUB + '/desktop-overlay.html?desktop=1'; }
+function overlayFile() { return path.join(__dirname, 'overlay.html'); }
+function createOverlay() {
+  try {
+    if (overlay && !overlay.isDestroyed()) return overlay;
+    const area = screen.getPrimaryDisplay().workArea;
+    overlay = new BrowserWindow({
+      width: 212, height: 148,
+      x: Math.max(0, area.x + area.width - 226),
+      y: Math.max(0, area.y + area.height - 300),
+      frame: false, transparent: true, resizable: false, movable: true,
+      minimizable: false, maximizable: false, fullscreenable: false,
+      skipTaskbar: true, alwaysOnTop: true, hasShadow: false, focusable: true,
+      title: '榫卯快捷录音',
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+    });
+    overlay.setAlwaysOnTop(true, 'screen-saver');
+    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    overlay.loadFile(overlayFile());
+    overlay.once('ready-to-show', () => { try { overlay.showInactive(); } catch (_) {} });
+    overlay.on('closed', () => { overlay = null; });
+    overlay.webContents.on('did-fail-load', () => { log('overlay load failed'); });
+    log('overlay created');
+    return overlay;
+  } catch (e) { log('overlay err', e.message); return null; }
+}
+function hideOverlay() { try { if (overlay && !overlay.isDestroyed()) overlay.hide(); } catch (_) {} }
+function showOverlay() { try { if (!overlay) createOverlay(); else overlay.showInactive(); sendQuickStatus(); } catch (_) {} }
+function sendQuickStatus(extra) {
+  if (!overlay || overlay.isDestroyed()) return;
+  const payload = Object.assign({ phase: quick.phase, said: quick.said, reply: quick.reply, active: quick.active }, extra || {});
+  try { overlay.webContents.send('quick:status', payload); } catch (_) {}
+  rebuildTray();
+}
+async function refreshQuickState() {
+  const r = await api('GET', '/api/v2/voice/status');
+  if (!r || !r.json) return;
+  const st = r.json;
+  const ws = st.workers || {};
+  const asr = ws.asr || {};
+  let phase = 'idle';
+  if (quick.active || st.state === 'session' || st.state === 'reply' || st.state === 'starting') {
+    if (st.state === 'starting' || asr.state === 'starting') phase = 'thinking';
+    else if (st.busy) phase = 'thinking';
+    else if (st.state === 'reply') phase = 'speaking';
+    else if (st.state === 'session') phase = 'listening';
+    else phase = 'listening';
+  }
+  if (st.lastError && !quick.active) phase = 'err';
+  const lt = st.lastTranscript;
+  if (lt && lt.at && lt.at !== quick.lastSaidAt && (lt.source === 'mic')) { quick.said = lt.text || ''; quick.lastSaidAt = lt.at; }
+  const lr = st.lastReply;
+  if (lr && lr.at && lr.at !== quick.lastReplyAt) { quick.reply = lr.text || ''; quick.lastReplyAt = lr.at; }
+  if (!quick.active && (st.state === 'idle' || st.state === 'listening')) {
+    if (Date.now() - (quick.lastActivityAt || 0) > 12000) { quick.said = ''; quick.reply = ''; phase = 'idle'; }
+  }
+  quick.phase = phase;
+  sendQuickStatus();
+}
+async function quickToggle() {
+  if (quick.busy) return quick.phase;
+  quick.busy = true;
+  try {
+    if (quick.active) {
+      await api('POST', '/api/v2/voice/quick/stop');
+      quick.active = false; quick.phase = 'idle';
+      sendQuickStatus();
+    } else {
+      quick.active = true; quick.phase = 'thinking'; quick.said = ''; quick.reply = '';
+      quick.lastActivityAt = Date.now();
+      sendQuickStatus();
+      const r = await api('POST', '/api/v2/voice/quick/start');
+      if (!r || !r.json || r.json.ok !== true) {
+        quick.active = false; quick.phase = 'err';
+        quick.reply = (r && r.json && r.json.error) || '语音引擎还没准备好，请稍等几秒再点';
+        sendQuickStatus();
+        setTimeout(() => { quick.phase = 'idle'; sendQuickStatus(); }, 3200);
+      } else {
+        quick.phase = 'listening';
+        sendQuickStatus();
+        // 最多 20 秒自动回到待机（避免一直转）
+        setTimeout(() => { if (quick.active) { quick.active = false; refreshQuickState(); } }, 25000);
+      }
+    }
+  } catch (e) {
+    quick.active = false; quick.phase = 'err'; quick.reply = String(e.message || e); sendQuickStatus();
+  } finally { quick.busy = false; }
+  return quick.phase;
+}
+function registerMediaShortcuts() {
+  try {
+    const ok1 = globalShortcut.register('MediaPlayPause', () => { quickToggle(); });
+    log('media key MediaPlayPause registered:', ok1);
+  } catch (e) { log('media key err', e.message); }
+  try {
+    const ok2 = globalShortcut.register('CommandOrControl+Alt+Space', () => { quickToggle(); });
+    log('hotkey Ctrl+Alt+Space registered:', ok2);
+  } catch (e) { log('hotkey err', e.message); }
+}
+
 function trayImage() {
   try { return nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png')); } catch (_) { return nativeImage.createEmpty(); }
 }
@@ -141,6 +243,10 @@ function rebuildTray() {
     { label: '记录 / 笔记', click: () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/notes'); } },
     { label: '提醒', click: () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/reminders'); } },
     { label: '文档（总结）', click: () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/documents'); } },
+    { type: 'separator' },
+    { label: quick.active ? '结束快捷录音' : '快捷录音（说一句直接执行）', click: () => { quickToggle(); } },
+    { label: '显示悬浮录音按钮', click: () => { showOverlay(); } },
+    { label: '隐藏悬浮录音按钮', click: () => { hideOverlay(); } },
     { type: 'separator' },
     { label: voiceLabel, click: () => toggleVoice() },
     { label: screenLabel, click: () => toggleScreen() },
@@ -181,12 +287,24 @@ async function bootstrap() {
   await new Promise((r) => setTimeout(r, 500));
   const st = await api('GET', '/api/v2/voice/status');
   if (st && st.json && st.json.enabled) state.voiceListening = st.json.state !== 'idle' || !!st.json.startedAt;
+  // 打开程序就默认进入「可录音」状态（用户常识：点开就能说）
+  try {
+    const pr = await api('PATCH', '/api/v2/voice/config', { enabled: true });
+    if (!pr || pr.status !== 200) await api('POST', '/api/v2/voice/start');
+    else await api('POST', '/api/v2/voice/start');
+    state.voiceListening = true;
+    log('voice auto-start on bootstrap');
+  } catch (e) { log('voice auto-start err', e.message); }
   createWindow();
   tray = new Tray(trayImage());
   tray.on('click', () => (win && win.isVisible() ? win.hide() : showWindow()));
   rebuildTray();
   setInterval(async () => { const j = await api('GET', '/api/v2/voice/status'); if (j && j.json) { state.voiceListening = !!j.json.enabled; rebuildTray(); sendToRenderer(); } }, 15000);
   startV5Pollers();
+  createOverlay();
+  registerMediaShortcuts();
+  setInterval(refreshQuickState, 1200);
+  setTimeout(refreshQuickState, 1500);
 }
 // ---------- V5：提醒 / 新文档系统通知 ----------
 const notified = new Set();
@@ -239,6 +357,7 @@ app.whenReady().then(bootstrap);
 app.on('window-all-closed', () => { /* 托盘常驻，不退出 */ });
 app.on('before-quit', () => {
   quitting = true;
+  try { globalShortcut.unregisterAll(); } catch (_) {}
   for (const c of [captureChild, hubChild]) { try { if (c && !c.killed) c.kill(); } catch (_) {} }
 });
 ipcMain.handle('desktop:getState', () => publicState());
@@ -246,3 +365,6 @@ ipcMain.handle('desktop:toggleVoice', () => toggleVoice());
 ipcMain.handle('desktop:toggleScreen', () => toggleScreen());
 ipcMain.handle('desktop:getToken', () => readToken());
 ipcMain.handle('desktop:generateDiary', () => api('POST', '/api/v2/voice/diary/generate', { force: true }));
+ipcMain.handle('quick:toggle', () => quickToggle());
+ipcMain.handle('quick:getStatus', () => ({ phase: quick.phase, said: quick.said, reply: quick.reply, active: quick.active }));
+ipcMain.handle('quick:hide', () => { hideOverlay(); return true; });

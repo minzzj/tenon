@@ -130,6 +130,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
   }
 
   function startAsr() {
+    if (asr.child) return true;
     asr.stopRequested = false;
     if (config.mock.enabled || config.asrProvider === 'mock') {
       startMockSequence();
@@ -163,7 +164,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     }
     try {
       setAsr({ state: 'starting', provider: split ? 'paraformer' : (config.asrProvider === 'auto' ? 'funasr' : config.asrProvider), split, lastError: null });
-      const child = spawn(config.workers.python || 'python', [realScript, ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+      const child = spawn(config.workers.python || 'python', [realScript, ...args], { cwd: root, stdio: [split ? 'pipe' : 'ignore', 'pipe', 'pipe'], env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
       asr.child = child;
       setAsr({ pid: child.pid, state: 'running' });
       asr.rl = readline.createInterface({ input: child.stdout });
@@ -230,6 +231,20 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     setAsr({ state: 'stopped', pid: null });
     return true;
   }
+
+  // ---- 快捷录音：直接让双流水线进入「记录会话」（跳过唤醒词，说一句直接交给 AI 执行） ----
+  function sendAsrCommand(obj) {
+    try {
+      if (!asr.child || !asr.child.stdin || asr.child.stdin.destroyed || !asr.child.stdin.writable) return false;
+      asr.child.stdin.write(JSON.stringify(obj) + '\n');
+      return true;
+    } catch (err) {
+      log('[voice] ASR 控制命令失败：' + String((err && err.message) || err));
+      return false;
+    }
+  }
+  function startQuickRecord() { return sendAsrCommand({ cmd: 'start_session' }); }
+  function stopQuickRecord() { return sendAsrCommand({ cmd: 'stop_session' }); }
 
   async function transcribeFile(file, { timeoutMs = 45000 } = {}) {
     const wav = abs(root, file);
@@ -484,6 +499,8 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     state,
     startAsr,
     stopAsr,
+    startQuickRecord,
+    stopQuickRecord,
     transcribeFile,
     startLlm,
     stopLlm,

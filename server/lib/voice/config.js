@@ -24,7 +24,7 @@ export const DEFAULT_CONFIG = {
     recordSilenceMs: 1000,
     recordMaxMs: 15000,
     sessionTimeoutMs: 6000,
-    threshold: 350,
+    threshold: 200,
   },
   llmProvider: 'auto', // auto | local | rule | mock
   tts: { enabled: true, play: true, voice: 'Microsoft Huihui Desktop', rate: 0, volume: 100 },
