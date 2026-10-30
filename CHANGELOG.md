@@ -32,7 +32,7 @@ V5：把「说出来的东西」真正落下来——**语音笔记、结构化�
 
 ### Verified (2026-10-30 晚)
 
-独立 Checker 终验（`_internal/checker-v5.md`）：**笔记 / 总结文档 / 提醒 / 物联 / UI / APK 全部 PASS**；回归 4/5 全绿，API 矩阵 1 FAIL（定位为 1 个 P2：只读实例 `GET /api/v2/iot/discover` 会写账本）。
+独立 Checker 终验（`_internal/checker-v5.md`）：**笔记 / 总结文档 / 提醒 / 物联 / UI / APK 全部 PASS**；回归 5/5 全绿，API 矩阵 353 PASS / 0 FAIL / 6 SKIP（P2：只读实例 `GET /api/v2/iot/discover` 写账本 → 已修复：只读守卫 + 复跑全绿）。
 
 - **笔记（10/10 PASS）**：POST 201 + id + Markdown；GET / 搜索 / PATCH / DELETE 全通；`data/notes/md/*.md` 353B（YAML front matter）；账本 `note.created/updated/deleted`；未登录 401；**语音链路「记一下：…」→ 笔记真实出现**（rule，actions=记笔记 succeeded）。
 - **结构化总结 + 文档（隔离 10/10 + live 13/13 PASS）**：隔离（无 key）`provider=template`、5 部分、md 1267B / docx 10101B（PK）/ pdf 16262B（%PDF）；**live 真实 DeepSeek 1 次**：`provider=deepseek`、5 字段、md 3113B / docx 11236B（PK）/ pdf 42525B（%PDF）、Content-Type + 文件名齐全；`/documents/stream` 200。

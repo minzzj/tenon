@@ -225,7 +225,7 @@ Full comparison: [docs/雷鸟AI眼镜对照-V5.md](docs/雷鸟AI眼镜对照-V5.
 
 Double-click the desktop shortcut "榫卯超级终端", the single-file portable build `desktop/release/TenonSuperTerminal-0.6.0-portable.exe` (~128 MB, built), or `启动超级终端.cmd` in the repo root; development mode: `cd desktop && npm start`. The old full console is still at `http://127.0.0.1:7410/legacy`. New V5 data folders: `data/notes/`, `data/reminders/`, `data/documents/`, `data/iot/`.
 
-> Version 0.6.0. Independent Checker acceptance: **notes / summary documents / reminders / IoT / UI / APK all PASS**; regression `npm test` **146/146**, v2 baseline 9/9, v1 E2E 9/9, super UI 14/14 (API matrix 352 PASS / 1 FAIL — one P2: a read-only instance writing the ledger on IoT discovery; see [delivery list](docs/交付物清单.md) §12); the APK has **no real-device test yet** (⏳).
+> Version 0.6.0. Independent Checker acceptance: **notes / summary documents / reminders / IoT / UI / APK all PASS**; regression `npm test` **146/146**, v2 baseline 9/9, v1 E2E 9/9, super UI 14/14 (API matrix 353 PASS / 0 FAIL / 6 SKIP (the earlier P2 — a read-only instance writing the ledger on IoT discovery — was fixed and re-verified); see [delivery list](docs/交付物清单.md) §12); the APK has **no real-device test yet** (⏳).
 
 ## V4 Super Terminal (v0.5.0, 2026-10-30)
 

@@ -224,7 +224,7 @@ docs/         使用手册、测试方法、测试证据、产品截图、样例
 
 双击桌面「榫卯超级终端」快捷方式、单文件便携版 `desktop/release/TenonSuperTerminal-0.6.0-portable.exe`（约 128 MB，已构建）或仓库根 `启动超级终端.cmd`；开发模式 `cd desktop && npm start`。旧完整控制台仍在 `http://127.0.0.1:7410/legacy`。V5 新数据目录：`data/notes/`、`data/reminders/`、`data/documents/`、`data/iot/`。
 
-> 版本 0.6.0。独立 Checker 终验：**笔记 / 总结文档 / 提醒 / 物联 / UI / APK 全部 PASS**；回归 `npm test` **146/146**、v2 基线 9/9、v1 E2E 9/9、super UI 14/14（API 矩阵 352 PASS / 1 FAIL，1 个 P2：只读实例 IoT 发现会写账本，详见[交付物清单](docs/交付物清单.md) §12）；APK 未真机实测（⏳）。
+> 版本 0.6.0。独立 Checker 终验：**笔记 / 总结文档 / 提醒 / 物联 / UI / APK 全部 PASS**；回归 `npm test` **146/146**、v2 基线 9/9、v1 E2E 9/9、super UI 14/14（API 矩阵 353 PASS / 0 FAIL / 6 SKIP（此前的 P2 只读实例 IoT 发现写账本已修复并复跑全绿），详见[交付物清单](docs/交付物清单.md) §12）；APK 未真机实测（⏳）。
 
 ## V4 超级终端（v0.5.0，2026-10-30）
 
