@@ -171,11 +171,18 @@ export function createVoiceService(opts = {}) {
     return status.session;
   }
 
+  function sessionWindowMs() {
+    const asrCfg = config.asr || {};
+    const wanted = Number(asrCfg.sessionTimeoutMs || 0) + 2000;
+    return Math.max(8000, Math.min(30000, wanted || 8000));
+  }
+
   function touchSession() {
     if (sessionTimer) clearTimeout(sessionTimer);
     if (!status.session) return;
-    status.session.expiresAt = new Date(Date.now() + config.silenceTimeoutMs).toISOString();
-    sessionTimer = setTimeout(() => endSession('silence-timeout'), config.silenceTimeoutMs);
+    const win = sessionWindowMs();
+    status.session.expiresAt = new Date(Date.now() + win).toISOString();
+    sessionTimer = setTimeout(() => endSession('silence-timeout'), win);
   }
 
   function endSession(reason = 'timeout') {
@@ -187,8 +194,26 @@ export function createVoiceService(opts = {}) {
   }
 
   // ---------------- 转写处理 ----------------
+  async function handleWakeEvent(ev) {
+    const raw = clampText(ev.text || '', 120);
+    const word = String(ev.word || '榫卯');
+    status.counters.wakes += 1;
+    status.lastWake = { at: nowIso(), word, via: ev.via || 'text', text: raw };
+    append('voice.wake', { word, via: ev.via || 'text', text: raw, pinyin: clampText(ev.pinyin || '', 160), source: 'mic' });
+    hub.broadcast({ type: 'wake', word, via: ev.via || 'text', text: raw, pinyin: ev.pinyin || '', ts: Date.now() });
+    startSession('wake');
+    const rest = String(ev.rest || '').replace(/^[\s,，。.!！?？]+/, '');
+    if (rest && rest.replace(/[\s,，。.!！?？]/g, '').length >= 1) {
+      await processCommand(rest, { source: 'wake', sessionId: status.sessionId });
+    }
+    return { ok: true, wake: true, word, rest };
+  }
+
   function handleAsrEvent(ev) {
     if (!ev || !ev.type) return;
+    if (ev.type === 'wake') { handleWakeEvent(ev).catch((err) => setError('唤醒处理失败：' + String(err && err.message))); return; }
+    if (ev.type === 'session_start') { if (!status.session) startSession('dual'); hub.broadcast({ type: 'session_start', ts: Date.now() }); return; }
+    if (ev.type === 'session_end') { endSession(ev.reason || 'asr-session-end'); return; }
     if (ev.type === 'partial') {
       hub.broadcast({ type: 'partial', text: clampText(ev.text, 400), provider: ev.provider || null, source: ev.source || 'mic' });
       return;
@@ -199,10 +224,15 @@ export function createVoiceService(opts = {}) {
     }
     if (ev.type === 'speech_start') {
       hub.broadcast({ type: 'speech_start', ts: Date.now() });
-      if (status.enabled && status.state === 'listening') setState('listening');
+      if (status.session) touchSession();
+      else if (status.enabled && status.state === 'listening') setState('listening');
       return;
     }
-    if (ev.type === 'speech_end') { hub.broadcast({ type: 'speech_end', ts: Date.now() }); return; }
+    if (ev.type === 'speech_end') {
+      hub.broadcast({ type: 'speech_end', ts: Date.now() });
+      if (status.session) touchSession();
+      return;
+    }
     if (ev.type === 'ready') { setState(status.enabled ? 'listening' : 'idle'); hub.broadcast({ type: 'ready', provider: ev.provider || 'funasr', ts: Date.now() }); return; }
     if (ev.type === 'heartbeat' || ev.type === 'level') { hub.broadcast({ type: 'level', level: Number(ev.level) || 0, ts: Date.now() }); return; }
     if (ev.type === 'error') { setError(ev.text || 'ASR 错误'); return; }
@@ -256,7 +286,9 @@ export function createVoiceService(opts = {}) {
     }
     if (status.session && status.sessionId) {
       touchSession();
-      await processCommand(raw, { source: 'session', sessionId: status.sessionId });
+      const r = await processCommand(raw, { source: 'session', sessionId: status.sessionId });
+      touchSession();
+      return { ok: true, wake: false, wakeSession: true, command: r };
       return { ok: true, wake: false, wakeSession: true };
     }
     if (status.enabled) setState('listening');

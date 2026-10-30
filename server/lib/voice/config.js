@@ -12,7 +12,20 @@ export const DEFAULT_CONFIG = {
   language: 'zh-CN',
   silenceTimeoutMs: 3000,
   wakeTimeoutMs: 8000,
-  asrProvider: 'auto', // auto | funasr | windows | mock | off
+  asrProvider: 'auto', // auto | paraformer | funasr | windows | mock | off
+  // V6：唤醒与记录分离（唤醒用短片段快速检测；记录用完整模型+标点；均本地）
+  asrSplit: true,
+  asr: {
+    wakeProvider: 'paraformer',
+    recordProvider: 'paraformer',
+    hotwords: ['榫卯', '小榫', '打开记事本', '音量', '调到', 'Chrome', '浏览器', '照片', '甩到电脑', '回家模式', '总结', '提醒'],
+    wakeSilenceMs: 500,
+    wakeMaxMs: 2500,
+    recordSilenceMs: 1000,
+    recordMaxMs: 15000,
+    sessionTimeoutMs: 6000,
+    threshold: 350,
+  },
   llmProvider: 'auto', // auto | local | rule | mock
   tts: { enabled: true, play: true, voice: 'Microsoft Huihui Desktop', rate: 0, volume: 100 },
   micDevice: '',
@@ -20,6 +33,7 @@ export const DEFAULT_CONFIG = {
   workers: {
     python: 'python',
     asrScript: 'scripts/voice/asr_worker.py',
+    wakeScript: 'scripts/voice/dual_worker.py',
     llmScript: 'scripts/voice/llm_worker.py',
     speakScript: 'scripts/voice/speak.ps1',
     transcribeScript: 'scripts/voice/transcribe.ps1',
@@ -76,7 +90,7 @@ export function normalizeConfig(raw = {}) {
   cfg.wakeWords = cfg.wakeWords.map((w) => String(w || '').trim()).filter(Boolean).slice(0, 8);
   cfg.silenceTimeoutMs = Math.max(800, Math.min(30000, Number(cfg.silenceTimeoutMs) || DEFAULT_CONFIG.silenceTimeoutMs));
   cfg.wakeTimeoutMs = Math.max(1000, Math.min(30000, Number(cfg.wakeTimeoutMs) || DEFAULT_CONFIG.wakeTimeoutMs));
-  if (!['auto', 'funasr', 'windows', 'mock', 'off'].includes(cfg.asrProvider)) cfg.asrProvider = 'auto';
+  if (!['auto', 'paraformer', 'funasr', 'windows', 'mock', 'off'].includes(cfg.asrProvider)) cfg.asrProvider = 'auto';
   if (!['auto', 'local', 'rule', 'mock'].includes(cfg.llmProvider)) cfg.llmProvider = 'auto';
   if (!['local', 'hub'].includes(cfg.executor.mode)) cfg.executor.mode = 'local';
   cfg.executor.baseUrl = String(cfg.executor.baseUrl || '').trim();
@@ -119,6 +133,12 @@ export function publicConfig(cfg) {
     silenceTimeoutMs: cfg.silenceTimeoutMs,
     wakeTimeoutMs: cfg.wakeTimeoutMs,
     asrProvider: cfg.asrProvider,
+    asrSplit: cfg.asrSplit !== false,
+    asr: {
+      wakeProvider: (cfg.asr && cfg.asr.wakeProvider) || 'paraformer',
+      recordProvider: (cfg.asr && cfg.asr.recordProvider) || 'paraformer',
+      hotwords: ((cfg.asr && cfg.asr.hotwords) || []).slice(0, 40),
+    },
     llmProvider: cfg.llmProvider,
     tts: { ...cfg.tts },
     micDevice: cfg.micDevice,

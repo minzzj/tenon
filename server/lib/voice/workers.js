@@ -141,11 +141,29 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
       emitAsr({ type: 'error', text: ASR_NOT_READY, code: 'ASR_NOT_READY', at: nowIso() });
       return false;
     }
+    // V6：唤醒/记录分离（dual_worker.py），不可用时回退旧 asr_worker.py --mic
+    const wakeScript = abs(root, (config.workers && config.workers.wakeScript) || 'scripts/voice/dual_worker.py');
+    const split = config.asrSplit !== false && fileExists(wakeScript);
+    const realScript = split ? wakeScript : script;
+    const asrCfg = config.asr || {};
     const args = ['--mic'];
-    if (config.micDevice) args.push('--device', String(config.micDevice));
+    if (config.micDevice) args.push('--mic-device', String(config.micDevice));
+    if (split) {
+      const hot = ((asrCfg.hotwords && asrCfg.hotwords.length) ? asrCfg.hotwords : []).concat(config.wakeWords || []);
+      if (hot.length) args.push('--hotwords', hot.join(' '));
+      args.push('--wake-words', (config.wakeWords || []).join(','));
+      args.push('--wake-provider', String(asrCfg.wakeProvider || 'paraformer'));
+      args.push('--record-provider', String(asrCfg.recordProvider || 'paraformer'));
+      args.push('--threshold', String(asrCfg.threshold || 350));
+      args.push('--wake-silence-ms', String(asrCfg.wakeSilenceMs || 500));
+      args.push('--wake-max-ms', String(asrCfg.wakeMaxMs || 2500));
+      args.push('--record-silence-ms', String(asrCfg.recordSilenceMs || 1000));
+      args.push('--record-max-ms', String(asrCfg.recordMaxMs || 15000));
+      args.push('--session-timeout-ms', String(asrCfg.sessionTimeoutMs || config.silenceTimeoutMs || 6000));
+    }
     try {
-      setAsr({ state: 'starting', provider: config.asrProvider === 'auto' ? 'funasr' : config.asrProvider, lastError: null });
-      const child = spawn(config.workers.python || 'python', [script, ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+      setAsr({ state: 'starting', provider: split ? 'paraformer' : (config.asrProvider === 'auto' ? 'funasr' : config.asrProvider), split, lastError: null });
+      const child = spawn(config.workers.python || 'python', [realScript, ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
       asr.child = child;
       setAsr({ pid: child.pid, state: 'running' });
       asr.rl = readline.createInterface({ input: child.stdout });
@@ -156,8 +174,12 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
         try { obj = JSON.parse(text); } catch { return; }
         setAsr({ lastLineAt: nowIso() });
         if (obj && obj.type === 'ready') {
-          setAsr({ state: 'running', provider: obj.provider || 'funasr', mic: obj.mic || config.micDevice || null, lastError: null });
+          setAsr({ state: 'running', provider: obj.wakeProvider || obj.provider || 'paraformer', recordProvider: obj.recordProvider || null, mic: obj.mic || config.micDevice || null, split: !!obj.recordProvider, lastError: null });
           emitAsr({ type: 'ready', provider: obj.provider || 'funasr', mic: obj.mic || null, at: nowIso() });
+        } else if (obj && obj.type === 'wake') {
+          emitAsr({ type: 'wake', text: String(obj.text || ''), word: String(obj.word || ''), via: String(obj.via || ''), rest: String(obj.rest || ''), pinyin: String(obj.pinyin || ''), provider: obj.provider || state.asr.provider, ms: obj.ms || null, at: nowIso() });
+        } else if (obj && (obj.type === 'session_start' || obj.type === 'session_end')) {
+          emitAsr({ type: obj.type, reason: obj.reason || null, at: nowIso() });
         } else if (obj && (obj.type === 'partial' || obj.type === 'final')) {
           emitAsr({ type: obj.type, text: String(obj.text || ''), pinyin: String(obj.pinyin || ''), source: 'mic', provider: obj.provider || state.asr.provider, ms: obj.ms || null, at: nowIso() });
         } else if (obj && obj.type === 'speech_start') {

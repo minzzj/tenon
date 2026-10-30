@@ -66,14 +66,18 @@ def emit(obj):
 _funasr_model = None
 _funasr_error = None
 
-def load_funasr(language="zh"):
+def load_funasr(language="zh", provider="paraformer", hotwords=""):
     global _funasr_model, _funasr_error
     if _funasr_model is not None or _funasr_error is not None:
         return _funasr_model
     try:
         from funasr import AutoModel
         t0 = time.time()
-        _funasr_model = AutoModel(model="iic/SenseVoiceSmall", disable_update=True, disable_pbar=True, device="cpu")
+        if provider == "sensevoice":
+            _funasr_model = AutoModel(model="iic/SenseVoiceSmall", disable_update=True, disable_pbar=True, device="cpu")
+        else:
+            _funasr_model = AutoModel(model="paraformer-zh", vad_model="fsmn-vad", punc_model="ct-punc",
+                                      disable_update=True, disable_pbar=True, device="cpu")
         log("[asr] SenseVoiceSmall loaded in %.1fs" % (time.time() - t0))
     except Exception as e:
         _funasr_error = str(e)[:500]
@@ -81,12 +85,17 @@ def load_funasr(language="zh"):
         _funasr_model = None
     return _funasr_model
 
-def funasr_transcribe(wav_path, language="zh"):
-    model = load_funasr(language)
+def funasr_transcribe(wav_path, language="zh", provider="paraformer", hotwords=""):
+    model = load_funasr(language, provider, hotwords)
     if model is None:
         return None
     t0 = time.time()
-    res = model.generate(input=wav_path, language=language, use_itn=True, batch_size_s=60)
+    kw = {"input": wav_path, "batch_size_s": 60}
+    if provider == "sensevoice":
+        kw.update({"language": language, "use_itn": True})
+    if hotwords:
+        kw["hotword"] = hotwords
+    res = model.generate(**kw)
     text = ""
     if isinstance(res, list) and res:
         text = res[0].get("text", "") if isinstance(res[0], dict) else str(res[0])
@@ -108,9 +117,9 @@ def windows_sr_transcribe(wav_path, language="zh-CN"):
     except Exception as e:
         return {"ok": False, "error": "windows-sr 调用失败: %s" % str(e)[:200], "ms": int((time.time() - t0) * 1000)}
 
-def transcribe_file(wav, language="zh"):
+def transcribe_file(wav, language="zh", provider="paraformer", hotwords=""):
     t0 = time.time()
-    r = funasr_transcribe(wav, language)
+    r = funasr_transcribe(wav, language, provider, hotwords)
     if r is None:
         r = windows_sr_transcribe(wav, "zh-CN" if language.startswith("zh") else language)
     r["totalMs"] = int((time.time() - t0) * 1000)
@@ -218,6 +227,8 @@ def main():
     ap.add_argument("--mic", action="store_true")
     ap.add_argument("--devices", action="store_true")
     ap.add_argument("--language", default="zh")
+    ap.add_argument("--provider", default=os.environ.get("TENON_ASR_PROVIDER", "paraformer"))
+    ap.add_argument("--hotwords", default=os.environ.get("TENON_ASR_HOTWORDS", ""))
     ap.add_argument("--mic-device", default="")
     ap.add_argument("--threshold", type=int, default=350)
     ap.add_argument("--silence-ms", type=int, default=900)
@@ -231,7 +242,7 @@ def main():
     if args.file:
         if not os.path.exists(args.file):
             emit({"ok": False, "error": "文件不存在: " + args.file}); return 1
-        emit(transcribe_file(args.file, args.language))
+        emit(transcribe_file(args.file, args.language, args.provider, args.hotwords))
         try:
             sys.stdout.flush(); sys.stderr.flush()
         except Exception:

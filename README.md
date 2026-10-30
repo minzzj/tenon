@@ -227,6 +227,10 @@ Double-click the desktop shortcut "榫卯超级终端", the single-file portable
 
 > Version 0.6.0. Independent Checker acceptance: **notes / summary documents / reminders / IoT / UI / APK all PASS**; regression `npm test` **146/146**, v2 baseline 9/9, v1 E2E 9/9, super UI 14/14 (API matrix 353 PASS / 0 FAIL / 6 SKIP (the earlier P2 — a read-only instance writing the ledger on IoT discovery — was fixed and re-verified); see [delivery list](docs/交付物清单.md) §12); the APK has **no real-device test yet** (⏳).
 
+### 0.6.1 · stronger Chinese ASR (Paraformer-large + hotwords) and separated wake/record pipelines
+
+Chinese speech recognition now defaults to **FunASR Paraformer-large** (VAD + punctuation + configurable hotwords) instead of SenseVoiceSmall, and the always-on **wake detector is separated from the recording/command pipeline**: the wake stage only transcribes 0.5–2.5 s clips and matches text/pinyin aliases (extra homophone aliases included), then the record stage opens a command session with full VAD segmentation and punctuation. Real loopback test (speaker→microphone): wake "榫卯" → "把音量调到六十" → volume changed 55→61 (rule, 492 ms). Same 11-audio benchmark: commands 6/6, wake 4/5 exact + 1/5 via pinyin alias.
+
 ## V4 Super Terminal (v0.5.0, 2026-10-30)
 
 **One desktop program is enough.** "Tenon Super Terminal" is an Electron desktop app (tray-resident, shipped as a single-file portable build) with the local hub built in: say one sentence and it drives programs, shell commands and devices at home.
