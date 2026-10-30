@@ -18,7 +18,13 @@ export const AGENT_ACTIONS = {
   'input.mouse': { label: '鼠标控制', risk: 'reversible', params: ['action', 'x', 'y', 'dx', 'dy', 'button', 'amount'] },
   'input.key': { label: '键盘输入', risk: 'reversible', params: ['text', 'combo'] },
   'input.media': { label: '媒体键', risk: 'reversible', params: ['action'] },
+  'note.create': { label: '记笔记', risk: 'reversible', params: ['text', 'title', 'tags'] },
+  'note.summarize': { label: '总结笔记', risk: 'reversible', params: ['ids', 'date', 'text'] },
+  'reminder.create': { label: '创建提醒', risk: 'reversible', params: ['text', 'at', 'recurrence', 'inMinutes'] },
+  'document.generate': { label: '生成文档', risk: 'reversible', params: ['kind', 'date', 'ids', 'title'] },
 };
+
+const AGENT_RULE_FIRST_RE = /记一下|记下来|记录一下|记录：|帮我记|备忘[:：]?|做个笔记|笔记[:：]|提醒我|提醒一下|别忘了|闹钟|总结(一下)?(今天|今日|我的记录|这段|一下)|生成(今日|今天)?总结|导出(今日|今天)?总结|做成文档|生成文档|发到手机/;
 
 const IRREVERSIBLE = new Set(['file.print', 'agent.message', 'shell.exec']);
 const DANGEROUS_SHELL = /(format|diskpart|del\s+\/|rmdir\s+\/s|shutdown|reg\s+delete|mkfs|dd\s+if=|net\s+user\s+.*\s+add|bcdedit|vssadmin|takeown|icacls\s+.*\/reset)/i;
@@ -79,6 +85,10 @@ export function normalizeAgentAction(raw, index = 0) {
   if (name === 'input.mouse') { params.action = asString(params.action || 'move'); if (!['move', 'click', 'down', 'up', 'wheel'].includes(params.action)) return { ok: false, error: 'input.mouse action 非法' }; }
   if (name === 'input.key') { if (!params.text && !params.combo) return { ok: false, error: 'input.key 需要 text 或 combo' }; }
   if (name === 'input.media') { params.action = asString(params.action || 'play-pause'); }
+  if (name === 'note.create') { params.text = asString(params.text || params.content || params.note).trim(); if (!params.text) return { ok: false, error: 'note.create 缺少 text' }; }
+  if (name === 'reminder.create') { params.text = asString(params.text || params.content || params.raw).trim(); if (!params.text) return { ok: false, error: 'reminder.create 缺少 text' }; if (params.recurrence !== undefined) params.recurrence = params.recurrence === 'daily' ? 'daily' : 'once'; }
+  if (name === 'note.summarize') { params.ids = Array.isArray(params.ids) ? params.ids.map((x) => asString(x)).filter(Boolean) : (params.ids ? [asString(params.ids)] : []); }
+  if (name === 'document.generate') { const kind = asString(params.kind || 'note-summary'); if (!['note-summary', 'daily', 'note-set'].includes(kind)) return { ok: false, error: 'document.generate kind 非法' }; params.kind = kind; params.ids = Array.isArray(params.ids) ? params.ids.map((x) => asString(x)).filter(Boolean) : (params.ids ? [asString(params.ids)] : []); }
   return { ok: true, action: { action: name, label: AGENT_ACTIONS[name].label, risk: AGENT_ACTIONS[name].risk, params, deviceId: raw.deviceId ? asString(raw.deviceId) : null } };
 }
 
@@ -101,6 +111,16 @@ export function sanitizeAgentPlan(parsed) {
 
 export function rulePlanOf(text) {
   const t = String(text || '');
+  // V5：语音笔记 / 提醒 / 结构化总结（规则兜底）
+  if (/记一下|记下来|记录一下|记录：|帮我记|备忘[:：]?|做个笔记|笔记[:：]/.test(t) && !/记不记得/.test(t)) {
+    const noteText = t.replace(/^.*?(?:帮我记|帮我记录|记一下|记录一下|记录|记下来|备忘|做个笔记|笔记)[:：,，\s]*/g, '').trim() || t;
+    return { say: '好，记下了：' + noteText.slice(0, 40), actions: [{ action: 'note.create', params: { text: noteText, source: 'voice' } }], needConfirm: false };
+  }
+  if (/提醒我|提醒一下|别忘了|闹钟/.test(t)) return { say: '好，我来设置提醒。', actions: [{ action: 'reminder.create', params: { text: t, source: 'voice' } }], needConfirm: false };
+  if (/总结(一下)?(今天|今日|我的记录|这段|一下)|生成(今日|今天)?总结|导出(今日|今天)?总结|做成文档|生成文档|发到手机/.test(t)) {
+    const kind = /这段|这个笔记|笔记总结/.test(t) ? 'note-summary' : 'daily';
+    return { say: '好，我来生成结构化总结和文档。', actions: [{ action: 'document.generate', params: { kind } }], needConfirm: false };
+  }
   if (/音量|声音|静音/.test(t)) {
     const m = t.match(/(\d{1,3})/);
     if (m) { const level = Math.max(0, Math.min(100, Number(m[1]))); return { say: '把音量调到 ' + level + '%', actions: [{ action: 'system.volume', params: { level, action: 'up' } }], needConfirm: false }; }
@@ -151,6 +171,13 @@ function messagesOf(prompts, { text, context, catalogText, history, round }) {
 export async function planAgent({ ai = null, workers = null, llmProvider = 'auto', text, context = null, catalogText = '', history = [], round = 0, prompts = null } = {}) {
   const P = prompts || resolveAgentPrompts({});
   const started = Date.now();
+  // V5：明确意图（记笔记/提醒/总结）规则优先，不消耗 DeepSeek 额度
+  if (AGENT_RULE_FIRST_RE.test(String(text || ''))) {
+    const quick = sanitizeAgentPlan(rulePlanOf(text));
+    if (quick.actions.length) {
+      return { say: quick.say, actions: quick.actions, needConfirm: quick.needConfirm, ask: quick.ask, provider: 'rule', rounds: round + 1, latencyMs: Date.now() - started, dropped: quick.dropped, ruleFirst: true };
+    }
+  }
   if (ai && ai.available && llmProvider !== 'rule') {
     try {
       const messages = messagesOf(P, { text, context, catalogText, history, round });

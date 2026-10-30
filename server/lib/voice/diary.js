@@ -7,6 +7,7 @@ import { replay } from '../state.js';
 import { nowIso } from '../link/util.js';
 import { filterTranscript, dayKey } from './store.js';
 import { resolvePrompts } from './prompts.js';
+import { structuredFromMarkdown, generateDocumentFromMarkdown } from '../documents/generate.js';
 
 export const DIARY_VERSION = '3.0.0';
 
@@ -153,7 +154,8 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
     const targetDate = String(date || dayKey());
     const file = fileOf(targetDate);
     if (!force && fs.existsSync(file) && fs.statSync(file).size > 0) {
-      return { ok: true, already: true, date: targetDate, path: path.relative(root, file).split(path.sep).join('/'), provider: 'existing' };
+      const existingMd = fs.readFileSync(file, 'utf8');
+      return { ok: true, already: true, date: targetDate, path: path.relative(root, file).split(path.sep).join('/'), provider: 'existing', structured: structuredFromMarkdown(existingMd) };
     }
     const cfg = typeof getConfig === 'function' ? getConfig() : {};
     const prompts = resolvePrompts(cfg);
@@ -200,8 +202,20 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
     const diaryMatch = header.match(/## 日记\s*\n([\s\S]*?)(?=\n## |$)/);
     const diaryText = diaryMatch ? diaryMatch[1].trim() : '';
     appendEvent('voice.diary', { date: targetDate, kind: 'diary', path: relPath, summary: (diaryText || summary).slice(0, 200), provider, latencyMs, by });
-    log('[voice] 日报/日记已生成 ' + targetDate + ' provider=' + provider + ' chars=' + header.length + (error ? ' fallbackReason=' + error : ''));
-    return { ok: true, already: false, date: targetDate, path: relPath, provider, chars: header.length, latencyMs, summary, fallbackReason: error };
+    // V5 结构化总结：解析摘要/重点/待办/回顾/日记，并同时生成文档（md/docx/pdf）
+    const structured = structuredFromMarkdown(header);
+    let documentInfo = null;
+    let documentError = null;
+    try {
+      const doc = await generateDocumentFromMarkdown({ dataDir, ledger, kind: 'daily', date: targetDate, title: '每日总结 · ' + targetDate, markdown: header, provider, degraded: provider === 'template' });
+      documentInfo = { id: doc.id, title: doc.title, provider: doc.provider, degraded: !!doc.degraded, downloads: doc.downloads || { md: '/api/v2/documents/' + doc.id + '/download?format=md', docx: '/api/v2/documents/' + doc.id + '/download?format=docx', pdf: '/api/v2/documents/' + doc.id + '/download?format=pdf' }, files: Object.keys(doc.files || {}) };
+      appendEvent('voice.diary', { date: targetDate, kind: 'document', path: relPath, summary: ('结构化文档：' + doc.title).slice(0, 200), provider: doc.provider, latencyMs, by, documentId: doc.id, structuredSummary: structured.摘要 || '' });
+    } catch (err) {
+      documentError = String((err && err.message) || err).slice(0, 200);
+    }
+    appendEvent('voice.diary', { date: targetDate, kind: 'structured', path: relPath, summary: (structured.摘要 || summary).slice(0, 200), provider, latencyMs, by, structured: { 摘要: structured.摘要, 重点: (structured.重点 || []).slice(0, 8), 待办: (structured.待办 || []).slice(0, 8), 回顾: (structured.回顾 || []).slice(0, 8), 日记: (structured.日记 || '').slice(0, 2400) }, documentId: documentInfo ? documentInfo.id : null });
+    log('[voice] 日报/日记已生成 ' + targetDate + ' provider=' + provider + ' chars=' + header.length + (documentInfo ? ' document=' + documentInfo.id : '') + (error ? ' fallbackReason=' + error : ''));
+    return { ok: true, already: false, date: targetDate, path: relPath, provider, chars: header.length, latencyMs, summary, fallbackReason: error, structured, degraded: provider !== 'deepseek', documentId: documentInfo ? documentInfo.id : null, document: documentInfo, downloads: documentInfo ? documentInfo.downloads : null, documentError };
   }
 
   function read(date = dayKey()) {

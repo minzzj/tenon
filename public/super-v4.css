@@ -40,3 +40,168 @@ button{font-family:inherit}.composer button,.primary{background:#1f6feb;color:#f
 .settings label.row{flex-direction:row;align-items:center;justify-content:space-between}.settings label.row input[type=checkbox]{width:20px;height:20px}
 .btns{display:flex;gap:8px;justify-content:flex-end}.privacy{font-size:12px;color:#6f8aa6;line-height:1.6;margin-top:8px}
 .hidden{display:none!important}.link{color:#7fd3ff;font-size:12px;margin-left:8px;text-decoration:none}
+
+/* ===================== V5 · 看板 / 记录 / 提醒 / 文档 / 物联 ===================== */
+.hidden{display:none!important}
+.section-title{font-size:13px;color:#8fd0ff;letter-spacing:.04em;margin:18px 0 2px;padding-top:12px;border-top:1px solid rgba(120,180,255,.12);display:flex;align-items:center;justify-content:space-between}
+.tiny{font-size:11px}
+.chip.on{color:#8ff0c0;border-color:rgba(33,196,106,.45);background:rgba(33,196,106,.12)}
+.badge.warn{color:#ffd08a;background:rgba(120,80,20,.35);border:1px solid rgba(255,190,90,.35)}
+.badge.voice{color:#b9a4ff;background:rgba(80,60,160,.3)}
+.badge.ok{color:#9df0c0;background:rgba(20,90,55,.35)}
+.badge.danger{color:#ffb4b4;background:rgba(120,30,30,.35)}
+
+/* 顶栏：5 页签时保持紧凑；物联 chip */
+#chip-iot{cursor:default}
+
+/* 今日看板 */
+.board{margin:16px auto 0;max-width:900px;background:rgba(14,24,38,.92);border:1px solid rgba(120,180,255,.16);border-radius:16px;padding:12px 14px}
+.board-head{display:flex;align-items:center;gap:8px}
+.board-head h3{font-size:14px;margin:0;color:#cfe6fb}
+.board-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+.board-tile{display:flex;gap:9px;align-items:flex-start;text-align:left;background:rgba(20,36,56,.75);border:1px solid rgba(120,180,255,.14);border-radius:12px;padding:10px 11px;color:#e8f1fa;cursor:pointer;min-height:78px;transition:border-color .15s,transform .15s}
+.board-tile:hover{border-color:rgba(80,180,255,.5);transform:translateY(-1px)}
+.board-tile .bt-ico{font-size:20px;line-height:1.1}
+.bt-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.bt-label{font-size:11px;color:#7fa8cc}
+.bt-body b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.bt-sub{font-size:11px;color:#7d95ab;line-height:1.4;overflow:hidden}
+.mini-btns{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
+.mini{background:rgba(30,60,95,.5);border:1px solid rgba(120,180,255,.22);color:#cfe6fb;border-radius:8px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap}
+.mini:hover{border-color:rgba(80,180,255,.6)}
+.mini.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.mini.danger{color:#ffb4b4;border-color:rgba(200,80,80,.35);background:rgba(80,20,20,.3)}
+.compose-hint{max-width:760px;margin:6px auto 0;text-align:center;font-size:12px;min-height:16px;color:#ffd08a}
+
+/* 列表/工具栏通用 */
+.page-head .head-actions{display:flex;gap:8px;align-items:center}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 10px}
+.toolbar input,.toolbar select,.reminder-form input,.reminder-form select,.iot-block input,.iot-block select{background:#101a26;border:1px solid rgba(120,180,255,.18);border-radius:10px;padding:9px 12px;color:#eaf6ff;font-size:13px;outline:none}
+.toolbar input#records-search{flex:1;min-width:180px}
+.toolbar input#records-date{width:150px}
+.mock-note{margin:6px 0 10px;padding:8px 12px;border-radius:10px;background:rgba(120,80,20,.18);border:1px solid rgba(255,190,90,.25);color:#ffd08a;font-size:12px}
+.empty{padding:18px;text-align:center}
+.col-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.col-head h3{font-size:14px;color:#9fc4e6;margin:0}
+.count{font-size:11px;color:#8fd0ff;background:rgba(40,110,180,.25);border-radius:999px;padding:2px 8px;margin-left:4px}
+.list{max-height:420px;overflow:auto;font-size:13px}
+.list .item{border-bottom:1px solid rgba(120,180,255,.08);padding:7px 0;color:#b9d2e8;line-height:1.5}
+
+/* 记录页 */
+.records-cols{display:grid;grid-template-columns:minmax(300px,1.1fr) minmax(300px,1fr);gap:14px}
+.note-list{display:flex;flex-direction:column;gap:6px;max-height:520px}
+.note-item{display:flex;gap:9px;align-items:center;width:100%;text-align:left;background:rgba(14,24,38,.75);border:1px solid rgba(120,180,255,.14);border-radius:11px;padding:9px 11px;color:#e8f1fa;cursor:pointer}
+.note-item:hover{border-color:rgba(80,180,255,.55)}
+.note-time{font-size:11px;color:#6f8aa6;width:42px;flex:none}
+.note-main{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.note-main b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note-excerpt{font-size:11.5px;color:#7d95ab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note-date{font-size:10px;flex:none}
+.detail-card{background:rgba(14,24,38,.75);border:1px solid rgba(120,180,255,.14);border-radius:12px;padding:12px 14px;min-height:80px;margin-bottom:12px;font-size:13px;color:#cfe6fb}
+.detail-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.detail-head h3{margin:0 0 4px;font-size:15px}
+.note-full{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13px;line-height:1.65;color:#cfe6fb;max-height:320px;overflow:auto;margin:10px 0;background:rgba(8,14,22,.6);border-radius:10px;padding:10px 12px}
+.structured .sect{margin:8px 0}
+.structured h4{margin:0 0 4px;font-size:13px;color:#8fd0ff}
+.structured p,.structured li{font-size:13px;line-height:1.65;color:#cfe6fb;margin:2px 0}
+.structured ul{margin:2px 0 2px 18px;padding:0}
+.md-details{margin-top:8px}
+.md-details summary{cursor:pointer;color:#8fd0ff;font-size:12px;margin:6px 0}
+
+/* 提醒页 */
+.reminder-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 12px}
+.reminder-form input#reminder-text{flex:1;min-width:200px}
+.reminder-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.reminder-item{display:flex;gap:8px;align-items:flex-start;background:rgba(14,24,38,.75);border:1px solid rgba(120,180,255,.14);border-radius:11px;padding:9px 11px;margin-bottom:6px}
+.reminder-item.overdue{border-color:rgba(255,120,120,.35);background:rgba(60,20,20,.25)}
+.reminder-item.done{opacity:.62}
+.ri-time{font-size:11px;color:#6f8aa6;width:96px;flex:none}
+.ri-main{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.ri-main b{font-size:13px}
+.ri-sub{font-size:11px;color:#7d95ab}
+.ri-actions{display:flex;gap:4px;flex:none}
+
+/* 文档页 */
+.doc-layout{display:grid;grid-template-columns:minmax(320px,1.15fr) minmax(300px,1fr);gap:14px}
+.doc-list{display:flex;flex-direction:column;gap:6px;max-height:560px}
+.doc-item{display:flex;gap:10px;align-items:center;background:rgba(14,24,38,.75);border:1px solid rgba(120,180,255,.14);border-radius:11px;padding:9px 11px}
+.doc-main{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;cursor:pointer}
+.doc-main b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-sub{font-size:11px}
+.doc-sum{font-size:11.5px;color:#9fc4e6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-actions{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none}
+
+/* 物联设置 */
+.iot-block{background:rgba(14,24,38,.6);border:1px solid rgba(120,180,255,.12);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.iot-block h3{margin:0;font-size:13.5px;color:#cfe6fb}
+.iot-block label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:#9fc4e6}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.iot-entities{margin-top:4px;border-top:1px dashed rgba(120,180,255,.18);padding-top:8px}
+.entity-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;color:#9fc4e6;margin-bottom:6px}
+.entity-list{max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:3px}
+.entity-row{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:8px;background:rgba(16,26,38,.6);font-size:12px;color:#cfe6fb;cursor:pointer}
+.entity-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.discover-row{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid rgba(120,180,255,.08);font-size:12.5px;color:#cfe6fb}
+.discover-row span:first-child{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iot-devices{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin-top:6px}
+.iot-device .acts button.danger{color:#ffb4b4;border-color:rgba(200,80,80,.35)}
+.iot-device .badge{font-size:10px;margin-left:4px}
+.legacy-links a.ghost{text-decoration:none;display:inline-flex;align-items:center}
+
+/* 页签：5 个（图标 + 文案） */
+.tabs{height:60px}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:12.5px}
+.tab .tab-ico{font-size:16px;line-height:1.1;opacity:.85}
+.tab.active .tab-ico{opacity:1}
+.tab.active{color:#eaf6ff;font-weight:600;position:relative}
+.tab.active::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:26px;height:2px;border-radius:2px;background:#4da3ff}
+
+/* Toast / 弹窗 */
+.toast-root{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none;max-width:min(560px,92vw)}
+.toast{background:rgba(16,28,44,.96);border:1px solid rgba(120,180,255,.25);color:#eaf6ff;font-size:13px;padding:9px 14px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.45);opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none}
+.toast.show{opacity:1;transform:none}
+.toast.warn{border-color:rgba(255,190,90,.45);color:#ffd9a0}
+.toast.bad{border-color:rgba(255,120,120,.45);color:#ffc0c0}
+.toast.ok{border-color:rgba(90,220,150,.4)}
+.modal-root{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center}
+.modal-mask{position:absolute;inset:0;background:rgba(4,8,14,.66)}
+.modal-card{position:relative;background:#101a26;border:1px solid rgba(120,180,255,.22);border-radius:16px;padding:18px 20px;max-width:420px;width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal-card h3{margin:0 0 8px;font-size:16px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+/* 手机适配 */
+@media(max-width:760px){
+  main{padding:8px 12px 14px}
+  .topbar{padding:0 12px}
+  .brand .sub{display:none}
+  .chips .chip{font-size:11px;padding:3px 7px}
+  .board-grid{grid-template-columns:1fr 1fr}
+  .board-tile{min-height:70px}
+  .records-cols,.doc-layout,.today-cols{grid-template-columns:1fr}
+  .reminder-cols{grid-template-columns:1fr}
+  .note-list{max-height:300px}
+  .subtitle{font-size:17px;white-space:normal}
+  .orb{width:104px;height:104px;font-size:34px}
+  .board{margin-top:12px}
+  .toolbar input#records-search{width:100%}
+  .toolbar input#records-date{flex:1}
+  .toast-root{bottom:74px}
+  .grid2{grid-template-columns:1fr}
+}
+
+
+/* 手机端顶栏：允许换行、收紧 chip，避免竖排挤爆 */
+@media (max-width: 760px) {
+  .topbar { height: auto; min-height: 54px; flex-wrap: wrap; row-gap: 4px; padding: 8px 10px; align-items: center; }
+  .brand { flex: none; }
+  .brand b { font-size: 15px; white-space: nowrap; }
+  .brand .sub { display: none; }
+  .brand .logo { width: 22px; height: 22px; font-size: 12px; }
+  .chips { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; gap: 5px; }
+  .chips .chip { font-size: 10.5px; padding: 3px 6px; line-height: 1.25; white-space: nowrap; }
+  .chips .icon-btn { padding: 0 4px; font-size: 16px; }
+  .board-tile .bt-ico { font-size: 17px; }
+  .bt-body b { font-size: 13.5px; }
+  .bt-sub { font-size: 10.5px; }
+  .quick button { font-size: 12px; padding: 7px 11px; }
+}

@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>榫卯 · 超级终端</title>
+<link rel="icon" href="data:," />
 <link rel="stylesheet" href="super-v4.css" />
 </head>
 <body>
@@ -12,13 +13,15 @@
     <div class="brand"><span class="dot" id="online-dot"></span><span class="logo">榫</span><b>榫卯</b><span class="sub">超级终端</span></div>
     <div class="chips">
       <span class="chip" id="chip-voice" data-testid="chip-voice">语音待机</span>
-      <span class="chip" id="chip-screen" data-testid="chip-screen">屏幕采集中</span>
+      <span class="chip" id="chip-screen" data-testid="chip-screen">屏幕采集</span>
       <span class="chip" id="chip-agent" data-testid="chip-agent">自研执行器</span>
+      <span class="chip" id="chip-iot" data-testid="chip-iot" title="物联设备">物联 0</span>
       <button class="icon-btn" id="btn-settings" title="设置" data-testid="btn-settings">⚙</button>
     </div>
   </header>
 
   <main>
+    <!-- ================= 首页 ================= -->
     <section id="page-home" class="page active">
       <div class="orb-wrap">
         <button id="mic-orb" class="orb" data-testid="mic-orb" aria-label="语音">
@@ -30,33 +33,155 @@
         <span id="sub-partial" class="partial"></span>
         <span id="sub-final" class="final">说「榫卯」唤醒，或点击麦克风</span>
       </div>
+
+      <!-- 今日看板 -->
+      <div class="board" data-testid="board-card">
+        <div class="board-head"><h3>今日看板</h3><span class="muted" id="board-date" data-testid="board-date"></span>
+          <span class="badge warn hidden" id="board-mock" data-testid="board-mock">示例数据 · 后端未就绪</span>
+        </div>
+        <div class="board-grid">
+          <button class="board-tile" id="board-reminder" data-testid="board-next-reminder" data-goto="reminders">
+            <span class="bt-ico">⏰</span>
+            <span class="bt-body"><span class="bt-label">下一个提醒</span><b id="board-reminder-text">暂无提醒</b><span class="bt-sub" id="board-reminder-at">点这里新建</span></span>
+          </button>
+          <button class="board-tile" id="board-notes" data-testid="board-notes-count" data-goto="records">
+            <span class="bt-ico">📝</span>
+            <span class="bt-body"><span class="bt-label">今日笔记</span><b id="board-notes-num">0 条</b><span class="bt-sub" id="board-notes-sub">说「记一下…」自动记录</span></span>
+          </button>
+          <div class="board-tile" id="board-summary" data-testid="board-summary-status">
+            <span class="bt-ico">📄</span>
+            <span class="bt-body"><span class="bt-label">今日总结</span><b id="board-summary-text">未生成</b>
+              <span class="bt-sub" id="board-summary-actions">
+                <button class="mini primary" id="board-summary-gen" data-testid="board-summary-generate">生成</button>
+                <span id="board-summary-downloads" class="mini-btns hidden">
+                  <button class="mini" data-dl="md" data-testid="board-download-md">MD</button>
+                  <button class="mini" data-dl="docx" data-testid="board-download-docx">DOCX</button>
+                  <button class="mini" data-dl="pdf" data-testid="board-download-pdf">PDF</button>
+                </span>
+              </span>
+            </span>
+          </div>
+          <button class="board-tile" id="board-screen" data-testid="board-screen-count" data-goto="documents">
+            <span class="bt-ico">🖥</span>
+            <span class="bt-body"><span class="bt-label">今日屏幕采集</span><b id="board-screen-num">0 条</b><span class="bt-sub" id="board-screen-sub">屏幕文字只存本机</span></span>
+          </button>
+        </div>
+      </div>
+
       <div class="composer">
-        <input id="cmd-input" data-testid="cmd-input" placeholder="也可以直接输入命令，例如：打开记事本，把音量调到 60" />
+        <input id="cmd-input" data-testid="cmd-input" placeholder="也可以直接输入命令，例如：打开记事本 / 把音量调到 60 / 记一下今天要点" />
         <button id="cmd-send" class="primary" data-testid="cmd-send">发送</button>
       </div>
+      <div class="compose-hint muted" id="compose-hint"></div>
+
       <div id="result" class="result-card hidden" data-testid="result-card">
         <div class="result-head"><span id="result-provider" class="badge"></span><span id="result-time" class="muted"></span></div>
         <div id="result-say" class="say"></div>
         <div id="result-steps" class="steps"></div>
         <div id="result-actions" class="result-actions"></div>
       </div>
+
       <div class="quick" data-testid="quick-actions">
+        <button data-quick="note" data-testid="quick-note">记一下今天要点</button>
+        <button data-quick="summary" data-testid="quick-summary">总结今天</button>
+        <button data-quick="reminder" data-testid="quick-reminder">提醒我 1 分钟后喝水</button>
+        <button data-quick="light" data-testid="quick-light">打开客厅灯</button>
         <button data-cmd="打开记事本">打开记事本</button>
         <button data-cmd="把电脑音量调到 60">音量 60</button>
-        <button data-cmd="回家模式">回家模式</button>
-        <button data-cmd="今天都做了什么？帮我总结一下">总结今天</button>
       </div>
-      <div class="hint" id="home-hint">提示：手机与电脑同一 WiFi；手机 App 录音后由电脑本地识别。</div>
+      <div class="hint" id="home-hint">提示：说「记一下…」自动记笔记；说「提醒我…」自动建提醒；总结可导出 MD/DOCX/PDF。</div>
     </section>
 
+    <!-- ================= 记录 ================= -->
+    <section id="page-records" class="page">
+      <div class="page-head"><h2>记录</h2>
+        <div class="head-actions"><button class="ghost" id="records-refresh" data-testid="records-refresh">刷新</button></div>
+      </div>
+      <div class="toolbar">
+        <input id="records-search" data-testid="records-search" placeholder="搜索笔记…（标题/正文）" />
+        <input id="records-date" data-testid="records-date" type="date" />
+        <button class="ghost" id="records-all" data-testid="records-all">全部日期</button>
+        <button class="primary" id="notes-summarize" data-testid="note-summarize">AI 总结这段</button>
+      </div>
+      <div class="mock-note hidden" id="records-mock" data-testid="records-mock">⚠ 后端未就绪：当前为示例数据，接口挂载后自动切换真实笔记。</div>
+      <div class="records-cols">
+        <div class="col">
+          <div class="col-head"><h3>笔记列表 <span class="count" id="records-count" data-testid="records-count">0</span></h3></div>
+          <div id="note-list" class="list note-list" data-testid="note-list"></div>
+        </div>
+        <div class="col">
+          <div class="col-head"><h3>详情 / 总结</h3></div>
+          <div id="note-detail" class="detail-card" data-testid="note-detail"><div class="muted">点击左侧笔记查看详情；也可以点「AI 总结这段」生成结构化总结。</div></div>
+          <div id="note-summary" class="result-card hidden" data-testid="note-summary-result">
+            <div class="result-head"><span id="note-summary-provider" class="badge"></span><span id="note-summary-time" class="muted"></span></div>
+            <div id="note-summary-body" class="structured"></div>
+            <div class="result-actions" id="note-summary-actions">
+              <button class="mini" data-dl="md" data-scope="summary" data-testid="summary-download-md">下载 MD</button>
+              <button class="mini" data-dl="docx" data-scope="summary" data-testid="summary-download-docx">下载 DOCX</button>
+              <button class="mini" data-dl="pdf" data-scope="summary" data-testid="summary-download-pdf">下载 PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 提醒 ================= -->
+    <section id="page-reminders" class="page">
+      <div class="page-head"><h2>提醒</h2>
+        <div class="head-actions"><button class="ghost" id="reminders-refresh" data-testid="reminders-refresh">刷新</button></div>
+      </div>
+      <div class="reminder-form" data-testid="reminder-form">
+        <input id="reminder-text" data-testid="reminder-text" placeholder="提醒内容，例如：喝水 / 开会 / 接孩子" />
+        <input id="reminder-at" data-testid="reminder-at" type="datetime-local" />
+        <select id="reminder-recurrence" data-testid="reminder-recurrence">
+          <option value="once">一次性</option>
+          <option value="daily">每天</option>
+        </select>
+        <button class="primary" id="reminder-create" data-testid="reminder-create">新建提醒</button>
+        <button class="ghost" id="reminder-quick" data-testid="reminder-quick">1 分钟后</button>
+      </div>
+      <div class="mock-note hidden" id="reminders-mock" data-testid="reminders-mock">⚠ 后端未就绪：当前为示例数据，接口挂载后自动切换真实提醒。</div>
+      <div class="reminder-cols">
+        <div class="col"><div class="col-head"><h3>待触发 <span class="count" id="reminders-pending-count" data-testid="reminders-pending-count">0</span></h3></div>
+          <div id="reminders-pending" class="list" data-testid="reminders-pending"></div></div>
+        <div class="col"><div class="col-head"><h3>已逾期 <span class="count" id="reminders-overdue-count" data-testid="reminders-overdue-count">0</span></h3></div>
+          <div id="reminders-overdue" class="list" data-testid="reminders-overdue"></div></div>
+        <div class="col"><div class="col-head"><h3>已完成 <span class="count" id="reminders-done-count" data-testid="reminders-done-count">0</span></h3></div>
+          <div id="reminders-done" class="list" data-testid="reminders-done"></div></div>
+      </div>
+    </section>
+
+    <!-- ================= 文档 ================= -->
+    <section id="page-documents" class="page">
+      <div class="page-head"><h2>文档</h2>
+        <div class="head-actions">
+          <button class="ghost" id="documents-refresh" data-testid="documents-refresh">刷新</button>
+          <button class="primary" id="documents-regenerate" data-testid="document-regenerate">重新生成今日总结</button>
+        </div>
+      </div>
+      <div class="mock-note hidden" id="documents-mock" data-testid="documents-mock">⚠ 后端未就绪：当前为示例数据，接口挂载后自动切换真实文档。</div>
+      <div class="doc-layout">
+        <div class="col">
+          <div class="col-head"><h3>文档列表 <span class="count" id="documents-count" data-testid="documents-count">0</span></h3></div>
+          <div id="document-list" class="list doc-list" data-testid="document-list"></div>
+        </div>
+        <div class="col">
+          <div class="col-head"><h3>预览</h3></div>
+          <div id="document-preview" class="detail-card" data-testid="document-preview"><div class="muted">点左侧文档查看结构化总结与 Markdown 预览。</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 设备（旧页，保留） ================= -->
     <section id="page-devices" class="page">
-      <div class="page-head"><h2>设备</h2><div><button class="ghost" id="dev-refresh">刷新</button></div></div>
+      <div class="page-head"><h2>设备（旧）</h2><div><button class="ghost" id="dev-refresh">刷新</button></div></div>
       <div class="hint">同一 WiFi 自动发现；点「使用这台」即完成绑定，无需扫码。</div>
       <div id="device-list" class="device-list" data-testid="device-list"></div>
     </section>
 
+    <!-- ================= 今日（旧页，保留） ================= -->
     <section id="page-today" class="page">
-      <div class="page-head"><h2>今日</h2><div><button class="ghost" id="diary-generate" data-testid="diary-generate">现在总结</button></div></div>
+      <div class="page-head"><h2>今日（旧）</h2><div><button class="ghost" id="diary-generate" data-testid="diary-generate">现在总结</button></div></div>
       <div id="diary-card" class="result-card hidden" data-testid="diary-card"><div class="result-head"><span class="badge" id="diary-provider"></span><span class="muted" id="diary-time"></span></div><div id="diary-md" class="markdown"></div></div>
       <div class="today-cols">
         <div class="col"><h3>语音记录 <a class="link" id="today-refresh" href="#">刷新</a></h3><div id="voice-list" class="list"></div></div>
@@ -64,10 +189,12 @@
       </div>
     </section>
 
+    <!-- ================= 设置 ================= -->
     <section id="page-settings" class="page">
       <div class="page-head"><h2>设置</h2></div>
       <div class="settings">
-        <label>操作令牌 <input id="set-token" type="password" placeholder="中枢操作令牌（data/secrets.json）" /></label>
+        <div class="section-title">基础</div>
+        <label>操作令牌 <input id="set-token" type="password" data-testid="set-token" placeholder="中枢操作令牌（data/secrets.json）" /></label>
         <label>执行智能体 <select id="set-agent" data-testid="set-agent"><option value="builtin">榫卯自研执行器（DeepSeek 规划）</option><option value="openclaw">OpenClaw 小龙虾（本机已部署）</option></select></label>
         <label class="row">常驻语音监听 <input id="set-enabled" type="checkbox" /></label>
         <label>唤醒词（逗号分隔）<input id="set-wakewords" /></label>
@@ -77,17 +204,68 @@
         <label>屏幕采集间隔（秒，重启采集生效）<input id="set-screen-interval" type="number" min="10" /></label>
         <div class="row btns"><button id="set-load" class="ghost">读取</button><button id="set-save" class="primary" data-testid="settings-save">保存到中枢</button><button id="set-diag" class="ghost">诊断</button></div>
         <div id="settings-msg" class="muted"></div>
-        <div class="privacy">隐私：音频、屏幕文字、日报只存在你自己的电脑；只有「唤醒命令文本」和「每晚总结」会发给 DeepSeek。屏幕采集可随时在托盘暂停。</div>
+
+        <div class="section-title">物联接入 <span class="mini-btns"><span class="chip" id="iot-ha-state" data-testid="iot-ha-state">HA 未配置</span><span class="chip" id="iot-mqtt-state" data-testid="iot-mqtt-state">MQTT 未连接</span></span></div>
+        <div class="mock-note hidden" id="iot-mock" data-testid="iot-mock">⚠ 物联后端（/api/v2/iot）未就绪：以下为示例数据，挂载后自动切换真实设备。</div>
+
+        <div class="iot-block" data-testid="iot-ha-block">
+          <h3>Home Assistant（推荐，桥接小米/华为/Aqara/涂鸦等大品牌）</h3>
+          <label>HA 地址 <input id="iot-ha-url" data-testid="iot-ha-url" placeholder="http://192.168.1.10:8123" /></label>
+          <label>长期访问令牌 <input id="iot-ha-token" data-testid="iot-ha-token" type="password" placeholder="HA 个人资料 → 长期访问令牌（保存后脱敏）" /></label>
+          <div class="row btns"><button class="ghost" id="iot-ha-save" data-testid="iot-ha-save">保存</button><button class="ghost" id="iot-ha-test" data-testid="iot-ha-test">测试连接</button><button class="ghost" id="iot-ha-entities" data-testid="iot-ha-entities">列出实体</button></div>
+          <div id="iot-entities" class="iot-entities hidden" data-testid="iot-entity-list"></div>
+        </div>
+
+        <div class="iot-block" data-testid="iot-mqtt-block">
+          <h3>MQTT（本地标准协议，支持自发现）</h3>
+          <div class="grid2">
+            <label>Broker <input id="iot-mqtt-broker" data-testid="iot-mqtt-broker" placeholder="mqtt://192.168.1.10:1883" /></label>
+            <label>前缀 <input id="iot-mqtt-prefix" data-testid="iot-mqtt-prefix" placeholder="homeassistant" /></label>
+            <label>用户名（可空）<input id="iot-mqtt-username" data-testid="iot-mqtt-username" /></label>
+            <label>密码（可空）<input id="iot-mqtt-password" data-testid="iot-mqtt-password" type="password" /></label>
+          </div>
+          <div class="row btns"><button class="ghost" id="iot-mqtt-save" data-testid="iot-mqtt-save">保存</button><button class="ghost" id="iot-mqtt-test" data-testid="iot-mqtt-test">连接测试</button><button class="ghost" id="iot-mqtt-discover" data-testid="iot-mqtt-discover">发现设备</button></div>
+          <div id="iot-mqtt-list" class="list hidden" data-testid="iot-mqtt-list"></div>
+        </div>
+
+        <div class="iot-block" data-testid="iot-ssdp-block">
+          <h3>局域网发现（SSDP）</h3>
+          <div class="row btns"><button class="ghost" id="iot-ssdp-discover" data-testid="iot-ssdp-discover">发现局域网设备</button><button class="ghost" id="iot-ssdp-import" data-testid="iot-ssdp-import">一键导入全部</button></div>
+          <div id="iot-ssdp-list" class="list hidden" data-testid="iot-ssdp-list"></div>
+        </div>
+
+        <div class="iot-block" data-testid="iot-devices-block">
+          <h3>已接入设备 <span class="count" id="iot-devices-count" data-testid="iot-devices-count">0</span></h3>
+          <div id="iot-devices" class="device-list iot-devices" data-testid="iot-device-list"><div class="muted">还没有接入物联设备：先配置 Home Assistant / MQTT，或发现局域网设备。</div></div>
+        </div>
+
+        <div class="privacy">隐私：音频、屏幕文字、日报、笔记、提醒只存在你自己的电脑（data/）；只有「唤醒命令文本」和「总结生成」会发给 DeepSeek。屏幕采集可随时在托盘暂停；物联设备只走本机/局域网。</div>
+        <div class="section-title">更多</div>
+        <div class="row btns legacy-links">
+          <button class="ghost" data-goto="devices" data-testid="tab-devices">旧设备页</button>
+          <button class="ghost" data-goto="today" data-testid="tab-today">旧今日页</button>
+          <a class="ghost" href="/m/live" target="_blank" rel="noopener">手机实时字幕</a>
+          <a class="ghost" href="/m" target="_blank" rel="noopener">手机页</a>
+        </div>
       </div>
     </section>
   </main>
 
   <nav class="tabs">
-    <button data-tab="home" class="tab active" data-testid="tab-home">首页</button>
-    <button data-tab="devices" class="tab" data-testid="tab-devices">设备</button>
-    <button data-tab="today" class="tab" data-testid="tab-today">今日</button>
-    <button data-tab="settings" class="tab" data-testid="tab-settings">设置</button>
+    <button data-tab="home" class="tab active" data-testid="tab-home"><span class="tab-ico">◉</span>首页</button>
+    <button data-tab="records" class="tab" data-testid="tab-records"><span class="tab-ico">📝</span>记录</button>
+    <button data-tab="reminders" class="tab" data-testid="tab-reminders"><span class="tab-ico">⏰</span>提醒</button>
+    <button data-tab="documents" class="tab" data-testid="tab-documents"><span class="tab-ico">📄</span>文档</button>
+    <button data-tab="settings" class="tab" data-testid="tab-settings"><span class="tab-ico">⚙</span>设置</button>
   </nav>
+</div>
+
+<div id="toast-root" class="toast-root" data-testid="toast-root" aria-live="polite"></div>
+<div id="modal-root" class="modal-root hidden" data-testid="modal-root">
+  <div class="modal-mask"></div>
+  <div class="modal-card"><h3 id="modal-title">确认</h3><div id="modal-body" class="muted"></div>
+    <div class="modal-actions"><button class="ghost" id="modal-cancel">取消</button><button class="primary" id="modal-ok">确定</button></div>
+  </div>
 </div>
 <script src="super-v4.js"></script>
 </body>

@@ -2,6 +2,47 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-10-30
+
+V5：把「说出来的东西」真正落下来——**语音笔记、结构化总结 + 文档中心、提醒、手机同步，以及通过标准协议接入真实家居设备**；雷鸟 AI 眼镜官方功能对照见 [docs/雷鸟AI眼镜对照-V5.md](docs/雷鸟AI眼镜对照-V5.md)。
+
+### Added
+
+- **语音笔记**（`server/lib/notes/`）：说「记一下：…」→ 笔记直接保存；按天 JSONL（`data/notes/YYYY-MM-DD.jsonl`）+ Markdown（`data/notes/md/`），支持搜索 / 编辑 / 删除 / 导出；账本 `note.*` 留痕。
+- **结构化总结 + 文档中心**（`server/lib/documents/`）：DeepSeek 输出固定结构「摘要 / 重点 / 待办 / 回顾 / 日记」，生成 **Markdown + DOCX + PDF**（`docx` + `pdfkit`）；文档列表 / 预览 / 下载 / 删除。live 实测 `provider=deepseek`、**1149 字**、DOCX/PDF 文件 magic 校验通过。
+- **提醒**（`server/lib/reminders/`）：中文时间解析（「提醒我 21:30 开会」「每天 8 点提醒我吃药」「1 分钟后提醒我喝水」），一次性 / 每天；15 秒调度；到点写账本 `reminder.fired`、SSE 推送、TTS 播报（`scripts/voice/speak.ps1`）、Windows 系统通知（node-agent `system.notify`）、手机 App 本地通知；完成/确认幂等。
+- **Android 0.6**（`public/download/tenon-android-0.6.0-debug.apk`）：5 页签（首页 / 记录 / 提醒 / 文档 / 设置）、笔记/提醒/文档同步、本地通知（前台 30 秒轮询 + WorkManager 15 分钟兜底）、文档下载 + FileProvider/`ACTION_SEND` 分享、IoT 设备控制；**2,901,975 B**、versionCode 6 / versionName 0.6.0、SHA-256 `BBA1B620…4A95F`；构建 + lint（0 errors / 94 warnings）+ aapt 静态校验通过；**未真机实测**。
+- **真正物联**（`server/lib/iot/`）：**Home Assistant REST**（大品牌设备经 HA 桥接）、**MQTT**（含 HA MQTT discovery）、**SSDP** 局域网发现；导入设备 → 统一设备列表 → 网页 / 语音 / 手机控制；`/api/v2/iot/*`、账本 `iot.*`。诚实边界：本轮是标准协议接入，**不直连厂商云**；无真实家居设备时以本地桩验证。
+- **UI 5 页签 + 今日看板**（`public/super.html`、`super-v4.js`）：首页看板展示下一个提醒 / 今日笔记 / 今日总结与 MD/DOCX/PDF 下载 / 今日屏幕采集；记录页（搜索 / AI 总结 / 笔记详情与下载）、提醒页、文档页、设置页（IoT 接入 HA/MQTT/SSDP）。
+- **雷鸟 AI 眼镜对照**：[docs/雷鸟AI眼镜对照-V5.md](docs/雷鸟AI眼镜对照-V5.md)（官方 7 项功能 vs 榫卯已做/未做；提词器、手机通知转发明确标下轮）与 README 对照表。
+
+### Changed
+
+- 总结从 V4 的「摘要式日记」升级为**结构化总结 + 三种文档导出**；V4 的 23:00 自动总结保留。
+- 手机 App 从「只显示」升级为可**拉取笔记 / 提醒 / 文档**并分享；新增 IoT 控制页。
+- 首页从 V4 四页签升级为 V5 **五页签 + 今日看板**；旧设备页/今日页入口保留。
+- `system.notify` 能力接入提醒链路（node-agent），到点系统通知可真实派发。
+
+### Fixed
+
+- 总结内容空泛 → 固定「摘要 / 重点 / 待办 / 回顾 / 日记」结构，并附来源（笔记/语音/屏幕/执行记录）。
+- 手机收不到电脑生成的内容 → 笔记/提醒/文档同步接口 + 手机本地通知 + 文档下载分享。
+- 提醒只能看不能到点 → 真实调度 + 账本/SSE/TTS/系统通知/手机通知全链路。
+- 物联只有模拟设备 → HA/MQTT/SSDP 标准协议接入真实生态（品牌经桥接）。
+
+### Verified (2026-10-30 晚)
+
+独立 Checker 终验（`_internal/checker-v5.md`）：**笔记 / 总结文档 / 提醒 / 物联 / UI / APK 全部 PASS**；回归 4/5 全绿，API 矩阵 1 FAIL（定位为 1 个 P2：只读实例 `GET /api/v2/iot/discover` 会写账本）。
+
+- **笔记（10/10 PASS）**：POST 201 + id + Markdown；GET / 搜索 / PATCH / DELETE 全通；`data/notes/md/*.md` 353B（YAML front matter）；账本 `note.created/updated/deleted`；未登录 401；**语音链路「记一下：…」→ 笔记真实出现**（rule，actions=记笔记 succeeded）。
+- **结构化总结 + 文档（隔离 10/10 + live 13/13 PASS）**：隔离（无 key）`provider=template`、5 部分、md 1267B / docx 10101B（PK）/ pdf 16262B（%PDF）；**live 真实 DeepSeek 1 次**：`provider=deepseek`、5 字段、md 3113B / docx 11236B（PK）/ pdf 42525B（%PDF）、Content-Type + 文件名齐全；`/documents/stream` 200。
+- **提醒（11/11 PASS）**：中文解析「1 分钟后」due=60.0s；**真实等待到点**：账本 `reminder.fired`、SSE `reminder`、TTS WAV 文件存在；node 不在线时 notify 优雅降级；done 幂等；daily 滚动（`lastFiredDay`/`nextAt` 次日、同日不重复）；「每天 8 点」「明天 9 点」解析正确。live 真机派发证据：`reminder.fired seq=1127`、notify `dispatched=true taskId=task_mvv3a6tekozd nodeId=node-local method=system.notify`、TTS WAV 125,326B。
+- **物联（14/14 PASS）**：本地桩真实链路——HA REST 配置/测试（version=API running）、实体 3、导入 3、控制 `turn_on`（桩收到 services 请求）；MQTT aedes broker 真实 client=2、订阅 `homeassistant/+/+/config`、连接测试通过；`/iot/discover?source=mqtt`、`?st=ssdp:all` 200（真实局域网 SSDP 1 次 0 台 UPnP 设备，如实记录；本地 UDP 桩可响应）；账本 `iot.discovered/imported/controlled`。node-agent 侧 IoT 自测 **44/44**：HA 版本 2025.10.0、6 个实体映射、MQTT discovery 自动发现「客厅灯」、`set_brightness 50%` payload=128、真实网卡 SSDP 3.5s 0 条（本网络无设备）。
+- **UI（11/11 PASS）**：5 页签 `tab-home/records/reminders/documents/settings` 全命中；首页看板 7 卡片（下一个提醒 / 今日笔记 / 总结状态 / 下载 MD-DOCX-PDF）；记录页 9 控件、提醒页 8 控件、文档页 5 控件、设置页物联 12 控件；**0 JS 错误**；网络隐私 22 请求全部 127.0.0.1。
+- **APK 0.6（13 PASS / 0 FAIL / 1 SKIP）**：`public/download/tenon-android-0.6.0-debug.apk` **2,901,975 B**、SHA-256 `BBA1B620AC4C9A90C57932500A73F7EB1A02B21B74940544FB6276CA7CA4A95F`、`com.minzzj.tenon` versionName 0.6.0 / versionCode 6；权限 12 项含 INTERNET / RECORD_AUDIO / FOREGROUND_SERVICE / POST_NOTIFICATIONS；FileProvider + file_paths.xml、ACTION_SEND 分享、notes/reminders/documents 接口代码、Notes/Reminders/Documents Activity 均在；无令牌泄漏；**SKIP = 无真机（未做安装/通知/分享/屏幕授权实测）**。
+- **回归**：`npm test` **146/146**；v2 基线 **9/9**；API 矩阵 **353 PASS / 0 FAIL / 6 SKIP**（359 用例、152 路由）；v1 E2E **9/9**；super UI（/legacy）**14/14**。
+- **已知问题（如实记录，未修）**：**P2**——只读实例 `GET /api/v2/iot/discover` 会写账本 `iot.discovered`（API 矩阵 `readonly-ledger` before=79/after=80 FAIL）；建议 discover 走 `requireWrite` 或只读模式不落账。另有环境说明：live 账本 `integrity=false` 为历史多实例并发写所致（最终重建）；node-agent 套件 39/42（3 条剪贴板真实测试受 live 并发影响，非本轮改动）。
+
 ## [0.5.0] - 2026-10-30
 
 V4：从「网页 + 多个辅助程序」收敛为**一个桌面程序「榫卯超级终端」**——托盘常驻、说话即可调动电脑程序与家里设备，屏幕文字本地识别，每天 23:00 自动写总结；手机 APK 0.5 同步简化绑定、录音送电脑识别、屏幕采集上报。
@@ -11,7 +52,7 @@ V4：从「网页 + 多个辅助程序」收敛为**一个桌面程序「榫卯�
 - **单程序桌面端（`desktop/`，Electron）**：托盘常驻的「榫卯超级终端」，窗口加载 `public/super.html`（四页签：首页/设备/今日/设置，单行字幕）；双击桌面快捷方式、单文件便携版或 `启动超级终端.cmd` 启动；自动拉起本地中枢（`127.0.0.1:7410`）与屏幕采集循环；托盘菜单支持暂停/开启语音监听、暂停/开启屏幕采集、现在生成今日总结、开机自启、打开数据目录、退出；关闭窗口收到托盘，单实例运行。
 - **实时本地语音 + 执行**：常开聆听、唤醒词「榫卯 / 小榫」；本地 FunASR 识别（live 实测 `provider=funasr`、`state=listening`）+ Windows 中文 TTS 回复；语音链路走 `server/lib/voice/`（`/api/v2/voice/*`：status/config/start/stop/command/transcribe/stream/transcripts/speak/screen/diary）。
 - **自研执行器（OpenClaw 式，`server/lib/agent/`）**：`POST /api/v2/agent/execute` 把一句话变成计划并执行，支持程序、命令、窗口、屏幕、音量、打印、场景、设备控制；DeepSeek 规划（最多 3 轮、结果回传继续判断），本地模型/规则兜底；动作白名单、不可逆动作需确认、全程审计；`/agent/status`、`/agent/actions`、`/agent/audit`、`/agent/confirm`。
-- **屏幕文字理解（本地系统字库 OCR）**：`scripts/screen/win_ocr.py` 使用 Windows.Media.Ocr（zh-Hans-CN 离线系统字库，非大模型），词级字体相似度 + 阈值；自测 3/3 ≥90%、5 张真实截图平均准确率 98.2%、单张约 250–800ms（手机图片 OCR 187ms）；`capture_loop.py` 默认 60 秒、变化才抓，支持黑名单与暂停文件；文字写入 `data/voice/screen/YYYY-MM-DD.jsonl` 与账本 `voice.screen`，不上传。
+- **屏幕文字理解（本地系统字库 OCR）**：`scripts/screen/win_ocr.py` 使用 Windows.Media.Ocr（zh-Hans-CN 离线系统字库，非大模型），词级字体相似度 + 阈值；自测 3/3 ≥90%、5 张真实截图平均准确率 98.2%、单张 OCR 约 67–96ms（含抓图/上传 186–239ms）；`capture_loop.py` 默认 60 秒、变化才抓，支持黑名单与暂停文件；文字写入 `data/voice/screen/YYYY-MM-DD.jsonl` 与账本 `voice.screen`，不上传。
 - **每日总结（23:00 内置）**：`server/lib/voice/diary.js` 汇总当天语音转写 + 屏幕文字 + 任务 → DeepSeek → 报告与日记（今天做了什么 / 明天要做什么 / 日记），Markdown 存 `data/voice/diary/YYYY-MM-DD.md`；live 实测 `provider=deepseek`、1383 字、三部分齐全；错过会在下次启动补跑，托盘可手动生成；`GET /api/v2/voice/diary`、`/diary/list`。
 - **单文件便携版**：`desktop/release/TenonSuperTerminal-0.5.0-portable.exe`（125,872,497 B ≈ 120 MB；打包内嵌本地服务与界面，双击即启动，经 Lead 实测可启动）；旧版完整控制台保留在 `http://127.0.0.1:7410/legacy`。
 - **手机 APK 0.5.0**（`public/download/tenon-android-0.5.0-debug.apk`）：1,230,154 B（1.17 MB），SHA-256 `F105D4EAD611924C694FC7285B348B9EE5EF384BEA55A98BEB1F6257D682E829`，versionCode 5 / versionName 0.5.0；主页极简 4 页签、录音送电脑识别并执行（含待确认确认闭环）、屏幕采集上报（MediaProjection 前台服务）、设备一键绑定/一键动作；构建 + lint + 静态校验通过，**真机未实测**（无 adb 设备）。
@@ -38,12 +79,13 @@ V4：从「网页 + 多个辅助程序」收敛为**一个桌面程序「榫卯�
 - **桌面单程序**：Electron 窗口加载 `public/super.html`（四页签：首页 / 设备 / 今日 / 设置；单行字幕 `#sub-final` 唯一）；进程存活、托盘常驻、桌面快捷方式「榫卯超级终端」存在、自动启动中枢（7410）与屏幕采集；页面 0 JS 错误；**单文件便携版** `desktop/release/TenonSuperTerminal-0.5.0-portable.exe`（125,872,497 B ≈ 120 MB）实测可启动；旧完整控制台保留在 `/legacy`。
 - **本地语音**：live 实测 ASR `provider=funasr`、`state=listening`，唤醒词「榫卯 / 小榫」生效；唤醒后执行「打开记事本 + 调音量」多动作真实成功（`provider=deepseek×2`，2.4s）。
 - **执行器**：`/api/v2/agent/execute` 16 动作白名单（含 `shell.exec` / `window.*` / `screen.capture` / `input.*`）；真实执行 notepad 成功、音量 0→60 成功；`shell.exec "echo hi"` 44ms、退出码 0；`window.list` 枚举 21 个窗口；`screen.capture` 2560×1440 PNG（341 KB）；不可逆动作需确认且幂等（重复确认 `already=true`）；`agent.executed` / `agent.shell` 审计可查；node-agent 在线能力 20 项（含 V4 4 项）。
-- **屏幕字库 OCR**：`win_ocr.py --selftest` 3/3 ≥90%；5 张真实截图字符平均准确率 **98.2%**（目标 ≥95%）；真实截图单张约 250–800ms（live 页面 OCR 166ms、手机图片 OCR 187ms）；`engine=windows-ocr`，无网络/云模型调用。
+- **屏幕字库 OCR**：`win_ocr.py --selftest` 3/3 ≥90%（100% / 92.7% / 94.1%）；5 张真实截图字符平均准确率 **98.2%**（目标 ≥95%）；单张 OCR **67–96ms**（含抓图/上传链路 186–239ms，capture_loop 实测 236–239ms / 1564–1641 字）；`engine=windows-ocr`，无网络/云模型调用。
 - **屏幕采集链路**：`capture_loop.py --once` → `POST /api/v2/voice/screen` 200 → `GET` 可查、`data/voice/screen/YYYY-MM-DD.jsonl` 落盘、账本 `voice.screen` 有记录；黑名单 / 暂停文件生效，数据只存本地。
 - **每日总结**：23:00 内置调度 + 手动「现在总结」；live 实测 `provider=deepseek`、**1383 字**、三部分（今天做了什么 / 明天要做什么 / 日记）齐全，Markdown 落盘 `data/voice/diary/YYYY-MM-DD.md`。
 - **两行重复修复**：手机 `/m/live` 修复前 **6 行、同句重复 2 次** → 修复后固定 1 条最终字幕 + 1 条临时槽位、0 重复、0 JS 错误；桌面首页 `#sub-final` 单行唯一（注入两条只显示最新）。
 - **手机 APK 0.5**：构建成功；1,230,154 B（1.17 MB）；SHA-256 `F105D4EAD611924C694FC7285B348B9EE5EF384BEA55A98BEB1F6257D682E829`；versionCode 5 / versionName 0.5.0；权限含 RECORD_AUDIO / FOREGROUND_SERVICE_MEDIA_PROJECTION 等；lint 0 errors / 78 warnings；**未真机实测**（无 adb 设备）。
-- **回归**：`npm test` **146/146 PASS**（0.87s，2026-10-30 实跑）；V4 独立验收（Checker API/UI 终验）进行中，PASS 后补记。
+- **回归**：`npm test` **146/146 PASS**；v2 基线 **9/9**；API 矩阵 **287 PASS / 0 FAIL / 2 SKIP**（289 用例、117 路由）；v1 E2E **9/9**；super UI **14/14**。
+- **独立验收（Checker 终验）**：**V4 P0 全部 PASS** — OCR 自测 3/3 ≥90%、5 张真实截图均值 98.2%（单张 OCR 67–96ms）；执行器真实多动作 `provider=deepseek×2`、2.69s、音量真实读回 60；Electron 单程序 12/12（四页签、单行字幕、0 JS 错误、托盘/快捷键/便携版）；新 UI 与 `/m/live` 去重 PASS；APK 0.5 静态 12 PASS/0 FAIL/1 SKIP（SKIP=无真机）。
 
 - **可选执行智能体：本机 OpenClaw（小龙虾）Gateway**：设置页可切换；`POST /api/v2/agent/openclaw`，实测 7.1s 返回「榫卯在线」，失败回退自研执行器。
 

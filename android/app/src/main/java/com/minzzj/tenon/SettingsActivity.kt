@@ -148,8 +148,74 @@ class SettingsActivity : Activity() {
         sScreen.addView(rowScreen)
         root.addView(sScreen)
 
+        // ---------- 05 提醒与通知 ----------
+        val sNotify = Ui.section(this, "05 · 提醒与通知")
+        sNotify.addView(Ui.switchRow(this, "提醒通知（到点手机弹通知）", App.remindersEnabled()) { on ->
+            App.setRemindersEnabled(on)
+            if (on) {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF_SCREEN)
+                } else {
+                    Toast.makeText(this, "提醒通知已开启", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+        val rowNotify = Ui.row(this)
+        rowNotify.addView(Ui.button(this, "请求通知权限", true) {
+            if (Build.VERSION.SDK_INT >= 33) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF_SCREEN)
+            } else {
+                Toast.makeText(this, "当前系统无需单独通知权限", Toast.LENGTH_SHORT).show()
+            }
+        })
+        rowNotify.addView(Ui.button(this, "发一条测试通知") {
+            if (!ReminderNotifier.canPost(this)) {
+                Toast.makeText(this, "先授予通知权限", Toast.LENGTH_SHORT).show()
+            } else {
+                ReminderNotifier.notify(this, "test", "测试通知：到点提醒会像这样弹出", "现在")
+                Toast.makeText(this, "已发送测试通知", Toast.LENGTH_SHORT).show()
+            }
+        })
+        rowNotify.addView(Ui.button(this, "打开提醒页") { startActivity(Intent(this, RemindersActivity::class.java)) })
+        sNotify.addView(rowNotify)
+        sNotify.addView(Ui.hint(this,
+            "前台：App 打开时每 30 秒检查一次 /api/v2/reminders/pending 并弹本地通知；后台：WorkManager 每 15 分钟兜底（Android 14 最小周期）。" +
+            "通知频道「提醒」，点击通知打开 App。"))
+        root.addView(sNotify)
+
+        // ---------- 06 笔记与文档 ----------
+        val sDocs = Ui.section(this, "06 · 笔记与文档")
+        sDocs.addView(Ui.hint(this,
+            "笔记在电脑端 data/notes 生成并可同步到手机（记录页可搜索/查看/删除）；文档（AI 总结/日报）从电脑端生成，" +
+            "下载后保存在本机 App 私有目录（files/documents），可用 FileProvider 分享到微信/QQ/邮件或用系统查看器打开。"))
+        val rowDocs = Ui.row(this)
+        rowDocs.addView(Ui.button(this, "打开记录页", true) { startActivity(Intent(this, NotesActivity::class.java)) })
+        rowDocs.addView(Ui.button(this, "打开文档页") { startActivity(Intent(this, DocumentsActivity::class.java)) })
+        sDocs.addView(rowDocs)
+        val rowDocs2 = Ui.row(this)
+        rowDocs2.addView(Ui.button(this, "清空本机已下载文档") {
+            App.clearDocuments()
+            Toast.makeText(this, "已清空本机下载文档（电脑端不受影响）", Toast.LENGTH_SHORT).show()
+        })
+        sDocs.addView(rowDocs2)
+        root.addView(sDocs)
+
+        // ---------- 07 IoT 与设备 ----------
+        val sIot = Ui.section(this, "07 · IoT 与设备")
+        val iotStatusText = Ui.hint(this, "IoT 状态：读取中…")
+        sIot.addView(iotStatusText)
+        val rowIot = Ui.row(this)
+        rowIot.addView(Ui.button(this, "打开 IoT 设备页", true) { startActivity(Intent(this, IotActivity::class.java)) })
+        rowIot.addView(Ui.button(this, "打开设备页") { startActivity(Intent(this, DevicesActivity::class.java)) })
+        sIot.addView(rowIot)
+        sIot.addView(Ui.hint(this, "Home Assistant / MQTT / SSDP 接入配置在电脑端 V5 设置页完成；手机侧只读状态并控制已导入设备（开/关/亮度）。"))
+        root.addView(sIot)
+        refreshIotStatus(iotStatusText)
+
         // ---------- 3. 本机设置 ----------
-        val sLocal = Ui.section(this, "05 · 本机设置")
+        val sLocal = Ui.section(this, "08 · 本机设置")
         ttsLocalSwitch = Ui.switchRow(this, "手机朗读回复（本机 TTS）", App.ttsLocalEnabled()) { on ->
             App.setTtsLocalEnabled(on)
         }
@@ -163,7 +229,7 @@ class SettingsActivity : Activity() {
         root.addView(sLocal)
 
         // ---------- 4. 二级页入口 ----------
-        val sPages = Ui.section(this, "06 · 设备与二级页")
+        val sPages = Ui.section(this, "09 · 设备与二级页")
         sPages.addView(Ui.hint(this, "主页只保留「超级终端」；以下能力在二级页打开。"))
         val rowP1 = Ui.row(this)
         rowP1.addView(Ui.button(this, "设备绑定 / 一键安装", true) { openWeb("我的设备", "/#/devices") })
@@ -176,7 +242,7 @@ class SettingsActivity : Activity() {
         root.addView(sPages)
 
         // ---------- 5. 关于 / 隐私 ----------
-        val sAbout = Ui.section(this, "07 · 关于 / 隐私")
+        val sAbout = Ui.section(this, "10 · 关于 / 隐私")
         aboutText = Ui.hint(this, "")
         sAbout.addView(aboutText)
         root.addView(sAbout)
@@ -294,6 +360,22 @@ class SettingsActivity : Activity() {
             val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
             if (granted) requestScreenCapture()
             else Toast.makeText(this, "未授予通知权限，无法开启前台采集", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun refreshIotStatus(textView: TextView) {
+        bg {
+            val msg = try {
+                val st = TenonClient.iotStatus()
+                "IoT 状态：" + st.toString().take(180)
+            } catch (e: Exception) {
+                if (e is TenonClient.VoiceHttpException && e.code == 404) {
+                    "IoT 状态：电脑端接口未就绪（后端并行实现中）"
+                } else {
+                    "IoT 状态读取失败：" + (e.message ?: "").take(120)
+                }
+            }
+            ui { textView.text = msg }
         }
     }
 

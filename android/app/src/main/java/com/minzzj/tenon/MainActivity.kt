@@ -51,6 +51,17 @@ class MainActivity : Activity() {
     private lateinit var textInput: EditText
     private lateinit var logLine: TextView
     private lateinit var confirmRow: LinearLayout
+    private val pollHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val reminderPoll = object : Runnable {
+        override fun run() {
+            if (App.remindersEnabled()) {
+                Thread {
+                    try { ReminderNotifier.pollPending(this@MainActivity) } catch (_: Exception) {}
+                }.start()
+            }
+            pollHandler.postDelayed(this, 30_000)
+        }
+    }
     private var lastCommandText: String = ""
     private var lastConfirmId: String = ""
 
@@ -191,12 +202,13 @@ class MainActivity : Activity() {
         todayCard.addView(todayText)
         root.addView(todayCard)
 
-        // ---------- 底部 4 页签：首页 / 设备 / 今日 / 设置 ----------
+        // ---------- 底部 5 页签：首页 / 记录 / 提醒 / 文档 / 设置 ----------
         val bottom = Ui.row(this)
         bottom.setPadding(0, Ui.dp(this, 14), 0, 0)
         bottom.addView(Ui.button(this, "首页", true) { })
-        bottom.addView(Ui.button(this, "设备") { startActivity(Intent(this, DevicesActivity::class.java)) })
-        bottom.addView(Ui.button(this, "今日") { startActivity(Intent(this, TodayActivity::class.java)) })
+        bottom.addView(Ui.button(this, "记录") { startActivity(Intent(this, NotesActivity::class.java)) })
+        bottom.addView(Ui.button(this, "提醒") { startActivity(Intent(this, RemindersActivity::class.java)) })
+        bottom.addView(Ui.button(this, "文档") { startActivity(Intent(this, DocumentsActivity::class.java)) })
         bottom.addView(Ui.button(this, "设置") { openSettings() })
         root.addView(bottom)
 
@@ -208,6 +220,10 @@ class MainActivity : Activity() {
         initTts()
         restoreLastResult()
         ensureAudioPermission()
+        ensureNotificationPermission()
+        ReminderNotifier.ensureChannel(this)
+        ReminderWorker.schedule(this)
+        handleOpenTabIntent(intent)
         LogBus.addListener(logListener)
     }
 
@@ -218,6 +234,32 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshHub()
+        if (App.remindersEnabled()) pollHandler.postDelayed(reminderPoll, 5_000)
+        renderStatusAfterChange()
+    }
+
+    override fun onPause() {
+        pollHandler.removeCallbacksAndMessages(null)
+        super.onPause()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOpenTabIntent(intent)
+    }
+
+    private fun handleOpenTabIntent(intent: Intent?) {
+        if (intent?.getStringExtra("openTab") == "reminders") {
+            try { startActivity(Intent(this, RemindersActivity::class.java)) } catch (_: Exception) {}
+        }
+    }
+
+    private fun ensureNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2002)
+        }
     }
 
     override fun onDestroy() {

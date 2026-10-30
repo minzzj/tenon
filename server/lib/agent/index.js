@@ -112,7 +112,7 @@ export function createAgentService(opts = {}) {
     let plan = await planAgent({ ai, workers: ensureWorkers(), llmProvider: vc.llmProvider || 'auto', text, context, catalogText, history, round: 0, prompts });
     const ruleFallback = sanitizeAgentPlan(rulePlanOf(text));
     if ((!plan.actions || !plan.actions.length) && ruleFallback.actions.length) {
-      plan = { ...plan, actions: ruleFallback.actions, say: plan.say || ruleFallback.say, needConfirm: !!plan.needConfirm || ruleFallback.needConfirm };
+      plan = { ...plan, actions: ruleFallback.actions, say: ruleFallback.say || plan.say, needConfirm: !!ruleFallback.needConfirm };
     }
     let providerUsed = plan.provider;
     let planRounds = 1;

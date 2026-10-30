@@ -12,7 +12,11 @@ const MODULES = [
   { dir: 'remote', name: 'remote', factory: 'createRemoteService' },
   { dir: 'voice', name: 'voice', factory: 'createVoiceService' },
   { dir: 'agent', name: 'agent', factory: 'createAgentService' },
-];
+  { dir: 'notes', name: 'notes', factory: 'createNotesService' },
+  { dir: 'reminders', name: 'reminders', factory: 'createRemindersService' },
+  { dir: 'documents', name: 'documents', factory: 'createDocumentsService' },
+  { dir: 'iot', name: 'iot', factory: 'createIotService' },
+]
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });

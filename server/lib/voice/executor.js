@@ -4,6 +4,10 @@
 //  - hub：独立运行/自测时，通过本机中枢 HTTP 执行（app.launch/url.open/handoff/preset 等）
 // device.control 统一映射为 app.launch + nodeId（全权限设备控制走 agent 任务队列）。
 import { createSuperService, executePlan } from '../super/index.js';
+import { createNotesStore } from '../notes/store.js';
+import { createRemindersStore } from '../reminders/store.js';
+import { parseReminder } from '../reminders/parse.js';
+import { generateDocument } from '../documents/generate.js';
 
 export const EXEC_VERSION = '3.0.0';
 
@@ -23,6 +27,10 @@ async function hubFetch(baseUrl, token, path, body) {
 }
 
 export function createExecutor({ root, ledger, dataDir, ai = null, getState, config }) {
+  let notesStore = null;
+  let remindersStore = null;
+  function notes() { if (!notesStore) notesStore = createNotesStore({ dataDir, ledger }); return notesStore; }
+  function reminders() { if (!remindersStore) remindersStore = createRemindersStore({ dataDir, ledger }); return remindersStore; }
   let superService = null;
   function sup() {
     if (!superService) {
@@ -36,6 +44,24 @@ export function createExecutor({ root, ledger, dataDir, ai = null, getState, con
       });
     }
     return superService;
+  }
+
+  // V5：物联设备控制（iot: 设备走中枢 /api/v2/iot/devices/:id/control）
+  function hubBaseUrl() { const e = String(process.env.TENON_PUBLIC_URL || '').trim(); return e ? e.replace(/\/+$/, '') : 'http://127.0.0.1:' + String(process.env.TENON_PORT || '7410'); }
+  function operatorTokenOf() { const t = String(process.env.TENON_OPERATOR_TOKEN || '').trim(); if (t) return t; try { return String(JSON.parse(fs.readFileSync(path.join(dataDir, 'secrets.json'), 'utf8')).operatorToken || ''); } catch { return ''; } }
+  async function callIotControl(deviceId, rawParams = {}) {
+    const p = { ...rawParams }; let command = String(p.command || p.action || '').trim(); delete p.command; delete p.action;
+    if (/打开|开启|启动|开灯/.test(command)) command = 'turn_on';
+    else if (/关闭|关灯|关掉/.test(command)) command = 'turn_off';
+    else if (/亮度|brightness/i.test(command)) { command = 'brightness'; if (p.brightness === undefined) p.brightness = Number(p.value || p.level || 50); }
+    else if (/切换|toggle/i.test(command)) command = 'toggle';
+    if (!command) command = 'turn_on';
+    try {
+      const res = await fetch(hubBaseUrl() + '/api/v2/iot/devices/' + encodeURIComponent(deviceId) + '/control', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(operatorTokenOf() ? { 'x-tenon-token': operatorTokenOf() } : {}) }, body: JSON.stringify({ command, params: p }), signal: AbortSignal.timeout(15000) });
+      const text = await res.text().catch(() => ''); let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+      const ok = res.ok && !(data && data.ok === false);
+      return { ok, status: res.status, command, params: p, summary: ok ? ('已控制物联设备 ' + deviceId) : ('物联设备控制失败 HTTP ' + res.status + '：' + String((data && data.error) || text).slice(0, 160)) };
+    } catch (err) { return { ok: false, status: 0, command, params: p, summary: '物联设备控制失败：' + String((err && err.message) || err).slice(0, 160) }; }
   }
 
   function mapToPlanStep(action) {
@@ -87,6 +113,16 @@ export function createExecutor({ root, ledger, dataDir, ai = null, getState, con
         }
         continue;
       }
+      if (action.action === 'device.control') {
+        const iotId = String(action.deviceId || action.params.deviceId || '');
+        if (iotId.startsWith('iot:') || action.params.iot === true) {
+          const r = await callIotControl(iotId, { ...(action.params || {}), deviceId: undefined });
+          ok = ok && r.ok;
+          steps.push(stepOf('控制物联设备', r.ok ? 'succeeded' : 'failed', r.summary, { deviceId: iotId, command: r.command }));
+          say = say || r.summary;
+          continue;
+        }
+      }
       if (action.action === 'scene.run') {
         try {
           const presetId = action.params.presetId || action.params.sceneId || 'home';
@@ -114,7 +150,53 @@ export function createExecutor({ root, ledger, dataDir, ai = null, getState, con
         }
         continue;
       }
-      const planStep = mapToPlanStep(action);
+      if (action.action === 'note.create') {
+        try {
+          const note = notes().create({ text: action.params.text || '', title: action.params.title || '', tags: action.params.tags || [], source: 'voice' });
+          ok = ok && true;
+          steps.push(stepOf('记笔记', 'succeeded', '已记录「' + note.title + '」', { noteId: note.id, md: note.md, taskId: null }));
+          say = say || ('好，记下了：' + note.title);
+        } catch (err) {
+          ok = false;
+          steps.push(stepOf('记笔记', 'failed', String((err && err.message) || err)));
+        }
+        continue;
+      }
+      if (action.action === 'reminder.create') {
+        try {
+          let parsed = null;
+          let at = action.params.at || '';
+          let recurrence = action.params.recurrence === 'daily' ? 'daily' : '';
+          let text = String(action.params.text || '').trim();
+          if (!at || !text || /提醒|分钟|小时|点/.test(text) && !/^\d{4}-/.test(at)) {
+            parsed = parseReminder(action.params.raw || action.params.text || text || '');
+            if (!parsed.ok && !at) { ok = false; steps.push(stepOf('创建提醒', 'failed', parsed.error || '没有识别到时间')); continue; }
+            if (parsed.ok) { text = text && !/^\d/.test(text) ? text : parsed.text; at = at || parsed.at; if (!recurrence) recurrence = parsed.recurrence; }
+          }
+          if (action.params.inMinutes && !at) at = new Date(Date.now() + Number(action.params.inMinutes) * 60000).toISOString();
+          const item = reminders().create({ text: text || '提醒', at: at || new Date(Date.now() + 3600000).toISOString(), recurrence: recurrence || 'once', source: 'voice' });
+          steps.push(stepOf('创建提醒', 'succeeded', '提醒已设置：' + new Date(item.at).toLocaleString('zh-CN', { hour12: false }) + ' · ' + item.text, { reminderId: item.id, at: item.at, recurrence: item.recurrence }));
+          say = say || ('好，提醒已设置：' + item.text);
+          ok = ok && true;
+        } catch (err) {
+          ok = false;
+          steps.push(stepOf('创建提醒', 'failed', String((err && err.message) || err)));
+        }
+        continue;
+      }
+      if (action.action === 'note.summarize' || action.action === 'document.generate') {
+        try {
+          const kind = action.action === 'note.summarize' ? 'note-summary' : (action.params.kind || 'daily');
+          const doc = await generateDocument({ ai, dataDir, ledger, kind, date: action.params.date || '', ids: action.params.ids && action.params.ids.length ? action.params.ids : null, title: action.params.title || '' });
+          steps.push(stepOf('生成文档', 'succeeded', '文档已生成：' + doc.title, { documentId: doc.id, provider: doc.provider, degraded: !!doc.degraded, download: '/api/v2/documents/' + doc.id + '/download?format=docx' }));
+          say = say || ('好，总结文档已生成：' + doc.title);
+          ok = ok && true;
+        } catch (err) {
+          ok = false;
+          steps.push(stepOf('生成文档', 'failed', String((err && err.message) || err)));
+        }
+        continue;
+      }      const planStep = mapToPlanStep(action);
       if (!planStep) {
         ok = false;
         steps.push(stepOf(action.label || action.action, 'failed', '动作参数不完整（' + action.action + '）'));
@@ -153,7 +235,17 @@ export function createExecutor({ root, ledger, dataDir, ai = null, getState, con
     for (const action of actions) {
       try {
         let r = null;
-        if (action.action === 'scene.run') {
+        if (action.action === 'device.control') {
+        const iotId = String(action.deviceId || action.params.deviceId || '');
+        if (iotId.startsWith('iot:') || action.params.iot === true) {
+          const r = await callIotControl(iotId, { ...(action.params || {}), deviceId: undefined });
+          ok = ok && r.ok;
+          steps.push(stepOf('控制物联设备', r.ok ? 'succeeded' : 'failed', r.summary, { deviceId: iotId, command: r.command }));
+          say = say || r.summary;
+          continue;
+        }
+      }
+      if (action.action === 'scene.run') {
           r = await hubFetch(base, token, '/api/v2/super/presets/' + encodeURIComponent(action.params.presetId || 'home') + '/run', {});
         } else if (action.action === 'handoff.show') {
           r = await hubFetch(base, token, '/api/v2/super/handoff', action.params);

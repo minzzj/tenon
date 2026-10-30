@@ -20,7 +20,7 @@ import { inputCapabilities, inputManifest } from './input.js';
 import { v4Capabilities, v4Manifest } from './v4.js';
 import { loadSecrets, HubClient, subscribeEvents } from './hub.js';
 import { createClipboardSync } from './clipboard.js';
-import { createNotifier } from './notifier.js';
+import { createNotifier, notifyCapabilities, notifyManifest } from './notifier.js';
 import { createLinkService } from './link.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -166,8 +166,8 @@ export class NodeAgent {
     this.token = this.secrets.nodeToken || loadNodeToken();
     this.operatorToken = this.secrets.operatorToken || '';
     this.v2Enabled = options.v2Enabled !== undefined ? !!options.v2Enabled : V2_ENABLED;
-    this.activeCapabilities = this.v2Enabled ? [...capabilities, ...actionCapabilities, ...appCapabilities, ...inputCapabilities, ...v4Capabilities] : capabilities;
-    this.activeManifest = this.v2Enabled ? [...manifest, ...actionsManifest, ...appsManifest, ...inputManifest, ...v4Manifest] : manifest;
+    this.activeCapabilities = this.v2Enabled ? [...capabilities, ...actionCapabilities, ...appCapabilities, ...inputCapabilities, ...v4Capabilities, ...notifyCapabilities] : capabilities;
+    this.activeManifest = this.v2Enabled ? [...manifest, ...actionsManifest, ...appsManifest, ...inputManifest, ...v4Manifest, ...notifyManifest] : manifest;
     this.v2 = { hub: null, clipboard: null, notifier: null, link: null, stopStream: null, started: false, errors: [], lastInboundKick: 0 };
     this.registered = false;
     this.stopping = false;
@@ -572,7 +572,7 @@ export class NodeAgent {
       onError: (err) => log(`[v2] 事件订阅断开（自动重连）：${err && err.message ? err.message : err}`),
     });
     this.v2.started = true;
-    log(`v2 模块就绪：受控动作 ${actionCapabilities.length} 项 + 超级终端动作 ${appCapabilities.length} 项 + 手机遥控输入 ${inputCapabilities.length} 项 + 执行器能力 ${v4Capabilities.length} 项（system.exec / window.list / window.focus / screen.capture）已随注册上报；接收目录 ${receiveDir}`);
+    log(`v2 模块就绪：受控动作 ${actionCapabilities.length} 项 + 超级终端动作 ${appCapabilities.length} 项 + 手机遥控输入 ${inputCapabilities.length} 项 + 执行器能力 ${v4Capabilities.length} 项（system.exec / window.list / window.focus / screen.capture） + 系统通知 ${notifyCapabilities.length} 项（system.notify）已随注册上报；接收目录 ${receiveDir}`);
   }
 
   async stopV2() {

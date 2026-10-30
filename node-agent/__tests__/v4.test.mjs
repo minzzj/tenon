@@ -235,12 +235,12 @@ test('v4：screen.capture 全屏/区域 PNG 非空且尺寸正确；base64 可�
 });
 
 // ---------------------------------------------------------------- agent 集成
-test('agent：TENON_V2 注册 20 项能力（含 4 个 V4 执行器能力）', async () => {
+test('agent：TENON_V2 注册 21 项能力（含 4 个 V4 执行器能力）', async () => {
   const agent = new agentMod.NodeAgent({ hubUrl: hub.url, v2Enabled: true });
-  assert.equal(agent.activeManifest.length, 20);
+  assert.equal(agent.activeManifest.length, 21);
   await agent.register();
   const body = hub.state.registerBodies[hub.state.registerBodies.length - 1];
-  assert.equal(body.capabilities.length, 20);
+  assert.equal(body.capabilities.length, 21);
   const ids = body.capabilities.map((cap) => cap.id);
   for (const id of ['system.exec', 'window.list', 'window.focus', 'screen.capture']) {
     assert.ok(ids.includes(id), `注册能力缺 ${id}`);

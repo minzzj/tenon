@@ -64,7 +64,8 @@ node --test --test-force-exit node-agent/__tests__/*.test.mjs  # 单测（27 条
 node node-agent/__tests__/run-tests.mjs                     # 同上（日志写 evidence/test-run.log，只打印摘要）
 node node-agent/__tests__/run-desktop-evidence.mjs        # 本机真实证据（剪贴板双向/扫描入库/受控动作/agent 端到端）
 node node-agent/__tests__/run-super-desktop-evidence.mjs  # v2.1 超级终端真实证据（打开程序/网页/媒体/流转 + 截屏 + task pull）
-node node-agent/__tests__/run-v4-evidence.mjs          # V4 执行器真实证据（隔离中枢：system.exec/window.list/window.focus/screen.capture + 审计，11 项）
+node node-agent/__tests__/run-v4-evidence.mjs          # V4 执行器真实证据
+node --test --test-force-exit node-agent/__tests__/notify.test.mjs  # V5 系统通知能力（真实弹一次）（隔离中枢：system.exec/window.list/window.focus/screen.capture + 审计，11 项）
 ```
 
 ## 安全边界
@@ -80,6 +81,7 @@ node node-agent/__tests__/run-v4-evidence.mjs          # V4 执行器真实证�
 | `system.exec` | `{command, cwd?, timeoutMs?}` | Windows `cmd.exe /d /s /c` 执行；危险操作黑名单直接拒绝；超时 kill 进程树；stdout/stderr 各截断 4000 字；本地 `data/exec-audit.log` 审计；返回 `{ok,exitCode,stdout,stderr,durationMs}` |
 | `window.list` | `{}` | Win32 EnumWindows 枚举可见顶层窗口（标题/进程/PID/是否前台/是否最小化），最多 50 条 |
 | `window.focus` | `{title?, process?}` | 按窗口标题（模糊）或进程名激活窗口（ShowWindow + SetForegroundWindow，AppActivate 兜底），失败给可读错误 + 窗口示例 |
+| `system.notify` | `{title, body, timeoutMs?}` | 真实 Windows 通知（WinRT Toast → NotifyIcon 气泡 → msg → 日志兜底），返回 `{ok, method}` 并写 `data/exec-audit.log`（供中枢提醒/执行器调用） |
 | `screen.capture` | `{region?, base64?}` | 截全屏/多屏虚拟桌面，或截 `{x,y,width,height}` 区域；PNG 保存到 `data/screen/`，返回路径+宽高+字节；`base64:true` 时 ≤512KB 内联 |
 
 调用示例（中枢 7410 + 已绑定电脑；任务走队列，结果用 taskId 查）：

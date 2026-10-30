@@ -1,6 +1,6 @@
 {
   "name": "tenon",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Tenon (榫卯) — a consumer super terminal: one small app to drive every device and program at home, by voice/AI, with device binding, one-click install, phone remote and phone-to-desktop handoff",
   "type": "module",
   "private": true,
@@ -30,7 +30,13 @@
     "ai"
   ],
   "dependencies": {
+    "docx": "^9.15.0",
+    "mqtt": "^5.16.1",
+    "pdfkit": "^0.20.2",
     "sharp": "^0.35.5",
     "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "aedes": "^1.2.0"
   }
 }

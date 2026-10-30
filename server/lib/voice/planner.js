@@ -18,6 +18,10 @@ export const ACTION_WHITELIST = {
   'device.control': { label: '控制设备', params: ['deviceId', 'app', 'command', 'action', 'value'], risk: 'reversible' },
   'agent.message': { label: '给设备/家人发消息', params: ['to', 'text'], risk: 'irreversible' },
   'voice.reply': { label: '口头回复', params: ['text'], risk: 'reversible' },
+  'note.create': { label: '记笔记', params: ['text', 'title', 'tags'], risk: 'reversible' },
+  'note.summarize': { label: '总结笔记', params: ['ids', 'date', 'text'], risk: 'reversible' },
+  'reminder.create': { label: '创建提醒', params: ['text', 'at', 'recurrence', 'inMinutes'], risk: 'reversible' },
+  'document.generate': { label: '生成文档', params: ['kind', 'date', 'ids', 'title'], risk: 'reversible' },
 };
 
 export const ACTION_ALIASES = {
@@ -28,8 +32,12 @@ export const ACTION_ALIASES = {
   handoff: 'handoff.show', fly: 'handoff.show', 'screen.show': 'handoff.show',
   scene: 'scene.run', preset: 'scene.run', scene_run: 'scene.run',
   device: 'device.control', control: 'device.control', 'device.act': 'device.control',
+  note: 'note.create', 'note.create': 'note.create', memo: 'note.create', remember: 'note.create',
   ask: 'voice.reply', chat: 'voice.reply', answer: 'voice.reply', reply: 'voice.reply',
+  reminder: 'reminder.create', remind: 'reminder.create', alarm: 'reminder.create',
   message: 'agent.message', notify: 'agent.message', send_message: 'agent.message',
+  summarize: 'note.summarize', summary: 'note.summarize',
+  document: 'document.generate', doc: 'document.generate', export: 'document.generate',
 };
 
 const VAGUE_APP_RE = /^(打开程序|打开应用|随便|随便打开|打开它|打开)$/;
@@ -117,6 +125,30 @@ export function normalizeAction(raw, index = 0) {
     if (!app) return { ok: false, error: 'device.control 缺少 command/app' };
     params.app = app;
   }
+  if (name === 'note.create') {
+    params.text = asString(params.text || params.content || params.note).trim();
+    if (!params.text) return { ok: false, error: 'note.create 缺少 text' };
+    params.title = asString(params.title || '').trim().slice(0, 80);
+    if (params.tags !== undefined) params.tags = Array.isArray(params.tags) ? params.tags : String(params.tags).split(/[,，\s]+/).filter(Boolean);
+  }
+  if (name === 'reminder.create') {
+    params.text = asString(params.text || params.content || params.raw).trim();
+    if (!params.text) return { ok: false, error: 'reminder.create 缺少 text' };
+    if (params.at !== undefined) params.at = asString(params.at).trim();
+    if (params.recurrence !== undefined) params.recurrence = params.recurrence === 'daily' ? 'daily' : 'once';
+    if (params.inMinutes !== undefined) params.inMinutes = Math.max(1, Math.min(60 * 24 * 30, Number(params.inMinutes) || 1));
+  }
+  if (name === 'note.summarize') {
+    params.ids = Array.isArray(params.ids) ? params.ids.map((x) => asString(x)).filter(Boolean) : (params.ids ? [asString(params.ids)] : []);
+    params.date = asString(params.date || '').trim();
+  }
+  if (name === 'document.generate') {
+    const kind = asString(params.kind || 'note-summary').trim();
+    if (!['note-summary', 'daily', 'note-set'].includes(kind)) return { ok: false, error: 'document.generate kind 只能是 note-summary/daily/note-set' };
+    params.kind = kind;
+    params.date = asString(params.date || '').trim();
+    params.ids = Array.isArray(params.ids) ? params.ids.map((x) => asString(x)).filter(Boolean) : (params.ids ? [asString(params.ids)] : []);
+  }
   if (name === 'voice.reply') {
     params.text = asString(params.text).trim();
     if (!params.text) return { ok: false, error: 'voice.reply 缺少 text' };
@@ -139,8 +171,35 @@ export function sanitizePlan(parsed) {
   return { ok: true, ...out };
 }
 
+const RULE_FIRST_RE = /记一下|记下来|记录一下|记录：|帮我记|备忘[:：]?|做个笔记|笔记[:：]|提醒我|提醒一下|别忘了|闹钟|总结(一下)?(今天|今日|我的记录|这段|一下)|生成(今日|今天)?总结|导出(今日|今天)?总结|做成文档|生成文档|发到手机/;
+
+function customRulePlan(text) {
+  const t = String(text || '');
+  // 语音笔记：「记一下：xxx」「记录一下 xxx」「帮我记 xxx」「备忘：xxx」
+  if (/记一下|记下来|记录一下|记录：|帮我记|帮我记录|备忘[:：]?|做个笔记|笔记[:：]/.test(t) && !/记不记得/.test(t)) {
+    let noteText = t
+      .replace(/^.*?(?:帮我记|帮我记录|记一下|记录一下|记录|记下来|备忘|做个笔记|笔记)[:：,，\s]*/g, '')
+      .replace(/^[我你]?记[一一下]*[:：,，\s]*/g, '')
+      .trim();
+    if (!noteText) noteText = t;
+    return { say: '好，记下了：' + noteText.slice(0, 40), actions: [{ action: 'note.create', params: { text: noteText, source: 'voice' } }] };
+  }
+  // 提醒：「提醒我 21:30 开会」「每天 8 点提醒我吃药」「1 分钟后提醒我喝水」
+  if (/提醒我|提醒一下|别忘了|闹钟/.test(t)) {
+    return { say: '好，我来设置提醒。', actions: [{ action: 'reminder.create', params: { text: t, source: 'voice' } }] };
+  }
+  // 总结/生成文档
+  if (/总结(一下)?(今天|今日|我的记录|这段|一下)|生成(今日|今天)?总结|导出(今日|今天)?总结|做成文档|生成文档|发到手机/.test(t)) {
+    const kind = /这段|这个笔记|笔记总结/.test(t) ? 'note-summary' : 'daily';
+    return { say: '好，我来生成结构化总结和文档。', actions: [{ action: 'document.generate', params: { kind } }] };
+  }
+  return null;
+}
+
 /** 规则引擎（确定性）：DeepSeek/本地模型都失败时的兜底，保证常见命令仍可真实执行 */
 export function rulePlanOf(text) {
+  const custom = customRulePlan(text);
+  if (custom) return custom;
   return mockPlanOf(text);
 }
 
@@ -219,6 +278,13 @@ export async function planCommand({ ai = null, text, workers = null, llmProvider
   const P = prompts || resolvePrompts({});
   const providerCfg = String(llmProvider || 'auto');
   const errors = [];
+  // V5：明确意图（记笔记/提醒/总结）规则优先，不消耗 DeepSeek 额度，且避免模型误判成 handoff
+  if (providerCfg !== 'mock' && RULE_FIRST_RE.test(command)) {
+    const quick = sanitizePlan(customRulePlan(command));
+    if (quick.actions.length) {
+      return { say: quick.say, actions: quick.actions, needConfirm: quick.needConfirm, ask: quick.ask, dropped: quick.dropped, provider: 'rule', latencyMs: Date.now() - started, fallback: true, errors, ruleFirst: true };
+    }
+  }
   // 1) DeepSeek（云端理解；仅唤醒命令文本出本机）
   if (providerCfg !== 'rule' && providerCfg !== 'mock' && ai && ai.available) {
     try {
@@ -227,7 +293,7 @@ export async function planCommand({ ai = null, text, workers = null, llmProvider
         let actions = r.plan.actions;
         let say = r.plan.say;
         if (!actions.length && !r.plan.needConfirm) {
-          const ruleAug = sanitizePlan(mockPlanOf(command));
+          const ruleAug = sanitizePlan(rulePlanOf(command));
           if (ruleAug.actions.length) { actions = ruleAug.actions; if (!say) say = ruleAug.say; }
         }
         return { say, actions, needConfirm: r.plan.needConfirm, ask: r.plan.ask, dropped: r.plan.dropped, provider: 'deepseek', latencyMs: Date.now() - started, fallback: false, aiMessages: r.messages, ruleAugmented: !r.plan.actions.length && actions.length > 0 };
@@ -245,7 +311,7 @@ export async function planCommand({ ai = null, text, workers = null, llmProvider
         let actions = r.plan.actions;
         let say = r.plan.say;
         if (!actions.length && !r.plan.needConfirm) {
-          const ruleAug = sanitizePlan(mockPlanOf(command));
+          const ruleAug = sanitizePlan(rulePlanOf(command));
           if (ruleAug.actions.length) { actions = ruleAug.actions; if (!say) say = ruleAug.say; }
         }
         return { say, actions, needConfirm: r.plan.needConfirm, ask: r.plan.ask, dropped: r.plan.dropped, provider: 'local', latencyMs: Date.now() - started, fallback: true, errors, ruleAugmented: !r.plan.actions.length && actions.length > 0 };
@@ -256,11 +322,11 @@ export async function planCommand({ ai = null, text, workers = null, llmProvider
     }
   }
   if (providerCfg === 'mock') {
-    const clean = sanitizePlan(mockPlanOf(command));
+    const clean = sanitizePlan(rulePlanOf(command));
     return { say: clean.say, actions: clean.actions, needConfirm: clean.needConfirm, ask: clean.ask, dropped: clean.dropped, provider: 'mock', latencyMs: Date.now() - started, fallback: false, errors };
   }
   // 3) 规则引擎（确定性动作）
-  const rule = sanitizePlan(mockPlanOf(command));
+  const rule = sanitizePlan(rulePlanOf(command));
   if (rule.actions.length || rule.say) {
     return { say: rule.say, actions: rule.actions, needConfirm: rule.needConfirm || IRREVERSIBLE_WORDS.test(command), ask: rule.ask, dropped: rule.dropped, provider: 'rule', latencyMs: Date.now() - started, fallback: true, errors };
   }

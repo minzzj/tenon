@@ -137,9 +137,9 @@ async function startAgent() {
     const state = await api('/api/state', { token: '' });
     const found = (state.nodes || []).find((item) => item.id === DEVICE && item.name === 'V4 证据节点');
     return found && Array.isArray(found.capabilities) && found.capabilities.length >= 20 ? found : null;
-  }, 'agent 注册 20 项能力', 40000);
+  }, 'agent 注册 21 项能力', 40000);
   evidence.sections.register = { nodeId: node.id, name: node.name, online: node.online, capabilityCount: node.capabilities.length, capabilities: node.capabilities.map((cap) => cap.id) };
-  check('register', '真实中枢 /api/state 可见 20 项能力（含 V4 4 项）', node.capabilities.length >= 20 && ['system.exec', 'window.list', 'window.focus', 'screen.capture'].every((id) => node.capabilities.some((cap) => cap.id === id)), node.capabilities.map((cap) => cap.id).join(','));
+  check('register', '真实中枢 /api/state 可见 21 项能力（含 V4 4 项 + system.notify）', node.capabilities.length >= 21 && ['system.exec', 'window.list', 'window.focus', 'screen.capture'].every((id) => node.capabilities.some((cap) => cap.id === id)), node.capabilities.map((cap) => cap.id).join(','));
   // 一键绑定（remote 路由要求已绑定）
   try {
     const bound = await api(`/api/v2/devices/${DEVICE}/bind`, { method: 'POST', body: { by: 'v4-evidence' } });

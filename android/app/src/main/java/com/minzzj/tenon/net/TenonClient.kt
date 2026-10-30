@@ -409,6 +409,62 @@ object TenonClient {
         return try { JSONObject(resp.body) } catch (_: Exception) { null }
     }
 
+    // ---------- V5：记录（笔记）/ 提醒 / 文档 / IoT ----------
+
+    fun notesList(q: String = "", date: String = "", limit: Int = 100): JSONObject {
+        val sb = StringBuilder("$API/notes?limit=").append(limit)
+        if (q.isNotBlank()) sb.append("&q=").append(enc(q))
+        if (date.isNotBlank()) sb.append("&date=").append(enc(date))
+        return asJson(TenonHttp.json("GET", sb.toString(), timeoutMs = 15000), "notes")
+    }
+
+    fun noteDetail(id: String): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/notes/" + enc(id), timeoutMs = 15000), "note")
+
+    fun noteDelete(id: String): JSONObject =
+        asJson(TenonHttp.json("DELETE", "$API/notes/" + enc(id), timeoutMs = 15000), "note/delete")
+
+    fun remindersList(): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/reminders", timeoutMs = 15000), "reminders")
+
+    fun remindersPending(): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/reminders/pending", timeoutMs = 15000), "reminders/pending")
+
+    fun reminderCreate(text: String, at: String, recurrence: String = "once"): JSONObject {
+        val body = JSONObject().put("text", text.trim()).put("at", at.trim()).put("recurrence", recurrence)
+        return asJson(TenonHttp.json("POST", "$API/reminders", body.toString(), timeoutMs = 20000), "reminder/create")
+    }
+
+    fun reminderDone(id: String): JSONObject =
+        asJson(TenonHttp.json("POST", "$API/reminders/" + enc(id) + "/done", "{}", timeoutMs = 20000), "reminder/done")
+
+    fun reminderDelete(id: String): JSONObject =
+        asJson(TenonHttp.json("DELETE", "$API/reminders/" + enc(id), timeoutMs = 15000), "reminder/delete")
+
+    fun documentsList(): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/documents", timeoutMs = 15000), "documents")
+
+    fun documentGenerate(kind: String, date: String, noteId: String = ""): JSONObject {
+        val body = JSONObject().put("kind", kind).put("date", date)
+        if (noteId.isNotBlank()) body.put("noteId", noteId)
+        return asJson(TenonHttp.json("POST", "$API/documents/generate", body.toString(), timeoutMs = 120000), "documents/generate")
+    }
+
+    /** 文档下载：返回字节 + 服务端文件名/类型。 */
+    fun documentDownload(id: String, format: String): TenonHttp.BinResp =
+        TenonHttp.getBin("$API/documents/" + enc(id) + "/download?format=" + enc(format), timeoutMs = 60000)
+
+    fun iotStatus(): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/iot/status", timeoutMs = 15000), "iot/status")
+
+    fun iotDevices(): JSONObject =
+        asJson(TenonHttp.json("GET", "$API/iot/devices", timeoutMs = 15000), "iot/devices")
+
+    fun iotControl(id: String, command: String, params: JSONObject = JSONObject()): JSONObject {
+        val body = JSONObject().put("command", command).put("params", params)
+        return asJson(TenonHttp.json("POST", "$API/iot/devices/" + enc(id) + "/control", body.toString(), timeoutMs = 20000), "iot/control")
+    }
+
     // ---------- 工具 ----------
 
     fun sha256(file: File): String {

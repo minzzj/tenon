@@ -3,6 +3,7 @@
 // 另外订阅中枢 SSE：notification.relayed 事件 → 本机通知（手机通知镜像）。
 import { isWindows, psQuote, runPowerShell, makeTempDir, removeTempDir, readUtf8Json, wrapResultScript } from './lib/ps.js';
 import { subscribeEvents } from './hub.js';
+import { appendExecAudit } from './v4.js';
 
 function winrtBody(title, body) {
   return `$result = @{ ok = $false; method = 'winrt'; error = $null }
@@ -177,4 +178,65 @@ export function createNotifier({ hub, deviceId = 'node-local', log = console, en
   return { status, notify, report, mirrorEvent, startMirror, stopMirror, statusOf: () => ({ ...status, history: status.history.slice() }) };
 }
 
-export default { sendWindowsNotification, createNotifier };
+// ---------------------------------------------------------------- V5：system.notify 能力
+// 供中枢提醒/执行器调用：真实 Windows 通知（WinRT Toast → NotifyIcon 气泡 → msg → 日志兜底）
+export const NOTIFY_VERSION = '5.0.0';
+
+function paramsOf(task) {
+  if (task && task.params && typeof task.params === 'object') return task.params;
+  if (task && task.draft && task.draft.params && typeof task.draft.params === 'object') return task.draft.params;
+  return {};
+}
+
+async function runSystemNotify(task, ctx) {
+  const params = paramsOf(task);
+  const title = String(params.title || params.heading || '榫卯提醒').slice(0, 120);
+  const body = String(params.body || params.text || params.message || '').slice(0, 400);
+  const timeoutMs = Number(params.timeoutMs) || 20000;
+  const result = await sendWindowsNotification({ title, body, timeoutMs });
+  const auditCtx = ctx && typeof ctx === 'object' ? ctx : {};
+  appendExecAudit({ action: 'system.notify', title, bodyPreview: body.slice(0, 200), ok: !!result.ok, method: result.method, error: result.error || null }, auditCtx);
+  return {
+    summary: `已发送系统通知（method=${result.method}）：${title}${body ? ' · ' + body.slice(0, 80) : ''}`,
+    items: [{ name: title, ok: !!result.ok, detail: `method=${result.method}${result.fallback ? '（回退）' : ''}${result.error ? '；' + String(result.error).slice(0, 120) : ''}` }],
+    partial: !result.ok,
+    ok: !!result.ok,
+    method: result.method,
+    data: { ok: !!result.ok, method: result.method, fallback: !!result.fallback, error: result.error || null, title, body, at: new Date().toISOString() },
+  };
+}
+
+export const notifyCapabilities = [
+  {
+    id: 'system.notify',
+    name: 'Windows 系统通知',
+    risk: 'reversible',
+    manualOnly: false,
+    version: NOTIFY_VERSION,
+    evidence: 'confirmed',
+    inputs: ['title（标题，≤120 字）', 'body（正文，≤400 字）', 'timeoutMs（可选）'],
+    outputs: ['电脑弹出 Windows 通知/托盘气泡，并写 data/exec-audit.log 审计'],
+    run: runSystemNotify,
+  },
+];
+
+function manifestOf(capability) {
+  return {
+    id: capability.id,
+    name: capability.name,
+    risk: capability.risk,
+    manualOnly: !!capability.manualOnly,
+    version: capability.version,
+    evidence: capability.evidence,
+    inputs: capability.inputs,
+    outputs: capability.outputs,
+  };
+}
+
+export const notifyManifest = notifyCapabilities.map(manifestOf);
+
+export function findNotifyCapability(id) {
+  return notifyCapabilities.find((capability) => capability.id === id) || null;
+}
+
+export default { sendWindowsNotification, createNotifier, notifyCapabilities, notifyManifest, findNotifyCapability, NOTIFY_VERSION };

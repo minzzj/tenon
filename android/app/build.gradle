@@ -11,8 +11,8 @@ android {
         applicationId "com.minzzj.tenon"
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName "0.5.0"
+        versionCode 6
+        versionName "0.6.0"
 
         // 默认中枢地址 / 操作令牌：从 local.properties 读取（该文件已 .gitignore，不随仓库分发）
         // 手机首次打开即可直接连上本机 hub；用户可在「设置」里修改。
@@ -51,4 +51,7 @@ android {
 
 dependencies {
     implementation 'com.google.zxing:core:3.5.3'
+    // V5：FileProvider（文档分享）+ WorkManager（提醒后台兜底轮询）
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
 }

@@ -1,33 +1,100 @@
-# 榫卯 Tenon · Android 原生 App（v0.5 单程序超级终端）
+# 榫卯 Tenon · Android 原生 App（v0.6 记录/提醒/文档/IoT）
 
-**包名** `com.minzzj.tenon` · **Kotlin** · minSdk 26 / targetSdk 34 · **versionName 0.5.0（versionCode 5）**
-**一句话**：打开就是「超级终端」——说一句话录音送电脑识别→执行；设备同 WiFi 自动发现、点「使用这台」一键绑定；手机屏幕每 120 秒截屏上报电脑做内容总结。
+**包名** `com.minzzj.tenon` · **Kotlin** · minSdk 26 / targetSdk 34 · **versionName 0.6.0（versionCode 6）**
+**一句话**：手机上就能收到电脑生成的笔记与总结文档（下载/分享/打开）、到点本地通知提醒、并控制已接入的 IoT 设备（HA/MQTT 导入）。
 
-## v0.5.0 本次更新（用户 10-30 确认：简化绑定 / 一键执行 / 屏幕内容采集 / 语音送电脑）
+## v0.6.0 本次更新（用户 10-30 晚：总结/文档发到手机、能提醒、配各种设备）
 
-### 1) 主页面只留「超级终端」（4 页签：首页 / 设备 / 今日 / 设置）
-- 顶部：在线/离线圆点 + 语音管家状态 + 屏幕采集开关状态 + 设备名；徽标「本地识别 funasr · 云端理解 deepseek · AI deepseek-chat」；
-- 中央大麦克风（点击开始/结束录音，16kHz 单声道 WAV）：录音 → `POST /api/v2/voice/transcribe` → `POST /api/v2/voice/command`；
-- **最近一句单行字幕**（只 1 行，`maxLines=1` + 省略号，不再两行重复）；
-- 结果卡：`say` 大字 + 步骤 ✅/📤/❌/⏳/⚠️ + provider/延迟；**needConfirm 时出现「✅ 确认执行 / 取消」按钮**（走 `/api/v2/voice/confirm` 闭环，10 分钟有效）；
-- 今日摘要：语音 N 条 · 屏幕 N 条（或本机上报次数）· 在线节点/绑定数 · 最近回复 · 每晚总结时间；
-- 文字兜底输入（主页可直接打字发送）；底部 4 页签。
+### 1) 底部 5 页签：首页 / 记录 / 提醒 / 文档 / 设置
+风格延续 0.5 超级终端；首页 = 大麦克风语音（送电脑识别→执行→needConfirm 确认）+ 单行字幕 + 今日摘要；新增 4 个能力页。
 
-### 2) 设备页简化（`DevicesActivity`）
-- 进入即 `GET /api/v2/devices` 自动列出设备卡：名称/平台/在线/已绑定；
-- 一键「使用这台」= `POST /devices/{id}/bind`，「移除」= `/unbind`；每卡最多 3 个一键动作（来自设备能力：打招呼 / 体检 / 打开控制台 = `POST /devices/{id}/action`）；手动刷新；
-- 扫码/6 位配对码等旧流程收进底部「高级 ▾」折叠（WebView 打开 `#/link`），不再占主流程。
+### 2) 记录页（NotesActivity）
+- `GET /api/v2/notes?q=&limit=` 列表（时间/标题/摘要/来源 语音或文字），搜索框，点开看详情（`GET /notes/:id`）；
+- 删除（`DELETE /notes/:id`，二次确认）；「总结这段」→ `POST /api/v2/documents/generate {kind:'note-summary', noteId, date}`，弹窗展示**结构化结果**（摘要/重点/待办/回顾/日记，兼容多种字段名），可跳文档页下载。
 
-### 3) 屏幕内容采集（新增 `ScreenCaptureService`，MediaProjection 前台服务）
-- 设置页开关 + 间隔（60/120/300 秒，默认 120）+ 黑名单输入；「授权并开启采集」拉起系统「共享屏幕」授权弹窗（真实权限流程），授权后前台服务运行，可随时「暂停采集」；
-- 每间隔截屏一次 → 缩放至宽 ≤960px → JPEG(55) → `POST /api/v2/voice/screen`：
-  `{source:"phone", app:"phone", title:"手机屏幕 · <机型>", text:"", ts, imageBase64, blacklist}`；
-- 通知栏常驻显示「已上报 N 次 · 每 X 秒采集」；设置页显示状态/间隔/本机今日上报次数/最近错误；
-- Android 14 合规：Manifest 声明 `FOREGROUND_SERVICE_MEDIA_PROJECTION` + `foregroundServiceType="mediaProjection"`，`startForeground(..., FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)`；
-- 说明：当前中枢 `/api/v2/voice/screen` 若尚未实现（404），App 会显示可读错误并保留本机计数；端点在 operator 侧就绪后无需改 App 即可开始入账。
+### 3) 提醒页（RemindersActivity + ReminderNotifier + ReminderWorker）
+- 新建（内容 + 时间 `yyyy-MM-dd HH:mm` + 一次性/每天）→ `POST /api/v2/reminders {text,at,recurrence}`；列表状态 待触发/已逾期/已完成；完成（`POST /reminders/:id/done`）、删除；
+- **前台每 30 秒**轮询 `GET /api/v2/reminders/pending`，用 `NotificationManager` 弹本地通知（channel id `tenon-reminders`，名称「提醒」，IMPORTANCE_HIGH），去重（已通知 id 存本地），点击通知打开 App 并跳到提醒页；
+- **后台兜底**：WorkManager `PeriodicWorkRequest` 每 15 分钟（Android 14 最小周期）拉 pending 并发通知；App 启动自动调度；
+- Android 13+ 首次进入请求 `POST_NOTIFICATIONS` 权限，设置页可看状态/发测试通知。
 
-### 4) 设置页（全部集中）
-中枢地址/令牌、语音管家（唤醒词/24-7/电脑 TTS/每晚总结/保留天数）、**语音来源（默认送电脑识别，手机离线 ASR 为 P1 暂未提供）**、**屏幕内容采集（开关/间隔/黑名单/授权开启/暂停）**、本机（手机朗读回复、清空本机记录、恢复默认）、设备与二级页入口、关于/隐私（含屏幕采集隐私说明）。
+### 4) 文档页（DocumentsActivity）
+- `GET /api/v2/documents` 列表（标题/类型/时间/大小）；
+- 「生成今日总结」→ `POST /api/v2/documents/generate {kind:'daily-summary', date}`；
+- 每个文档可 **分享 MD / DOCX / PDF**（`GET /documents/:id/download?format=` 下载到 App 私有目录 `files/documents/` → **FileProvider**（authority `com.minzzj.tenon.fileprovider`）+ `ACTION_SEND` 分享到微信/QQ/邮件），也可「打开 MD」（系统查看器）或仅下载；设置页可清空本机已下载文档。
+
+### 5) IoT 页（IotActivity）+ 设置
+- `GET /api/v2/iot/status` 显示 HA/MQTT 状态；`GET /api/v2/iot/devices` 列出已接入设备（名称/类型/状态/adapter）；
+- 每张卡「开 / 关 / 亮度+」→ `POST /api/v2/iot/devices/:id/control {command, params}`（灯用 turn_on/turn_off，开关用 on/off，亮度带 brightness_pct）；
+- 设置页新增「07 IoT 与设备」（状态只读 + 打开 IoT/设备页）；HA/MQTT/SSDP 配置在电脑端 V5 设置页完成，手机只做状态与控制。
+
+### 6) 设置页（全部集中，新增 3 区）
+05 提醒与通知（提醒开关/请求通知权限/发测试通知/打开提醒页/30s+15min 机制说明）→ 06 笔记与文档（存储说明/打开记录页/打开文档页/清空本机下载）→ 07 IoT 与设备（状态/入口）→ 08 本机 → 09 设备与二级页 → 10 关于/隐私（含文档与通知隐私说明）。
+
+## 本机构建结果（2026-10-30 实测，v0.6.0）
+
+| 项 | 结果 |
+|---|---|
+| 构建 | `.\gradlew.bat --no-daemon assembleDebug` → **BUILD SUCCESSFUL in 35s**（37 tasks） |
+| APK 分发包 | `public/download/tenon-android-0.6.0-debug.apk`（gitignored，仅分发） |
+| 大小 | **2,901,975 B（2.77 MB）** |
+| SHA-256 | `BBA1B620AC4C9A90C57932500A73F7EB1A02B21B74940544FB6276CA7CA4A95F` |
+| 包信息（aapt2 badging） | `com.minzzj.tenon` · versionCode **6** · versionName **0.6.0** · minSdk 26 / targetSdk 34 / compileSdk 34 · launchable `MainActivity` |
+| 权限清单 | INTERNET / ACCESS_NETWORK_STATE / ACCESS_WIFI_STATE / CAMERA / RECORD_AUDIO / FOREGROUND_SERVICE / FOREGROUND_SERVICE_DATA_SYNC / FOREGROUND_SERVICE_MEDIA_PROJECTION / **POST_NOTIFICATIONS** / WAKE_LOCK / **RECEIVE_BOOT_COMPLETED**（WorkManager）/ DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION（WorkManager） |
+| 组件校验 | Manifest 含 `NotesActivity`、`RemindersActivity`、`DocumentsActivity`、`IotActivity`、`androidx.core.content.FileProvider`（authorities `com.minzzj.tenon.fileprovider`）、WorkManager 初始化组件与服务（aapt2 xmltree 实测） |
+| lint | `lintDebug` → **0 errors / 94 warnings**（非阻断：中文硬编码 i18n、局域网明文 HTTP、未用资源、WebView JS 等） |
+| 敏感信息扫描（解压 dex 实测） | **无 DeepSeek API key**（`sk-<20+位>` 匹配 0 个）、无 nodeToken；内置默认 `operatorToken` 与局域网 IP 为 `local.properties`(gitignore) 注入的体验默认值（正式对外分发需删除默认令牌重构建） |
+| 后端契约 | 本机实测 `/api/v2/notes|reminders|reminders/pending|documents|iot/devices|iot/status` 当前均 404（后端并行实现中）——App 已按任务卡契约实现，未就绪时页面显示「电脑端接口未就绪（后端并行实现中），稍后刷新」，不假装成功；就绪后无需改 App |
+| 真机 | **未实测**（无 adb 设备）：以构建成功 + lint + aapt/解压静态校验 + 接口契约为准；通知/分享/WorkManager 需在手机上实际体验 |
+
+## 安装 / 权限 / 功能说明
+
+1. 手机与电脑同一 WiFi；电脑端启动中枢（默认 7410），手机 APK 首次打开已内置中枢地址与体验令牌。
+2. 安装 `public/download/tenon-android-0.6.0-debug.apk`（允许未知来源）。
+3. 首次打开会请求通知权限（提醒需要）；也可在「设置 → 05 提醒与通知」补授权并发测试通知。
+4. 记录页：语音说「记一下…」后出现在列表；点笔记可删除或「总结这段」（生成结构化总结，去文档页下载分享）。
+5. 提醒页：新建提醒 → 到点本地通知（前台 30s 内、后台 15 分钟内）；点击通知打开 App。
+6. 文档页：生成今日总结 → 分享 MD/DOCX/PDF 到微信/QQ/邮件或系统查看器打开；下载文件存 App 私有目录。
+7. IoT：先在电脑端 V5 设置配置 Home Assistant / MQTT / SSDP 并导入设备，手机 IoT 页即可开/关/亮度控制。
+
+## 构建复跑
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot'
+$env:ANDROID_HOME='C:\Android\Sdk'
+cd H:\minzzj文件\技术部\项目\官方\榫卯\android
+.\gradlew.bat --no-daemon assembleDebug   # -> app/build/outputs/apk/debug/app-debug.apk
+.\gradlew.bat --no-daemon lintDebug      # 0 errors / 94 warnings
+```
+
+## 关键文件（v0.6.0 新增）
+
+```text
+android/app/src/main/java/com/minzzj/tenon/
+├── NotesActivity.kt        # 记录页：笔记列表/搜索/详情/删除/总结这段（结构化结果）
+├── RemindersActivity.kt    # 提醒页：创建/列表/完成/删除 + 前台 30s 轮询 pending
+├── DocumentsActivity.kt    # 文档页：列表/生成今日总结/下载 MD-DOCX-PDF/FileProvider 分享/打开
+├── IotActivity.kt          # IoT 页：状态 + 设备列表 + 开/关/亮度控制
+├── ReminderNotifier.kt     # 通知频道「提醒」/ pending 去重/本地通知/点击打开 App
+├── ReminderWorker.kt       # WorkManager 15 分钟兜底轮询
+├── MainActivity.kt         # 5 页签 + 前台 30s 提醒轮询 + 通知权限
+├── SettingsActivity.kt     # +05 提醒与通知 / 06 笔记与文档 / 07 IoT 与设备
+├── net/TenonClient.kt      # +notes/reminders/documents/iot API + 文档二进制下载
+├── net/TenonHttp.kt        # +getBin 二进制 GET
+└── res/xml/file_paths.xml  # FileProvider 路径（files/documents、cache）
+```
+
+## 版本历史
+
+- 0.6.0（2026-10-30）：5 页签 + 记录（笔记/总结）+ 提醒（本地通知/WorkManager）+ 文档（下载/分享/打开）+ IoT 控制；构建成功。
+- 0.5.0（2026-10-30）：单程序超级终端（4 页签）+ 极简设备一键绑定 + 语音送电脑 + 屏幕采集上报 + needConfirm 确认闭环。
+- 0.4.0（2026-10-26）：主页面极简超级终端 + 语音输入/执行 + 设置页集中。
+- 0.2.0（2026-10-25）：倾斜甩屏 + 系统语音识别指令 + 快捷程序面板。
+- 0.1.0（2026-10-25）：v2 P0 基础（发现/配对/传输/剪贴板/通知/素材 WebView/分享目标）。
+
+---
+
+## 以下为 0.5.0 历史构建记录（保留）
 
 ## 本机构建结果（2026-10-30 实测，v0.5.0）
 

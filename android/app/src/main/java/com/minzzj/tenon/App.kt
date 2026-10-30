@@ -10,6 +10,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        try { ReminderWorker.schedule(this) } catch (_: Exception) {}
     }
 
     companion object {
@@ -103,6 +104,23 @@ class App : Application() {
         }
 
         fun screenLastError(): String = sp().getString("screenLastError", "") ?: ""
+
+        // ---- V0.5/V0.6：提醒开关（本地通知） ----
+        fun remindersEnabled(): Boolean = sp().getBoolean("remindersEnabled", true)
+        fun setRemindersEnabled(v: Boolean) = sp().edit().putBoolean("remindersEnabled", v).apply()
+
+        // ---- V0.6：文档下载目录（app 私有 files/documents） ----
+        fun documentsDir(): java.io.File {
+            val d = java.io.File(instance.filesDir, "documents")
+            if (!d.exists()) d.mkdirs()
+            return d
+        }
+
+        fun clearDocuments() {
+            try {
+                documentsDir().listFiles()?.forEach { it.delete() }
+            } catch (_: Exception) {}
+        }
 
         // ---- 旧版功能开关（保留兼容） ----
         fun peerId(): String = sp().getString("peerId", "hub") ?: "hub"

@@ -192,12 +192,46 @@ docs/         使用手册、测试方法、测试证据、产品截图、样例
 榫卯**不**实现 Matter/Thread 配网，**不**做云端自动化 SaaS，**不**做网盘或聊天，**不**做 GUI 点击机器人。它站在这些东西之上：给你已有的设备、软件和模型加一层「任务与责任」。
 
 
+## V5 超级终端（v0.6.0，2026-10-30 晚）
+
+**会记、会总结、会提醒、能连真实家居。** 在 V4 单程序基础上，V5 补上用户说的五件事：说出来的东西直接记下来、总结生成真正的文档、发到手机、能提醒、能配真实设备。
+
+- **语音笔记**：说「记一下：…」→ 自动写成笔记；本地按天保存（`data/notes/YYYY-MM-DD.jsonl` + Markdown `data/notes/md/`），可搜索、编辑、删除、导出；账本 `note.*` 留痕。
+- **真正的总结 + 文档中心**：说「总结今天」或在记录页点「AI 总结」→ DeepSeek 输出结构化 **摘要 / 重点 / 待办 / 回顾 / 日记**，生成 **Markdown / DOCX / PDF** 三种文档，可下载或分享（手机 App 也能下载并分享）；live 实测 `provider=deepseek`、**1149 字**、DOCX/PDF 文件 magic 校验通过。
+- **提醒**：语音「提醒我 21:30 开会」「每天 8 点提醒我吃药」「1 分钟后提醒我喝水」，或在设置页创建；支持一次性与每天；到点写入账本 `reminder.fired`、网页 SSE 推送、电脑 TTS 播报、Windows 系统通知（node-agent `system.notify`）与手机 App 通知。
+- **Android 0.6**：APK `public/download/tenon-android-0.6.0-debug.apk`（2,901,975 B；versionCode 6 / versionName 0.6.0；SHA-256 `BBA1B620…4A95F`）；5 页签（首页/记录/提醒/文档/设置）、笔记/提醒/文档同步、本地通知、文档下载 + 系统分享（FileProvider/ACTION_SEND）、IoT 设备控制。**未真机实测**，以构建 + lint + 静态校验为准。
+- **真正的物联**：**Home Assistant REST**（大品牌设备经 HA 桥接）、**MQTT**（含 HA MQTT discovery）、**SSDP** 局域网发现；导入设备 → 统一设备列表 → 网页 / 语音 / 手机控制；账本 `iot.*`。
+  - 诚实边界：本轮是**标准协议接入**，不直连厂商云（小米/华为/苹果/Aqara/涂鸦等需经 HA 或 MQTT 网关桥接）；SSDP 发现的设备仅能查看，是否可控取决于其 UPnP 实现；无真实家居设备时以本地桩验证（无真实设备实测）。
+- **UI**：5 页签（首页 / 记录 / 提醒 / 文档 / 设置）+ 首页**今日看板**（下一个提醒 / 今日笔记 / 今日总结与下载 / 今日屏幕采集）。
+
+### 雷鸟 AI 眼镜对照
+
+| 雷鸟官方能力 | 榫卯 V5 | 状态 |
+|---|---|---|
+| 看板 | 首页今日看板 | ✅ 已做 |
+| 实时字幕（含翻译） | 本地实时单行字幕；翻译下轮 | 🟡 已有字幕 |
+| AI 录音总结（摘要/重点/待办/回顾） | 语音笔记 + 结构化总结（多「日记」）+ 文档导出 | ✅ 已做 |
+| 提词器 | — | ⏳ 下轮 |
+| 手机通知提醒 | 提醒中心（到点账本/SSE/TTS/系统通知/手机通知） | ✅ 已做 |
+| 手机通知转发到其他屏幕 | — | ⏳ 下轮 |
+| 全天智记 → AI 日记 | 24/7 本地转写 + 屏幕 OCR + 每晚总结日记 | ✅ 已做 |
+| 与大模型对话 | 唤醒对话 + 执行器（可执行程序/命令/设备） | ✅ 已做 |
+| 大品牌物联 | HA/MQTT/SSDP 标准协议（桥接） | ✅ 已做（桥接，不直连厂商云） |
+
+完整对照见 [docs/雷鸟AI眼镜对照-V5.md](docs/雷鸟AI眼镜对照-V5.md)。
+
+### 启动方式（沿用 V4）
+
+双击桌面「榫卯超级终端」快捷方式、单文件便携版 `desktop/release/TenonSuperTerminal-0.6.0-portable.exe`（约 128 MB，已构建）或仓库根 `启动超级终端.cmd`；开发模式 `cd desktop && npm start`。旧完整控制台仍在 `http://127.0.0.1:7410/legacy`。V5 新数据目录：`data/notes/`、`data/reminders/`、`data/documents/`、`data/iot/`。
+
+> 版本 0.6.0。独立 Checker 终验：**笔记 / 总结文档 / 提醒 / 物联 / UI / APK 全部 PASS**；回归 `npm test` **146/146**、v2 基线 9/9、v1 E2E 9/9、super UI 14/14（API 矩阵 352 PASS / 1 FAIL，1 个 P2：只读实例 IoT 发现会写账本，详见[交付物清单](docs/交付物清单.md) §12）；APK 未真机实测（⏳）。
+
 ## V4 超级终端（v0.5.0，2026-10-30）
 
 **一个桌面程序就够了。** 「榫卯超级终端」是一个 Electron 桌面应用（托盘常驻，有单文件便携版），本地服务内嵌其中：说一句话，就能调动电脑上的程序、命令与家里的设备。
 
 - **实时本地语音**：常开聆听，唤醒词「榫卯 / 小榫」；本地 **FunASR** 识别（live 实测 ASR `provider=funasr`、`state=listening`）。说完一句 → 自研 OpenClaw 式执行器（DeepSeek 规划）执行程序 / 命令 / 设备控制，结果回传继续判断（最多 3 轮），不可逆动作必须确认，每一步写入审计账本。live 实测：唤醒后「打开记事本 + 调音量」多动作真实执行成功（`provider=deepseek×2`，2.4s）。
-- **屏幕文字理解（非大模型）**：本地 **Windows 系统字库 OCR**（`Windows.Media.Ocr`，zh-Hans-CN，非大模型、不联网）；自测 3/3 ≥90%，真实截图单张约 250–800ms；电脑每 60 秒检查一次、变化才抓，支持黑名单与暂停；文字只存本机 `data/voice/screen/`。
+- **屏幕文字理解（非大模型）**：本地 **Windows 系统字库 OCR**（`Windows.Media.Ocr`，zh-Hans-CN，非大模型、不联网）；自测 3/3 ≥90%，5 张真实截图平均 98.2%，单张 OCR 约 67–96ms（含抓图/上传链路约 186–239ms）；电脑每 60 秒检查一次、变化才抓，支持黑名单与暂停；文字只存本机 `data/voice/screen/`。
 - **每天 23:00 内置总结**：汇总当天语音 + 屏幕文字 + 任务 → DeepSeek → 「今天做了什么 / 明天要做什么 / 日记」，Markdown 存 `data/voice/diary/YYYY-MM-DD.md`；可手动「现在总结」；live 实测 `provider=deepseek`、1383 字、三部分齐全。
 - **手机 APK 0.5**：主页超级终端 + 4 页签；录音送电脑识别并执行；屏幕采集（MediaProjection）上报同一接口；设备一键绑定 / 移除。APK 位于 `public/download/tenon-android-0.5.0-debug.apk`（1,230,154 B；versionName 0.5.0 / versionCode 5；**未真机实测**，以构建 + lint + 静态校验为准）。
 - **两行重复识别已修复**：手机 `/m/live` 修复前 6 行、同句重复 2 次 → 修复后仅 1 条最终字幕、0 JS 错误；桌面首页单行字幕 `#sub-final` 唯一（注入两条也只显示最新）。
@@ -217,7 +251,7 @@ docs/         使用手册、测试方法、测试证据、产品截图、样例
 - APK：`public/download/tenon-android-0.5.0-debug.apk`；安装后与电脑同一 WiFi 自动发现，点「使用这台」一键绑定；令牌在 `data/secrets.json` 的 `operatorToken`。
 - 完整操作步骤与常见问题见 [使用手册 V4](docs/使用手册-V4.md)。
 
-> 回归：`npm test` **146/146** 通过（2026-10-30 实跑）；V4 独立验收（Checker API/UI 终验）完成后在[交付物清单](docs/交付物清单.md) §11 回填 PASS 与证据。
+> 回归：`npm test` **146/146**、v2 基线 9/9、v1 E2E 9/9、super UI 14/14；V4 独立验收（Checker 终验）**全部 PASS**（OCR 98.2% / 执行器真实多动作 2.69s / Electron 12/12 / APK 静态 12 PASS + 无真机 SKIP），证据与数字见[交付物清单](docs/交付物清单.md) §11。
 
 - **可选执行智能体：本机 OpenClaw（小龙虾）Gateway** — 设置页可在「自研执行器 / OpenClaw」之间切换；OpenClaw 通过本机 Gateway（端口 18789）执行开放式任务并回传结果（实测 7.1s 返回「榫卯在线」）；不可用时自动回退自研执行器（`POST /api/v2/agent/openclaw`）。
 

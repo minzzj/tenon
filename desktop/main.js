@@ -1,6 +1,6 @@
 // 榫卯超级终端 · Electron 桌面主进程（V4 单程序）
 // 功能：托盘常驻；启动本地中枢（复用 server/start.js）；启动屏幕文字采集；加载超级终端界面；托盘菜单控制监听/采集/总结/退出。
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain, Notification } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -138,6 +138,10 @@ function rebuildTray() {
     { label: '打开超级终端', click: () => showWindow() },
     { label: '打开完整控制台（旧版）', click: () => { showWindow(); if (win) win.loadURL(HUB + '/?desktop=1#/super'); } },
     { type: 'separator' },
+    { label: '记录 / 笔记', click: () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/notes'); } },
+    { label: '提醒', click: () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/reminders'); } },
+    { label: '文档（总结）', click: () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/documents'); } },
+    { type: 'separator' },
     { label: voiceLabel, click: () => toggleVoice() },
     { label: screenLabel, click: () => toggleScreen() },
     { label: '现在生成今日总结', click: async () => { const r = await api('POST', '/api/v2/voice/diary/generate', { force: true }); log('diary', r.status); if (win) { showWindow(); win.loadURL(HUB + '/?desktop=1#/today'); } } },
@@ -182,7 +186,53 @@ async function bootstrap() {
   tray.on('click', () => (win && win.isVisible() ? win.hide() : showWindow()));
   rebuildTray();
   setInterval(async () => { const j = await api('GET', '/api/v2/voice/status'); if (j && j.json) { state.voiceListening = !!j.json.enabled; rebuildTray(); sendToRenderer(); } }, 15000);
+  startV5Pollers();
 }
+// ---------- V5：提醒 / 新文档系统通知 ----------
+const notified = new Set();
+let lastDocAt = 0;
+function showNative(title, body) {
+  try {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title, body: String(body || '').slice(0, 200), silent: false });
+    n.on('click', () => { showWindow(); if (win) win.loadURL(HUB + '/super.html?desktop=1#/reminders'); });
+    n.show();
+    log('native notification:', title);
+  } catch (e) { log('notification err', e.message); }
+}
+async function pollReminders() {
+  try {
+    const r = await api('GET', '/api/v2/reminders/pending');
+    const items = (r.json && (r.json.items || r.json.pending || r.json.reminders)) || [];
+    for (const it of items) {
+      const id = String(it.id || it.reminderId || it.at + it.text);
+      if (notified.has('r:' + id)) continue;
+      notified.add('r:' + id);
+      showNative('⏰ 提醒', it.text || it.title || '时间到了');
+    }
+    if (notified.size > 500) notified.clear();
+  } catch (_) {}
+}
+async function pollDocuments() {
+  try {
+    const r = await api('GET', '/api/v2/documents?limit=5');
+    const list = (r.json && (r.json.items || r.json.documents)) || [];
+    for (const d of list) {
+      const at = Date.parse(d.createdAt || d.at || 0) || Number(d.createdAt || d.at || 0) || 0;
+      if (!at || at <= lastDocAt) continue;
+      if (lastDocAt === 0) { lastDocAt = at; continue; }
+      lastDocAt = Math.max(lastDocAt, at);
+      showNative('📄 新文档已生成', (d.title || '今日总结') + '（点击查看/下载）');
+    }
+  } catch (_) {}
+}
+function startV5Pollers() {
+  pollReminders();
+  pollDocuments();
+  setInterval(pollReminders, 15000);
+  setInterval(pollDocuments, 60000);
+}
+
 app.requestSingleInstanceLock();
 app.on('second-instance', () => showWindow());
 app.whenReady().then(bootstrap);

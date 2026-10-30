@@ -83,6 +83,37 @@ object TenonHttp {
         return out.toByteArray().toString(Charsets.UTF_8)
     }
 
+    /** 二进制 GET（文档下载）。 */
+    class BinResp(val code: Int, val bytes: ByteArray, val contentType: String?)
+
+    fun getBin(path: String, token: String = App.token(), timeoutMs: Int = 60000): BinResp {
+        val base = App.baseUrl()
+        if (base.isEmpty()) return BinResp(0, ByteArray(0), null)
+        val conn = open("GET", base + path, token, timeoutMs)
+        return try {
+            val code = conn.responseCode
+            val stream: InputStream? = if (code in 200..299) conn.inputStream else conn.errorStream
+            val bytes = stream?.use { readBytes(it) } ?: ByteArray(0)
+            BinResp(code, bytes, conn.contentType)
+        } catch (e: Exception) {
+            LogBus.log("下载失败：" + e.message)
+            BinResp(-1, ByteArray(0), null)
+        } finally {
+            try { conn.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    private fun readBytes(input: InputStream): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
+    }
+
     /** multipart 上传单个文件（语音 WAV 转写用）。 */
     fun postMultipart(
         path: String,

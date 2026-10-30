@@ -193,12 +193,46 @@ Full list: [docs/假设与未覆盖清单.md](docs/假设与未覆盖清单.md).
 Tenon does **not** implement Matter/Thread pairing, is **not** a cloud automation SaaS, **not** a file-sync or chat product, and **not** a GUI click robot. It sits above those: a task-and-responsibility layer for the devices, software and models you already own.
 
 
+## V5 Super Terminal (v0.6.0, 2026-10-30 evening)
+
+**It remembers, summarises, reminds, and talks to real home devices.** On top of the single V4 desktop program, V5 closes the five gaps users called out: what you say is written down, summaries become real documents, documents reach the phone, reminders actually fire, and real devices can be connected.
+
+- **Voice notes**: say "记一下：…" ("note this: …") → a note is saved locally per day (`data/notes/YYYY-MM-DD.jsonl` + Markdown in `data/notes/md/`); search / edit / delete / export; audited as `note.*` ledger events.
+- **Real summaries + document centre**: say "总结今天" or press "AI summary" on the Records page → DeepSeek returns a structured **abstract / highlights / todos / review / diary**, rendered as **Markdown / DOCX / PDF** documents that can be downloaded or shared (the phone app can download and share them too); live run: `provider=deepseek`, **1,149 characters**, DOCX/PDF magic bytes verified.
+- **Reminders**: say "提醒我 21:30 开会", "每天 8 点提醒我吃药" or "1 分钟后提醒我喝水", or create one on the Settings page; one-shot or daily; when due it writes `reminder.fired` to the ledger, pushes over SSE, speaks via TTS, shows a Windows system notification (node-agent `system.notify`) and a phone-app notification.
+- **Android 0.6**: `public/download/tenon-android-0.6.0-debug.apk` (2,901,975 B; versionCode 6 / versionName 0.6.0; SHA-256 `BBA1B620…4A95F`); 5 tabs (Home / Records / Reminders / Documents / Settings), notes/reminders/documents sync, local notifications, document download + system share (FileProvider / ACTION_SEND), IoT device control. **No real-device test yet** — build + lint + static checks only.
+- **Real IoT**: **Home Assistant REST** (big-brand devices bridged through HA), **MQTT** (including HA MQTT discovery) and **SSDP** LAN discovery; import devices → one device list → control from web / voice / phone; audited as `iot.*` ledger events.
+  - Honest boundary: this round is **standard-protocol integration, not a direct vendor-cloud connection** (Xiaomi/Huawei/Apple/Aqara/Tuya etc. need an HA or MQTT bridge); SSDP-discovered devices are view-only unless their UPnP implementation allows control; with no real home devices, verification uses local stubs (no real-device test yet).
+- **UI**: 5 tabs (Home / Records / Reminders / Documents / Settings) + a **Today board** on the home page (next reminder / today's notes / today's summary & downloads / today's screen capture).
+
+### RayNeo AI Glasses comparison
+
+| RayNeo official capability | Tenon V5 | Status |
+|---|---|---|
+| Dashboard | Today board on the home page | ✅ done |
+| Live captions (with translation) | local single-line live captions; translation next round | 🟡 captions only |
+| AI recording summary (abstract/highlights/todos/review) | voice notes + structured summary (plus diary) + document export | ✅ done |
+| Teleprompter | — | ⏳ next round |
+| Phone-notification reminders | Reminder centre (ledger / SSE / TTS / system notification / phone notification) | ✅ done |
+| Forwarding phone notifications to another screen | — | ⏳ next round |
+| All-day AI diary | 24/7 local transcription + screen OCR + nightly summary diary | ✅ done |
+| Chat with the AI | wake-word conversation + executor (can run programs / commands / devices) | ✅ done |
+| Big-brand IoT | HA / MQTT / SSDP standard protocols (bridged) | ✅ done (bridge, not vendor cloud) |
+
+Full comparison: [docs/雷鸟AI眼镜对照-V5.md](docs/雷鸟AI眼镜对照-V5.md).
+
+### How to start (same as V4)
+
+Double-click the desktop shortcut "榫卯超级终端", the single-file portable build `desktop/release/TenonSuperTerminal-0.6.0-portable.exe` (~128 MB, built), or `启动超级终端.cmd` in the repo root; development mode: `cd desktop && npm start`. The old full console is still at `http://127.0.0.1:7410/legacy`. New V5 data folders: `data/notes/`, `data/reminders/`, `data/documents/`, `data/iot/`.
+
+> Version 0.6.0. Independent Checker acceptance: **notes / summary documents / reminders / IoT / UI / APK all PASS**; regression `npm test` **146/146**, v2 baseline 9/9, v1 E2E 9/9, super UI 14/14 (API matrix 352 PASS / 1 FAIL — one P2: a read-only instance writing the ledger on IoT discovery; see [delivery list](docs/交付物清单.md) §12); the APK has **no real-device test yet** (⏳).
+
 ## V4 Super Terminal (v0.5.0, 2026-10-30)
 
 **One desktop program is enough.** "Tenon Super Terminal" is an Electron desktop app (tray-resident, shipped as a single-file portable build) with the local hub built in: say one sentence and it drives programs, shell commands and devices at home.
 
 - **Real-time local voice**: always-listening with the wake words 「榫卯 / 小榫」; local **FunASR** recognition (live run: ASR `provider=funasr`, `state=listening`). One sentence → a self-built OpenClaw-style executor (DeepSeek planning) runs programs / commands / device control and feeds results back for up to 3 rounds; irreversible actions require confirmation; every step goes to the audit ledger. Live run: after the wake word, "open Notepad + set volume" executed for real (`provider=deepseek×2`, 2.4 s).
-- **Screen-text understanding without an LLM**: local **Windows system-font OCR** (`Windows.Media.Ocr`, zh-Hans-CN — not an LLM, no network); self-test 3/3 ≥90%, ~250–800 ms per real screenshot; the PC checks every 60 s and captures only on change, with an app blacklist and pause support; text stays in the local `data/voice/screen/`.
+- **Screen-text understanding without an LLM**: local **Windows system-font OCR** (`Windows.Media.Ocr`, zh-Hans-CN — not an LLM, no network); self-test 3/3 ≥90%; 5 real screenshots averaged 98.2%, ~67–96 ms OCR per screenshot (~186–239 ms including capture/upload); the PC checks every 60 s and captures only on change, with an app blacklist and pause support; text stays in the local `data/voice/screen/`.
 - **Built-in daily summary at 23:00**: merges the day's voice + screen text + tasks → DeepSeek → "what I did today / what to do tomorrow / diary", stored as Markdown in `data/voice/diary/YYYY-MM-DD.md`; can also be generated on demand; live run: `provider=deepseek`, 1,383 characters, all three sections present.
 - **Phone APK 0.5**: super-terminal home with 4 tabs; record on the phone and let the PC recognise and execute; MediaProjection screen capture posts to the same endpoint; one-tap device bind / unbind. APK at `public/download/tenon-android-0.5.0-debug.apk` (1,230,154 B; versionName 0.5.0 / versionCode 5; **no real-device test yet** — build + lint + static checks only).
 - **Two-line duplicate captions fixed**: on mobile `/m/live`, 6 rows with the same sentence twice → now exactly one final caption with 0 JS errors; the desktop home's single-line caption (`#sub-final`) is unique (injecting two lines shows only the latest).
@@ -218,7 +252,7 @@ The old full console is still available at `http://127.0.0.1:7410/legacy`. The f
 - APK: `public/download/tenon-android-0.5.0-debug.apk`; on the same Wi-Fi the PC is auto-discovered — one tap on "use this device" binds it; the token is `operatorToken` in `data/secrets.json`.
 - Full steps and FAQ: [V4 manual](docs/使用手册-V4.md).
 
-> Regression: `npm test` **146/146** pass (run on 2026-10-30); the V4 independent acceptance (Checker API/UI final pass) will be filled into the [delivery list](docs/交付物清单.md) §11 once complete.
+> Regression: `npm test` **146/146**, v2 baseline 9/9, v1 E2E 9/9, super UI 14/14; the V4 independent acceptance (Checker) is **all PASS** (OCR 98.2% / real executor actions 2.69 s / Electron 12/12 / APK static 12 PASS + no-real-device SKIP) — see [delivery list](docs/交付物清单.md) §11 for evidence and numbers.
 
 - **Optional agent: local OpenClaw Gateway** — switch between the built-in executor and OpenClaw in Settings; OpenClaw runs open-ended tasks through its local Gateway (port 18789) and returns the result (live: 7.1 s reply "榫卯在线"); falls back to the built-in executor when unavailable (`POST /api/v2/agent/openclaw`).
 

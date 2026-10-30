@@ -37,6 +37,17 @@
         android:theme="@style/Theme.Tenon"
         android:usesCleartextTraffic="true">
 
+        <!-- V5：文档下载后通过 FileProvider 分享到微信/QQ/邮件 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -77,6 +88,27 @@
 
         <activity
             android:name=".TodayActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <!-- V5：记录 / 提醒 / 文档 / IoT -->
+        <activity
+            android:name=".NotesActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <activity
+            android:name=".RemindersActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <activity
+            android:name=".DocumentsActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <activity
+            android:name=".IotActivity"
             android:exported="false"
             android:label="@string/app_name" />
 

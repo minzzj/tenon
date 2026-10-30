@@ -1,7 +1,7 @@
 // 榫卯 v2-P0 桌面端 Agent · 本机真实证据脚本
 // 运行：node node-agent/__tests__/run-desktop-evidence.mjs
 // 产出：node-agent/__tests__/evidence/desktop-evidence.json + desktop-evidence.md + agent.log
-// 内容：剪贴板双向（PowerShell 回读）/ 文件扫描入库 / 4 个动作各 1 次 / v2 agent 端到端（注册 20 能力、
+// 内容：剪贴板双向（PowerShell 回读）/ 文件扫描入库 / 4 个动作各 1 次 / v2 agent 端到端（注册 21 能力、
 //       心跳、拉任务执行回报、入站传输自动落盘 ack、剪贴板双向、通知镜像、优雅退出 exit 0）
 // 不占用 7410，不写 data/；临时目录 _internal/v2-desktop-data 结束后清理。
 import fs from 'node:fs';
@@ -210,10 +210,10 @@ async function runAgentE2E(hubClient) {
   let exitInfo = null;
   const exited = new Promise((resolve) => child.on('exit', (code, signal) => { exitInfo = { code, signal }; resolve(); }));
   try {
-    await waitFor(() => hub.state.registerBodies.some((body) => body.name === '证据节点' && body.capabilities.length === 20), 'agent 注册 20 能力', 20000);
+    await waitFor(() => hub.state.registerBodies.some((body) => body.name === '证据节点' && body.capabilities.length === 21), 'agent 注册 21 能力', 20000);
     const register = hub.state.registerBodies.find((body) => body.name === '证据节点');
     section.register = { nodeId: register.nodeId, name: register.name, capabilityCount: register.capabilities.length, capabilityIds: register.capabilities.map((cap) => cap.id) };
-    check('agent-register', '节点注册上报 20 项能力（4 基础 + 4 受控动作 + 5 超级终端 + 3 遥控 + 4 执行器）', register.capabilities.length === 20, register.capabilities.map((cap) => cap.id).join(','));
+    check('agent-register', '节点注册上报 21 项能力（4 基础 + 4 受控动作 + 5 超级终端 + 3 遥控 + 4 执行器）', register.capabilities.length === 21, register.capabilities.map((cap) => cap.id).join(','));
     await waitFor(() => hub.state.heartbeats.some((beat) => beat.nodeId === register.nodeId), 'agent 心跳', 10000);
     section.heartbeat = hub.state.heartbeats.find((beat) => beat.nodeId === register.nodeId);
     check('agent-heartbeat', '节点心跳上报', !!section.heartbeat, `nodeId=${section.heartbeat && section.heartbeat.nodeId}`);
