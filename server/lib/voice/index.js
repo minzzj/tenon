@@ -240,18 +240,21 @@ export function createVoiceService(opts = {}) {
     if (ev.type === 'error') { setError(ev.text || 'ASR 错误'); return; }
   }
 
-  function recordTranscript(text, { source = 'mic', wake = false, pinyin = '', sessionId = null, provider = null } = {}) {
+  function recordTranscript(text, { source = 'mic', wake = false, pinyin = '', sessionId = null, provider = null, device = null } = {}) {
+    // 设备标记：手机来源（android/phone）与显式 device=phone 归入手机，其余为电脑；用于多设备分节总结
+    const deviceLabel = device || (source === 'android' || source === 'phone' ? 'phone' : 'pc');
     const priv = filterTranscript(text, config);
     const at = nowIso();
     const sensitive = !!priv.redacted;
     const safeText = sensitive ? '' : String(text || '');
     store.append({
-      at, text: safeText, source, wake: !!wake, sessionId, provider,
+      at, text: safeText, source, wake: !!wake, sessionId, provider, device: deviceLabel,
       ...(sensitive ? { redacted: true, sensitiveType: priv.sensitiveType, length: priv.length } : {}),
     });
     append('voice.transcript', {
       text: safeText,
       source,
+      device: deviceLabel,
       wake: !!wake,
       sessionId,
       provider,
@@ -260,8 +263,8 @@ export function createVoiceService(opts = {}) {
     });
     status.counters.transcripts += 1;
     if (sensitive) status.counters.redacted += 1;
-    status.lastTranscript = { at, text: sensitive ? priv.preview : safeText, source, wake: !!wake, sensitive, sensitiveType: priv.sensitiveType || null };
-    const payload = { type: 'transcript', text: sensitive ? priv.preview : safeText, source, wake: !!wake, sensitive, sensitiveType: priv.sensitiveType || null, sessionId, provider, at };
+    status.lastTranscript = { at, text: sensitive ? priv.preview : safeText, source, device: deviceLabel, wake: !!wake, sensitive, sensitiveType: priv.sensitiveType || null };
+    const payload = { type: 'transcript', text: sensitive ? priv.preview : safeText, source, device: deviceLabel, wake: !!wake, sensitive, sensitiveType: priv.sensitiveType || null, sessionId, provider, at };
     hub.broadcast(payload);
     return { sensitive, safeText, preview: priv.preview, priv };
   }
@@ -281,7 +284,8 @@ export function createVoiceService(opts = {}) {
     const raw = String(text || '').trim();
     if (!raw) return { ok: false, error: '空转写' };
     status.lastError = null;
-    const rec = recordTranscript(raw, { source, wake: false, pinyin, sessionId: status.sessionId, provider });
+    const dev = (source === 'android' || source === 'phone') ? 'phone' : 'pc';
+    const rec = recordTranscript(raw, { source, wake: false, pinyin, sessionId: status.sessionId, provider, device: dev });
     if (rec.sensitive) {
       return { ok: true, redacted: true, sensitiveType: rec.priv.type };
     }
@@ -357,7 +361,7 @@ export function createVoiceService(opts = {}) {
     return parts.join('\n').slice(0, 1500);
   }
 
-  async function processCommand(text, { source = 'text', sessionId = status.sessionId, forceConfirm = false } = {}) {
+  async function processCommand(text, { source = 'text', sessionId = status.sessionId, forceConfirm = false, playTts } = {}) {
     const command = String(text || '').trim();
     if (!command) return { ok: false, error: '命令为空' };
     if (busy) {
@@ -440,7 +444,10 @@ export function createVoiceService(opts = {}) {
       if (!replyText) replyText = '我在，可以说：打开记事本、把音量调到 40、回家模式。';
       let ttsInfo = null;
       let audio = null;
-      if (config.tts.enabled) {
+      // 手机来源（source=android/phone）：默认不在电脑播报/生成音频，由手机本地 TTS 播报回复，避免"手机数据传到电脑再播报一遍"
+      const phoneSource = source === 'android' || source === 'phone';
+      const shouldPlayTts = playTts !== undefined ? !!playTts : (phoneSource ? !!(config.tts && config.tts.playOnPhone === true) : !!config.tts.play);
+      if (config.tts.enabled && shouldPlayTts) {
         hub.broadcast({ type: 'tts_thinking', text: replyText, ts: Date.now() });
         ttsInfo = await workers.speak(replyText, { play: !!config.tts.play });
         if (ttsInfo && ttsInfo.ok) {
@@ -752,7 +759,7 @@ export function createVoiceService(opts = {}) {
     return { wavPath, converted: true, from: fmt };
   }
   async function transcribe(filePath) {
-    const res = await workers.transcribeFile(filePath);
+    const res = await workers.transcribeFile(filePath, { timeoutMs: 120000 });
     const wake = detectWake(res.text || '', res.pinyin || '', config.wakeWords);
     const rec = recordTranscript(res.text || '', { source: 'file', wake: wake.wake, pinyin: res.pinyin || '', provider: res.provider });
     return { ...res, wake: wake.wake, wakeWord: wake.word, sensitive: rec.sensitive, redacted: rec.sensitive, preview: rec.preview };
@@ -984,6 +991,44 @@ export function createVoiceService(opts = {}) {
       } finally {
         if (cleanupRaw) { try { fs.unlinkSync(rawPath); } catch { /* ignore */ } }
         if (convertedPath) { try { fs.unlinkSync(convertedPath); } catch { /* ignore */ } }
+      }
+    } },
+    { method: 'POST', path: '/voice/ambient-upload', handler: async (req, res, ctx) => {
+      // 手机端 24 小时录制分片上传：本地转写 + 全天记录留痕（不执行命令、不播报）
+      requireWrite(req, ctx);
+      if (!config.ambient || config.ambient.enabled === false) { sendJson(res, 200, { ok: false, skipped: true, reason: 'ambient-disabled' }); return; }
+      const ct = String(req.headers['content-type'] || '');
+      if (!ct.includes('multipart/form-data')) { sendJson(res, 400, { ok: false, error: '需要 multipart/form-data（字段 file/audio/wav）' }); return; }
+      let rawPath = '';
+      let convertedPath = '';
+      let fileInfo = { filename: 'ambient.wav', contentType: '' };
+      try {
+        const raw = await readBody(req);
+        const parsed = parseMultipart(raw, ct);
+        if (!parsed.files.length) { sendJson(res, 400, { ok: false, error: 'multipart 中没有音频文件（字段名可用 file/audio/wav）' }); return; }
+        const pick = parsed.files.find((f) => ['file', 'audio', 'wav', 'recording', 'voice'].includes(String(f.field || '').toLowerCase())) || parsed.files[0];
+        fileInfo = { filename: pick.filename || 'ambient.wav', contentType: pick.contentType || '' };
+        const ext = audioFormatOf(fileInfo.filename, fileInfo.contentType);
+        rawPath = tempUploadPath('ambient.' + (ext === 'raw' ? 'bin' : ext));
+        fs.writeFileSync(rawPath, pick.data);
+        const conv = await ensureWav(rawPath, fileInfo);
+        if (conv.converted) convertedPath = conv.wavPath;
+        const r = await transcribe(conv.wavPath);
+        const text = String((r && r.text) || '').trim();
+        if (text.length >= 2) {
+          const rec = recordTranscript(text, { source: 'ambient', wake: false, sessionId: null, provider: (r && r.provider) || 'paraformer', device: 'phone' });
+          status.counters.ambient = (status.counters.ambient || 0) + 1;
+          status.lastAmbient = { at: nowIso(), text: rec.sensitive ? rec.preview : text, provider: (r && r.provider) || null, device: 'phone' };
+          sendJson(res, 200, { ok: true, text: rec.sensitive ? rec.preview : text, redacted: !!rec.sensitive, provider: (r && r.provider) || 'paraformer', ms: (r && r.ms) || null });
+        } else {
+          sendJson(res, 200, { ok: true, text: '', empty: true });
+        }
+      } catch (err) {
+        const msg = String((err && err.message) || err);
+        sendJson(res, 503, { ok: false, error: msg, code: /ASR|transcribe|转写/.test(msg) ? 'ASR_NOT_READY' : 'AMBIENT_UPLOAD_FAILED' });
+      } finally {
+        try { if (rawPath) fs.unlinkSync(rawPath); } catch { /* ignore */ }
+        try { if (convertedPath) fs.unlinkSync(convertedPath); } catch { /* ignore */ }
       }
     } },
     { method: 'GET', path: '/voice/stream', handler: async (req, res) => {

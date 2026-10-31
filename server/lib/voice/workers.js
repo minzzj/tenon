@@ -320,13 +320,25 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     });
   }
 
-  async function transcribeFile(file, { timeoutMs = 45000 } = {}) {
+  async function waitTranscribeReady(ms = 60000) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      if (transcribe.ready && transcribe.child) return true;
+      if (!transcribe.child) startTranscribeWorker();
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    return false;
+  }
+
+  async function transcribeFile(file, { timeoutMs = 120000 } = {}) {
     const wav = abs(root, file);
     if (!fileExists(wav)) throw new Error('WAV 文件不存在：' + wav);
     // 优先用常驻进程（模型已加载，通常 <1s），避免每次重启 FunASR 30-45s 导致手机超时
     if (!config.mock.enabled && config.asrProvider !== 'mock') {
       try {
-        if (!transcribe.child && !transcribe.ready) startTranscribeWorker();
+        if (!transcribe.child) startTranscribeWorker();
+        const ready = await waitTranscribeReady(Math.min(90000, timeoutMs));
+        if (!ready) throw new Error('常驻转写进程未就绪');
         const startedAt = Date.now();
         const r = await transcribeWithWorker(wav, { timeoutMs });
         return { ok: true, text: r.text, pinyin: r.pinyin || '', confidence: null, provider: r.provider || 'paraformer', ms: r.ms || (Date.now() - startedAt), totalMs: Date.now() - startedAt, file: wav, cached: true };

@@ -202,6 +202,17 @@ object TenonClient {
         return asJson(resp, "voice/transcribe")
     }
 
+    /**
+     * 0.6.8 · 手机 24h 录制分段上传：multipart file 字段 + x-tenon-token。
+     * 服务端以 source=ambient 入库（只记录、不执行命令），手机「记录 → 全天录音」可见。
+     */
+    fun voiceAmbientUpload(wav: java.io.File): JSONObject {
+        val resp = TenonHttp.postMultipart(
+            "$API/voice/ambient-upload", wav, "file", wav.name, timeoutMs = 30000
+        )
+        return asJson(resp, "voice/ambient-upload")
+    }
+
     /** 一句话 → 中枢执行（AI 计划 + 步骤）。返回 {say, provider, steps, actions, needConfirm...}。 */
     fun voiceCommand(text: String): JSONObject {
         val req = JSONObject().put("text", text.trim()).put("source", "android")

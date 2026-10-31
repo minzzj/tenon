@@ -17,6 +17,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.util.Base64
@@ -65,6 +66,8 @@ class ScreenCaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
     private var handler: Handler? = null
+    private var workerThread: HandlerThread? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var uploads = 0
     private var failures = 0
     private var lastError = ""
@@ -86,6 +89,8 @@ class ScreenCaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // 截屏/压缩/上传全部放到后台线程，避免主线程阻塞导致系统弹「应用无响应」
+        workerThread = HandlerThread("tenon-screen-capture").also { it.start() }
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
@@ -122,6 +127,16 @@ class ScreenCaptureService : Service() {
         return try {
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             projection = mpm.getMediaProjection(code, data)
+            // Android 14 某些机型要求先注册回调再 createVirtualDisplay，否则会抛异常/无响应
+            projection?.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    LogBus.log("屏幕采集授权被系统/用户停止")
+                    running = false
+                    App.setScreenEnabled(false)
+                    App.setScreenLastError("屏幕授权已被系统/用户停止，请重新在设置里授权")
+                    stopSelf()
+                }
+            }, mainHandler)
             val metrics = resources.displayMetrics
             val w = metrics.widthPixels
             val h = metrics.heightPixels
@@ -131,14 +146,11 @@ class ScreenCaptureService : Service() {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
             )
-            projection?.registerCallback(object : MediaProjection.Callback() {
-                override fun onStop() {
-                    LogBus.log("屏幕采集授权被系统/用户停止")
-                    stopSelf()
-                }
-            }, Handler(Looper.getMainLooper()))
             running = true
-            handler = Handler(Looper.getMainLooper())
+            App.setScreenEnabled(true)
+            App.setScreenLastError("")
+            App.setScreenLast("采集已开启 · 每 " + App.screenInterval() + " 秒一次")
+            handler = Handler(workerThread?.looper ?: Looper.getMainLooper())
             notify("屏幕采集已开启 · 每 " + App.screenInterval() + " 秒一次")
             LogBus.log("屏幕采集服务启动，间隔 " + App.screenInterval() + " 秒")
             handler?.postDelayed(tick, 2500)
@@ -248,6 +260,8 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         cleanup()
+        try { workerThread?.quitSafely() } catch (_: Exception) {}
+        workerThread = null
         LogBus.log("屏幕采集服务已停止")
         super.onDestroy()
     }

@@ -24,6 +24,7 @@ class VoiceRecorder(private val context: Context) {
     private var worker: Thread? = null
     private var pcm: ByteArrayOutputStream? = null
     @Volatile private var recording = false
+    private val pcmLock = Any()
     @Volatile var maxAmplitude: Int = 0
         private set
 
@@ -73,11 +74,22 @@ class VoiceRecorder(private val context: Context) {
                     bytes[i * 2 + 1] = ((v shr 8) and 0xFF).toByte()
                 }
                 if (amp > maxAmplitude) maxAmplitude = amp
-                pcm?.write(bytes, 0, n * 2)
+                synchronized(pcmLock) { pcm?.write(bytes, 0, n * 2) }
             }
         }.also { it.isDaemon = true; it.start() }
         LogBus.log("开始录音（16kHz 单声道）")
         return true
+    }
+
+    /** 录音中的当前 PCM 快照（用于「实时识别预览」：每 2-3 秒取一次上传电脑识别）。 */
+    fun snapshotWav(minBytes: Int = SAMPLE_RATE / 2): File? {
+        val data = synchronized(pcmLock) { pcm?.toByteArray() ?: return null }
+        if (data.size < minBytes) return null
+        val out = File(context.cacheDir, "tenon-partial-" + System.currentTimeMillis() + ".wav")
+        try {
+            FileOutputStream(out).use { fos -> fos.write(wavHeader(data.size)); fos.write(data) }
+            return out
+        } catch (_: Exception) { return null }
     }
 
     /** 停止并返回 WAV 文件（无有效音频时返回 null）。 */

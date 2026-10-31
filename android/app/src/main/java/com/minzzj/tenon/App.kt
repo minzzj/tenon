@@ -73,6 +73,12 @@ class App : Application() {
         fun speechSource(): String = sp().getString("speechSource", "pc") ?: "pc"
         fun setSpeechSource(v: String) = sp().edit().putString("speechSource", v).apply()
 
+        // 0.6.9：24h 录制可配置（设置页可改）
+        fun ambientChunkSec(): Int = sp().getInt("ambientChunkSec", 12).coerceIn(6, 30)
+        fun setAmbientChunkSec(v: Int) = sp().edit().putInt("ambientChunkSec", v.coerceIn(6, 30)).apply()
+        fun ambientWifiOnly(): Boolean = sp().getBoolean("ambientWifiOnly", false)
+        fun setAmbientWifiOnly(v: Boolean) = sp().edit().putBoolean("ambientWifiOnly", v).apply()
+
         fun screenEnabled(): Boolean = sp().getBoolean("screenEnabled", false)
         fun setScreenEnabled(v: Boolean) = sp().edit().putBoolean("screenEnabled", v).apply()
 
@@ -104,6 +110,27 @@ class App : Application() {
         }
 
         fun screenLastError(): String = sp().getString("screenLastError", "") ?: ""
+
+        // ---- 0.6.8：手机本机 24 小时录制（AmbientRecordService） ----
+        fun ambientDesired(): Boolean = sp().getBoolean("ambientDesired", false)
+        fun setAmbientDesired(v: Boolean) = sp().edit().putBoolean("ambientDesired", v).apply()
+
+        fun bumpAmbientSegment() {
+            val key = "ambientCount_" + dayKey()
+            sp().edit().putInt(key, sp().getInt(key, 0) + 1).apply()
+        }
+
+        fun ambientSegmentsToday(): Int = sp().getInt("ambientCount_" + dayKey(), 0)
+
+        fun setAmbientLast(info: String) = sp().edit().putString("ambientLast", info).apply()
+        fun ambientLast(): String = sp().getString("ambientLast", "") ?: ""
+
+        fun setAmbientLastError(info: String) = sp().edit().putString("ambientLastError", info).apply()
+        fun ambientLastError(): String = sp().getString("ambientLastError", "") ?: ""
+
+        // ---- 0.6.8：悬浮窗开关记忆 ----
+        fun overlayEnabled(): Boolean = sp().getBoolean("overlayEnabled", false)
+        fun setOverlayEnabled(v: Boolean) = sp().edit().putBoolean("overlayEnabled", v).apply()
 
         // ---- V0.5/V0.6：提醒开关（本地通知） ----
         fun remindersEnabled(): Boolean = sp().getBoolean("remindersEnabled", true)

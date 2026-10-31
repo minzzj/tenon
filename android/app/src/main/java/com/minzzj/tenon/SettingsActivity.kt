@@ -7,8 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.InputType
 import android.view.ViewGroup
 import android.widget.EditText
@@ -17,7 +19,10 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.minzzj.tenon.net.TenonClient
+import com.minzzj.tenon.service.AmbientRecordService
+import com.minzzj.tenon.service.OverlayService
 import com.minzzj.tenon.service.ScreenCaptureService
+import com.minzzj.tenon.voice.OneTapVoice
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -34,6 +39,8 @@ class SettingsActivity : Activity() {
     companion object {
         private const val REQ_SCREEN_CAPTURE = 3001
         private const val REQ_NOTIF_SCREEN = 3002
+        private const val REQ_OVERLAY = 3003
+        private const val REQ_AUDIO_AMBIENT = 3004
     }
 
     private lateinit var hubInput: EditText
@@ -56,6 +63,13 @@ class SettingsActivity : Activity() {
     private lateinit var screenSwitch: Switch
     private lateinit var screenStatus: TextView
     private lateinit var screenBlacklistInput: EditText
+
+    // 0.6.8 悬浮窗 / 手机 24h 录制
+    private lateinit var overlaySwitch: Switch
+    private lateinit var overlayStatus: TextView
+    private lateinit var ambientSwitch: Switch
+    private lateinit var ambientStatus: TextView
+    private var suppressSwitch = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -229,8 +243,87 @@ class SettingsActivity : Activity() {
         sLocal.addView(rowClear)
         root.addView(sLocal)
 
+        // ---------- 09 悬浮窗 ----------
+        val sOverlay = Ui.section(this, "09 · 悬浮窗（一键唤醒 / 24h 开关）")
+        sOverlay.addView(Ui.hint(this,
+            "悬浮球可拖动：单击=一键唤醒（立即录音说一句），长按=开启/关闭 24 小时录制。" +
+            "退出 App 后仍可用（前台服务保活，常驻通知里可关闭）。"))
+        overlaySwitch = Ui.switchRow(this, "显示悬浮窗", OverlayService.running) { on ->
+            if (suppressSwitch) return@switchRow
+            if (on) {
+                if (Settings.canDrawOverlays(this)) startOverlay()
+                else {
+                    overlaySwitch.isChecked = false
+                    requestOverlayPermission()
+                }
+            } else {
+                OverlayService.stop(this)
+                App.setOverlayEnabled(false)
+            }
+            overlayStatus.postDelayed({ refreshOverlayStatus() }, 600)
+        }
+        sOverlay.addView(overlaySwitch)
+        val rowOverlay = Ui.row(this)
+        rowOverlay.addView(Ui.button(this, "显示悬浮窗", true) {
+            if (Settings.canDrawOverlays(this)) startOverlay() else requestOverlayPermission()
+        })
+        rowOverlay.addView(Ui.button(this, "关闭悬浮窗") {
+            OverlayService.stop(this)
+            overlayStatus.postDelayed({ refreshOverlayStatus() }, 400)
+        })
+        sOverlay.addView(rowOverlay)
+        val rowOverlay2 = Ui.row(this)
+        rowOverlay2.addView(Ui.button(this, "授予悬浮窗权限 / 打开系统设置") { requestOverlayPermission() })
+        sOverlay.addView(rowOverlay2)
+        overlayStatus = Ui.body(this, "")
+        overlayStatus.textSize = 13f
+        sOverlay.addView(overlayStatus)
+        root.addView(sOverlay)
+
+        // ---------- 10 24 小时录制（手机本机） ----------
+        val sAmbient = Ui.section(this, "10 · 24 小时录制（手机本机）")
+        sAmbient.addView(Ui.hint(this,
+            "开启后手机在后台持续录音，分段 WAV 逐段上传到你自己电脑的 " +
+            "/api/v2/voice/ambient-upload（multipart file + x-tenon-token），服务端以 source=ambient 入库，" +
+            "在「记录 → 全天录音」可见。只上传电脑本机、不上传第三方；耗电与发热会增加，" +
+            "常驻通知和本页都能随时停止。"))
+        ambientSwitch = Ui.switchRow(this, "开启 24 小时录制（手机后台录音）", AmbientRecordService.running) { on ->
+            if (suppressSwitch) return@switchRow
+            if (on) startAmbientRecording() else {
+                AmbientRecordService.stop(this)
+                ambientStatus.postDelayed({ refreshAmbientStatus() }, 600)
+            }
+        }
+        sAmbient.addView(ambientSwitch)
+        val rowAmbient = Ui.row(this)
+        rowAmbient.addView(Ui.button(this, "开启 24h 录制", true) { startAmbientRecording() })
+        rowAmbient.addView(Ui.button(this, "停止 24h 录制") {
+            AmbientRecordService.stop(this)
+            ambientStatus.postDelayed({ refreshAmbientStatus() }, 600)
+        })
+        sAmbient.addView(rowAmbient)
+        ambientStatus = Ui.body(this, "")
+        ambientStatus.textSize = 13f
+        sAmbient.addView(ambientStatus)
+        val rowChunkSec = Ui.row(this)
+        for (sec in intArrayOf(8, 12, 20, 30)) {
+            rowChunkSec.addView(Ui.button(this, sec.toString() + " 秒/段") {
+                App.setAmbientChunkSec(sec)
+                Toast.makeText(this, "已设为 " + sec + " 秒/段（下次分段生效）", Toast.LENGTH_SHORT).show()
+                refreshAmbientStatus()
+            })
+        }
+        sAmbient.addView(rowChunkSec)
+        sAmbient.addView(Ui.switchRow(this, "仅 WiFi 上传（移动网络时跳过上传）", App.ambientWifiOnly()) { on ->
+            App.setAmbientWifiOnly(on)
+            Toast.makeText(this, if (on) "已开启仅 WiFi 上传" else "移动网络也可上传", Toast.LENGTH_SHORT).show()
+        })
+        sAmbient.addView(Ui.hint(this,
+            "说明：24h 录制与「一键唤醒」是两个独立入口；一键唤醒录音时会临时暂停 24h 录制，结束后自动恢复。"))
+        root.addView(sAmbient)
+
         // ---------- 4. 更多（旧页面 / 二级页，保留兼容、不打扰首页） ----------
-        val sPages = Ui.section(this, "09 · 更多（旧页面 / 二级页）")
+        val sPages = Ui.section(this, "11 · 更多（旧页面 / 二级页）")
         sPages.addView(Ui.hint(this, "5 页签之外的旧页面都收在这里：功能保留，但不占用首页。"))
         val rowP1 = Ui.row(this)
         rowP1.addView(Ui.button(this, "旧设备页", true) { openWeb("设备（旧）", "/#/devices") })
@@ -247,13 +340,13 @@ class SettingsActivity : Activity() {
         root.addView(sPages)
 
         // ---------- 5. 关于 / 隐私 ----------
-        val sAbout = Ui.section(this, "10 · 关于 / 隐私")
+        val sAbout = Ui.section(this, "12 · 关于 / 隐私")
         aboutText = Ui.hint(this, "")
         sAbout.addView(aboutText)
         root.addView(sAbout)
 
         // ---------- 6. 版本与一键更新 ----------
-        val sUpdate = Ui.section(this, "11 · 版本与一键更新")
+        val sUpdate = Ui.section(this, "13 · 版本与一键更新")
         sUpdate.addView(Ui.body(this, "当前版本 v" + BuildConfig.VERSION_NAME + "（versionCode " + BuildConfig.VERSION_CODE + "）"))
         val updMsg = Ui.hint(this, "点「检查更新」自动从电脑中枢下载新版 APK；不需要重新发文件。首次更新需允许「安装未知应用」。")
         val rowUpd = Ui.row(this)
@@ -277,6 +370,8 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshScreenStatus()
+        refreshOverlayStatus()
+        refreshAmbientStatus()
     }
 
     private fun loadLocal() {
@@ -296,6 +391,8 @@ class SettingsActivity : Activity() {
             append("· 操作令牌只保存在本机 App 的 SharedPreferences，不写入日志；\n")
             append("· 云端理解走电脑端已配置的 DeepSeek Key，手机不保存该 Key；\n")
             append("· 屏幕采集需你手动在系统弹窗授权，可随时暂停；截图只上传到你自己的中枢。\n")
+            append("· 手机 24h 录制约 12 秒一段，只上传到你的中枢，可随时在首页/设置/通知里停止。\n")
+            append("· 悬浮窗只用于本机操作，不采集屏幕内容。\n")
             append("· 本 APK 不内置操作令牌，令牌只保存在本机；换手机/重置后需重新填写。")
         }
     }
@@ -354,8 +451,94 @@ class SettingsActivity : Activity() {
         }
     }
 
+    // ================= 0.6.8：悬浮窗 =================
+
+    private fun startOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            requestOverlayPermission()
+            return
+        }
+        try {
+            OverlayService.start(this)
+            App.setOverlayEnabled(true)
+            Toast.makeText(this, "悬浮窗已显示，可拖动；退出 App 后仍可用", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "悬浮窗开启失败：" + (e.message ?: ""), Toast.LENGTH_LONG).show()
+        }
+        overlayStatus.postDelayed({ refreshOverlayStatus() }, 600)
+    }
+
+    private fun requestOverlayPermission() {
+        Toast.makeText(this, "请在系统页面允许「显示在其他应用上层」", Toast.LENGTH_LONG).show()
+        try {
+            startActivityForResult(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + packageName)
+                ),
+                REQ_OVERLAY
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开悬浮窗权限页：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun refreshOverlayStatus() {
+        if (!this::overlayStatus.isInitialized) return
+        val allowed = Settings.canDrawOverlays(this)
+        val running = OverlayService.running
+        suppressSwitch = true
+        overlaySwitch.isChecked = running
+        suppressSwitch = false
+        overlayStatus.text = buildString {
+            append("权限：").append(if (allowed) "已授权" else "未授权")
+            append(" · 状态：").append(if (running) "运行中" else "未运行")
+            append("\n悬浮球可拖动，点一下展开；展开后两个按钮完全分开。退出 App 后仍可用。")
+        }
+    }
+
+    // ================= 0.6.8：手机本机 24 小时录制 =================
+
+    private fun startAmbientRecording() {
+        if (!OneTapVoice.hasMic(this)) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO_AMBIENT)
+            return
+        }
+        try {
+            AmbientRecordService.start(this)
+            App.setAmbientDesired(true)
+            Toast.makeText(this, "24 小时录制已开启（常驻通知可停止）", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "开启失败：" + (e.message ?: "") + "（请保持 App 在前台再试）", Toast.LENGTH_LONG).show()
+        }
+        ambientStatus.postDelayed({ refreshAmbientStatus() }, 600)
+    }
+
+    private fun refreshAmbientStatus() {
+        if (!this::ambientStatus.isInitialized) return
+        val running = AmbientRecordService.running
+        suppressSwitch = true
+        ambientSwitch.isChecked = running
+        suppressSwitch = false
+        ambientStatus.text = buildString {
+            append("状态：").append(if (running) "运行中（前台服务）" else "未开启")
+            append(" · 今日 ").append(App.ambientSegmentsToday()).append(" 段")
+            val last = App.ambientLast()
+            if (last.isNotBlank()) append("\n最近：").append(last)
+            val err = App.ambientLastError()
+            if (err.isNotBlank()) append("\n⚠ ").append(err.take(120))
+            append("\n记录位置：记录 → 全天录音（source=ambient）。")
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_OVERLAY) {
+            refreshOverlayStatus()
+            if (Settings.canDrawOverlays(this)) startOverlay()
+            else Toast.makeText(this, "未授权悬浮窗权限", Toast.LENGTH_LONG).show()
+            return
+        }
         if (requestCode != REQ_SCREEN_CAPTURE) return
         if (resultCode == RESULT_OK && data != null) {
             App.setScreenEnabled(true)
@@ -377,6 +560,12 @@ class SettingsActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_AUDIO_AMBIENT) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted) startAmbientRecording()
+            else Toast.makeText(this, "未授予麦克风权限，无法开启 24h 录制", Toast.LENGTH_LONG).show()
+            return
+        }
         if (requestCode == REQ_NOTIF_SCREEN) {
             val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
             if (granted) requestScreenCapture()
@@ -400,12 +589,43 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /**
+     * 0.6.8：「保存并测试」不是只保存 —— 保存后真实 GET /api/v2/voice/status，
+     * 把 HTTP 状态、语音状态、ASR/LLM/AI 提供方和令牌状态都显示出来。
+     */
     private fun saveConnection() {
         App.setHub(hubInput.text.toString())
         App.setToken(tokenInput.text.toString())
         hubInput.setText(App.hub())
-        Toast.makeText(this, "已保存（中枢：" + App.baseUrl() + "）", Toast.LENGTH_SHORT).show()
-        refreshFromHub()
+        if (App.baseUrl().isBlank()) {
+            statusText.text = "中枢地址为空：请填写，或点下面的「局域网地址 / 公网地址」快捷填入。"
+            Toast.makeText(this, "请先填写中枢地址", Toast.LENGTH_SHORT).show()
+            return
+        }
+        statusText.text = "已保存，正在测试 GET /api/v2/voice/status …"
+        Toast.makeText(this, "已保存，正在测试…", Toast.LENGTH_SHORT).show()
+        bg {
+            val msg = try {
+                val st = TenonClient.voiceStatus()
+                val providers = st.optJSONObject("providers")
+                val ai = st.optJSONObject("ai")
+                val aiLabel = if (ai?.optBoolean("available", false) == true) ai.optString("model", "deepseek") else "规则引擎"
+                "✅ 保存并测试通过 · HTTP 200 · 状态 " + st.optString("state", "?") +
+                        " · 本地识别 " + (providers?.optString("asr", "?") ?: "?") +
+                        " · 云端理解 " + (providers?.optString("llm", "?") ?: "?") +
+                        " · AI " + aiLabel +
+                        (if (App.token().isNotBlank()) " · 已带令牌" else " · 未填令牌")
+            } catch (e: TenonClient.VoiceHttpException) {
+                if (e.isAuth) "⚠ 地址已保存，但 HTTP " + e.code + "：需要操作令牌（新版 GET 也要令牌）"
+                else "⚠ 地址已保存，但测试失败 HTTP " + e.code + "：" + bodyError(e.body)
+            } catch (e: Exception) {
+                "⚠ 地址已保存，但连不上中枢：" + (e.message ?: "") + "\n当前：" + App.baseUrl()
+            }
+            ui {
+                statusText.text = msg
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun refreshFromHub() {

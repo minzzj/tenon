@@ -48,7 +48,11 @@ export function collectSources({ dataDir, date, ids = null, kind = 'note-summary
       notes = notesStore.list({ date: day, limit: 100 }).items;
     }
   } catch { notes = []; }
-  const transcripts = readJsonLines(path.join(dataDir, 'voice', 'transcripts', day + '.jsonl'), 200).map((x) => String(x.text || '')).filter(Boolean);
+  const transcripts = readJsonLines(path.join(dataDir, 'voice', 'transcripts', day + '.jsonl'), 200)
+    .map((x) => ({ text: String(x.text || ''), source: String(x.source || ''), device: String(x.device || (x.source === 'android' || x.source === 'phone' ? 'phone' : 'pc')) }))
+    .filter((x) => x.text);
+  const byDevice = { pc: [], phone: [] };
+  for (const t of transcripts) (byDevice[t.device === 'phone' ? 'phone' : 'pc'] || byDevice.pc).push(t.text);
   const screens = readJsonLines(path.join(dataDir, 'voice', 'screen', day + '.jsonl'), 300).filter((x) => x && x.text && !x.redacted).map((x) => ({ at: x.at, app: x.app, title: x.title, text: String(x.text).slice(0, 300) }));
   let diaryMarkdown = '';
   try { const f = path.join(dataDir, 'voice', 'diary', day + '.md'); if (fs.existsSync(f)) diaryMarkdown = fs.readFileSync(f, 'utf8'); } catch { diaryMarkdown = ''; }
@@ -59,7 +63,12 @@ export function collectSources({ dataDir, date, ids = null, kind = 'note-summary
       if (ev.type === 'voice.command' || ev.type === 'agent.executed') execs.push({ type: ev.type, text: String((ev.data && (ev.data.text || '')).slice(0, 160)), ok: ev.data && ev.data.ok !== false, provider: ev.data && ev.data.provider });
     }
   } catch { /* ignore */ }
-  return { day, notes, transcripts, screens, diaryMarkdown, execs: execs.slice(-40) };
+  const screenByDevice = { pc: [], phone: [] };
+  for (const sc of screens) {
+    const dev = String(sc.device || sc.source || '').toLowerCase() === 'phone' ? 'phone' : 'pc';
+    screenByDevice[dev].push(sc);
+  }
+  return { day, notes, transcripts, transcriptTexts: transcripts.map((t) => t.text), byDevice, screens, screenByDevice, diaryMarkdown, execs: execs.slice(-40) };
 }
 
 export function buildPrompt(kind = 'note-summary') {
@@ -89,7 +98,7 @@ export function sanitizeStructured(parsed, fallback = {}) {
 export function fallbackStructured(sources = {}, kind = 'note-summary') {
   const notes = sources.notes || [];
   const screens = sources.screens || [];
-  const transcripts = sources.transcripts || [];
+  const transcripts = (sources.transcriptTexts || sources.transcripts || []).map((t) => (typeof t === 'string' ? t : t.text)).filter(Boolean);
   const execs = sources.execs || [];
   const noteLines = notes.map((n) => '「' + (n.title || '') + '」' + String(n.text || '').slice(0, 120));
   const videoLines = screens.map((s) => (s.app ? '[' + s.app + '] ' : '') + (s.title || '') + '：' + String(s.text || '').slice(0, 100));
@@ -113,7 +122,8 @@ export async function generateStructured({ ai = null, kind = 'note-summary', dat
       const sourceText = [
         '日期：' + day,
         '【笔记】\n' + (sources.notes.length ? sources.notes.map((n, i) => (i + 1) + '. ' + (n.title || '') + '（' + (n.source === 'voice' ? '语音' : '文字') + '）：' + String(n.text || '').slice(0, 600)).join('\n') : '（无）'),
-        '【语音转写】\n' + (sources.transcripts.length ? sources.transcripts.slice(-60).map((t) => '- ' + t).join('\n') : '（无）'),
+        '【电脑端记录】\n' + (((sources.byDevice || {}).pc || []).length ? (sources.byDevice.pc.slice(-40).map((t) => '- ' + t).join('\n')) : '（无）'),
+        '【手机端记录】\n' + (((sources.byDevice || {}).phone || []).length ? (sources.byDevice.phone.slice(-40).map((t) => '- ' + t).join('\n')) : '（无）'),
         '【屏幕文本（看了什么）】\n' + (sources.screens.length ? sources.screens.slice(-80).map((s) => '- ' + String(s.at).slice(11, 16) + ' [' + (s.app || '屏幕') + '] ' + (s.title ? s.title + '：' : '') + s.text).join('\n') : '（无）'),
         '【已执行操作】\n' + (sources.execs.length ? sources.execs.map((e) => '- ' + (e.ok ? '✓' : '✗') + ' ' + e.text).join('\n') : '（无）'),
         sources.diaryMarkdown ? '【已有晚间日记】\n' + sources.diaryMarkdown.slice(0, 2500) : '',
@@ -140,6 +150,10 @@ function markdownOf({ title, day, kind, provider, degraded, structured, sources 
   sec('待办', structured.待办);
   sec('回顾', structured.回顾);
   lines.push('## 日记', '', structured.日记 || '（无）', '');
+  const dev = sources.byDevice || { pc: [], phone: [] };
+  lines.push('## 设备记录', '', '- 电脑端语音：' + ((dev.pc || []).length) + ' 条', '- 手机端语音：' + ((dev.phone || []).length) + ' 条', '');
+  if ((dev.pc || []).length) { lines.push('### 🖥 电脑端记录', ''); for (const t of dev.pc.slice(-25)) lines.push('- ' + String(t).slice(0, 160)); lines.push(''); }
+  if ((dev.phone || []).length) { lines.push('### 📱 手机端记录', ''); for (const t of dev.phone.slice(-25)) lines.push('- ' + String(t).slice(0, 160)); lines.push(''); }
   lines.push('## 今日数据', '', '- 笔记：' + ((sources.notes || []).length) + ' 条', '- 语音转写：' + ((sources.transcripts || []).length) + ' 条', '- 屏幕文本：' + ((sources.screens || []).length) + ' 条', '- 执行操作：' + ((sources.execs || []).length) + ' 条', '');
   return lines.join('\n');
 }

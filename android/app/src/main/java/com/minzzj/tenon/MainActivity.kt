@@ -1,22 +1,19 @@
 package com.minzzj.tenon
 
 import android.Manifest
-import android.animation.ObjectAnimator
-import android.animation.PropertyValuesHolder
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
-import android.speech.tts.TextToSpeech
+import android.provider.Settings
 import android.text.InputType
 import android.text.TextUtils
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -24,19 +21,26 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.minzzj.tenon.net.TenonClient
+import com.minzzj.tenon.service.AmbientRecordService
+import com.minzzj.tenon.service.OverlayService
+import com.minzzj.tenon.voice.LocalTts
+import com.minzzj.tenon.voice.OneTapVoice
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.util.Locale
 
 /**
- * 0.6.7 · 手机端首页（与电脑端 super.html 同样的清爽 5 页签）。
+ * 0.6.8 · 手机端首页（5 页签）。
  *
- * 结构：页头 → 中枢连接状态 → 大录音按钮（按住/点击，显示录音/识别/执行状态）
- * → 最近回复/执行结果 → 快捷入口（记笔记/总结今天/提醒）→ 文字兜底 → 底部 5 页签。
- * 录音仍走原链路：VoiceRecorder 16k WAV → /voice/transcribe（电脑本地 ASR）→ /voice/command。
+ * 首页最上面是**两个完全分开**的功能入口（用户最强调）：
+ * 1) 🎙 一键唤醒：点一下立即录一句话（不喊唤醒词），再点结束 → 电脑本地 ASR →
+ *    `/api/v2/voice/command {text, source:"android"}` → 手机本机 TTS 播报；
+ *    界面显示「听到：…」与「榫卯：…」。
+ * 2) ⏺ 24 小时录制：独立开关按钮 + 状态，开启后由 AmbientRecordService 后台
+ *    约 12 秒一段上传 `/api/v2/voice/ambient-upload`，记录出现在「记录 → 全天录音」。
+ *
+ * 与录音按钮无关的旧版 24h 电脑端开关保留在设置页，手机本机录制是新增的独立能力。
  */
-class MainActivity : Activity() {
+class MainActivity : Activity(), OneTapVoice.Listener {
     companion object {
         private const val REQ_AUDIO = 2001
         private const val REQ_NOTIFY = 2002
@@ -47,10 +51,15 @@ class MainActivity : Activity() {
     private lateinit var hubLine: TextView
     private lateinit var voiceLine: TextView
 
-    private lateinit var voiceButton: TextView
-    private lateinit var stateLabel: TextView
-    private lateinit var liveLine: TextView
-    private lateinit var recognizedLine: TextView
+    // 卡片 A：一键唤醒
+    private lateinit var wakeBtn: TextView
+    private lateinit var wakeState: TextView
+    private lateinit var heardLine: TextView
+    private lateinit var wakeReply: TextView
+
+    // 卡片 B：24 小时录制
+    private lateinit var ambientBtn: TextView
+    private lateinit var ambientState: TextView
 
     private lateinit var replyText: TextView
     private lateinit var replyMeta: TextView
@@ -60,9 +69,16 @@ class MainActivity : Activity() {
 
     private lateinit var textInput: EditText
     private lateinit var logLine: TextView
+    private lateinit var statusLine: TextView
 
     private val pollHandler = Handler(Looper.getMainLooper())
-    private val tickerHandler = Handler(Looper.getMainLooper())
+    private val ambientHandler = Handler(Looper.getMainLooper())
+
+    private var lastCommandText = ""
+    private var lastConfirmId = ""
+    private var pendingWake = false
+    private var pendingAmbient = false
+    private var busy = false
 
     private val reminderPoll = object : Runnable {
         override fun run() {
@@ -75,27 +91,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private var lastCommandText = ""
-    private var lastConfirmId = ""
-
-    private lateinit var recorder: VoiceRecorder
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    private var pulse: ObjectAnimator? = null
-    private var busy = false
-    private var pendingStart = false
-    private var recordStartAt = 0L
-    private var recordTapMode = false
-    private var downAt = 0L
-
-    private val ticker = object : Runnable {
+    private val ambientTicker = object : Runnable {
         override fun run() {
-            if (!recorder.isRecording) return
-            val sec = ((SystemClock.elapsedRealtime() - recordStartAt) / 1000L).toInt()
-            if (this@MainActivity::liveLine.isInitialized) {
-                liveLine.text = "正在录音 " + sec + "s · 音量 " + levelBar(recorder.maxAmplitude)
-            }
-            tickerHandler.postDelayed(this, 250)
+            refreshAmbientUi()
+            ambientHandler.postDelayed(this, 2500)
         }
     }
 
@@ -105,17 +104,20 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        recorder = VoiceRecorder(this)
-
+        LocalTts.init(this)
         val root = Ui.column(this)
 
         // ---------- 页头 ----------
         val head = Ui.row(this)
-        head.addView(Ui.pageHead(this, "榫卯 · 超级终端",
-            "v" + BuildConfig.VERSION_NAME + " · 语音管家"))
+        head.addView(
+            Ui.pageHead(
+                this, "榫卯 · 超级终端",
+                "v" + BuildConfig.VERSION_NAME + " · 一键唤醒 / 24h 录制 / 悬浮窗"
+            )
+        )
         root.addView(head)
 
-        // ---------- 顶部：连接状态（中枢地址 / 在线 / 语音状态） ----------
+        // ---------- 中枢连接 ----------
         val sHub = Ui.section(this, "中枢连接")
         val onlineRow = Ui.row(this)
         dot = TextView(this).apply {
@@ -141,75 +143,63 @@ class MainActivity : Activity() {
         sHub.addView(rowHub)
         root.addView(sHub)
 
-        // ---------- 中央：大录音按钮（按住/点击都可） ----------
-        val center = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, Ui.dp(this@MainActivity, 22), 0, Ui.dp(this@MainActivity, 4))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        // ---------- 卡片 A：一键唤醒（独立入口 1） ----------
+        val sWake = Ui.section(this, "🎙 一键唤醒")
+        sWake.addView(
+            Ui.hint(
+                this,
+                "不用喊唤醒词：点一下开始录一句话，再点一下结束。识别在电脑本地完成，" +
+                        "结果回到手机显示，并由手机本机朗读（电脑端不会重复播报）。"
             )
-        }
-        voiceButton = TextView(this).apply {
-            text = "按住说话\n或点一下"
-            gravity = Gravity.CENTER
-            textSize = 21f
-            setTextColor(Ui.PAPER)
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setBackgroundResource(R.drawable.bg_voice_ring)
-            layoutParams = LinearLayout.LayoutParams(
-                Ui.dp(this@MainActivity, 176), Ui.dp(this@MainActivity, 176)
-            ).apply { gravity = Gravity.CENTER_HORIZONTAL }
-            isClickable = true
-            setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        downAt = SystemClock.elapsedRealtime()
-                        if (busy) {
-                            stateLabel.text = "还在处理上一条，稍等…"
-                            return@setOnTouchListener true
-                        }
-                        if (recorder.isRecording) stopVoice() else startVoice()
-                        true
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        val held = SystemClock.elapsedRealtime() - downAt
-                        if (recorder.isRecording) {
-                            if (held < 600) {
-                                recordTapMode = true
-                                stateLabel.text = "正在录音… 再点一下结束"
-                            } else {
-                                stopVoice()
-                            }
-                        }
-                        v.performClick()
-                        true
-                    }
-                    else -> false
-                }
-            }
-        }
-        center.addView(voiceButton)
-        stateLabel = Ui.body(this, "点一下开始录音，再点一下结束；也可以按住说话")
-        stateLabel.gravity = Gravity.CENTER
-        stateLabel.setTextColor(Ui.CYAN)
-        stateLabel.textSize = 13f
-        stateLabel.setPadding(0, Ui.dp(this, 12), 0, 0)
-        center.addView(stateLabel)
-        liveLine = Ui.meta(this, "")
-        liveLine.gravity = Gravity.CENTER
-        liveLine.setTextColor(Ui.AMBER)
-        liveLine.visibility = LinearLayout.GONE
-        center.addView(liveLine)
-        recognizedLine = Ui.body(this, "最近识别：—")
-        recognizedLine.gravity = Gravity.CENTER
-        recognizedLine.setTextColor(Ui.GREY)
-        recognizedLine.textSize = 13f
-        recognizedLine.maxLines = 2
-        recognizedLine.ellipsize = TextUtils.TruncateAt.END
-        recognizedLine.setPadding(0, Ui.dp(this, 6), 0, 0)
-        center.addView(recognizedLine)
-        root.addView(center)
+        )
+        wakeBtn = Ui.button(this, "🎙 点一下开始说话", true) { onWakeTap() }
+        wakeBtn.textSize = 17f
+        wakeBtn.minHeight = Ui.dp(this, 54)
+        val wakeRow = Ui.row(this)
+        wakeRow.addView(wakeBtn)
+        sWake.addView(wakeRow)
+        wakeState = Ui.body(this, "待机")
+        wakeState.textSize = 14f
+        wakeState.setTextColor(Ui.CYAN)
+        wakeState.setPadding(0, Ui.dp(this, 10), 0, 0)
+        sWake.addView(wakeState)
+        heardLine = Ui.body(this, "听到：—")
+        heardLine.textSize = 13f
+        heardLine.setTextColor(Ui.PAPER)
+        sWake.addView(heardLine)
+        wakeReply = Ui.body(this, "榫卯：—")
+        wakeReply.textSize = 13f
+        wakeReply.setTextColor(Ui.PAPER)
+        wakeReply.maxLines = 4
+        wakeReply.ellipsize = TextUtils.TruncateAt.END
+        sWake.addView(wakeReply)
+        root.addView(sWake)
+
+        // ---------- 卡片 B：24 小时录制（独立入口 2，和录音按钮完全分开） ----------
+        val sAmb = Ui.section(this, "⏺ 24 小时录制")
+        ambientBtn = Ui.button(this, "⏺ 开启 24 小时录制", true) { onAmbientTap() }
+        ambientBtn.textSize = 16f
+        ambientBtn.minHeight = Ui.dp(this, 52)
+        val ambRow = Ui.row(this)
+        ambRow.addView(ambientBtn)
+        sAmb.addView(ambRow)
+        ambientState = Ui.body(this, "未开启")
+        ambientState.textSize = 13f
+        ambientState.setPadding(0, Ui.dp(this, 10), 0, 0)
+        sAmb.addView(ambientState)
+        sAmb.addView(
+            Ui.hint(
+                this,
+                "手机本机后台录音：约 12 秒一段 WAV，上传到你自己的电脑 " +
+                        "/api/v2/voice/ambient-upload，只存电脑本机、不上传第三方。开启后耗电和发热会增加，" +
+                        "常驻通知里有「停止 24h 录制」，这里也能随时关闭。"
+            )
+        )
+        val ambRow2 = Ui.row(this)
+        ambRow2.addView(Ui.button(this, "查看全天录音") { openAmbientRecords() })
+        ambRow2.addView(Ui.button(this, "打开设置") { TabNav.go(this, TabNav.SETTINGS) })
+        sAmb.addView(ambRow2)
+        root.addView(sAmb)
 
         // ---------- 最近回复 / 执行结果 ----------
         val replyCard = Ui.section(this, "最近回复 / 执行结果")
@@ -232,17 +222,23 @@ class MainActivity : Activity() {
         replyCard.addView(errorText)
         root.addView(replyCard)
 
-        // ---------- 快捷入口：记笔记 / 总结今天 / 提醒 ----------
+        // ---------- 快捷 ----------
         val sQuick = Ui.section(this, "快捷")
         val quickRow = Ui.row(this)
         quickRow.addView(Ui.button(this, "📝 记笔记", true) { quickNote() })
         quickRow.addView(Ui.button(this, "🧠 总结今天") { quickSummary() })
         quickRow.addView(Ui.button(this, "⏰ 提醒") { TabNav.go(this, TabNav.REMINDERS) })
         sQuick.addView(quickRow)
-        sQuick.addView(Ui.hint(this, "笔记会出现在「记录」的笔记分段；总结会生成文档，可在「文档」下载/分享。"))
+        val quickRow2 = Ui.row(this)
+        quickRow2.addView(Ui.button(this, "🪟 显示悬浮窗", true) { showOverlay() })
+        quickRow2.addView(Ui.button(this, "⏺ 全天录音记录") { openAmbientRecords() })
+        sQuick.addView(quickRow2)
+        sQuick.addView(
+            Ui.hint(this, "悬浮窗可拖动，展开后「一键唤醒」与「24h 开/关」是两个分开的按钮；退出 App 后仍可用。")
+        )
         root.addView(sQuick)
 
-        // ---------- 文字兜底输入 ----------
+        // ---------- 文字兜底 ----------
         val row = Ui.row(this)
         textInput = Ui.input(this, "也可以打字：打开记事本 / 记一下今天的重点")
         textInput.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -254,31 +250,35 @@ class MainActivity : Activity() {
         row.addView(sendBtn)
         root.addView(row)
 
+        statusLine = Ui.meta(this, "")
+        root.addView(statusLine)
         logLine = Ui.meta(this, "")
         root.addView(logLine)
 
-        // 底部固定 5 页签（首页 / 记录 / 提醒 / 文档 / 设置）
         setContentView(Ui.page(this, root, TabNav.HOME))
 
-        initTts()
         restoreLastResult()
-        ensureAudioPermission()
         ensureNotificationPermission()
         ReminderNotifier.ensureChannel(this)
         ReminderWorker.schedule(this)
         handleOpenTabIntent(intent)
         LogBus.addListener(logListener)
+        OneTapVoice.get(this).addListener(this)
     }
 
     override fun onResume() {
         super.onResume()
         UpdateManager.autoCheck(this)
         refreshHub()
+        refreshAmbientUi()
+        ambientHandler.removeCallbacks(ambientTicker)
+        ambientHandler.post(ambientTicker)
         if (App.remindersEnabled()) pollHandler.postDelayed(reminderPoll, 5_000)
     }
 
     override fun onPause() {
         pollHandler.removeCallbacksAndMessages(null)
+        ambientHandler.removeCallbacksAndMessages(null)
         super.onPause()
     }
 
@@ -287,10 +287,22 @@ class MainActivity : Activity() {
         handleOpenTabIntent(intent)
     }
 
+    override fun onDestroy() {
+        LogBus.removeListener(logListener)
+        OneTapVoice.get(this).removeListener(this)
+        if (!OverlayService.running) {
+            try { OneTapVoice.get(this).cancel() } catch (_: Exception) {}
+        }
+        pollHandler.removeCallbacksAndMessages(null)
+        ambientHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+
     private fun handleOpenTabIntent(intent: Intent?) {
         when (intent?.getStringExtra("openTab")) {
             "reminders" -> TabNav.go(this, TabNav.REMINDERS)
-            "records", "notes", "ambient" -> TabNav.go(this, TabNav.RECORDS)
+            "records", "notes" -> TabNav.go(this, TabNav.RECORDS)
+            "ambient" -> openAmbientRecords()
             "documents" -> TabNav.go(this, TabNav.DOCUMENTS)
             "settings" -> TabNav.go(this, TabNav.SETTINGS)
         }
@@ -304,16 +316,6 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onDestroy() {
-        LogBus.removeListener(logListener)
-        pulse?.cancel()
-        tickerHandler.removeCallbacksAndMessages(null)
-        try { recorder.cancel() } catch (_: Exception) {}
-        try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
-        tts = null
-        super.onDestroy()
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -322,17 +324,161 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQ_AUDIO) return
         val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-        if (granted && pendingStart) {
-            pendingStart = false
-            startVoice()
-            recordTapMode = true
-            stateLabel.text = "麦克风已授权 · 正在录音，再点一下结束"
-        } else if (granted) {
-            stateLabel.text = "麦克风已授权，点一下开始录音"
+        if (granted) {
+            when {
+                pendingAmbient -> {
+                    pendingAmbient = false
+                    pendingWake = false
+                    startAmbient()
+                }
+                pendingWake -> {
+                    pendingWake = false
+                    pendingAmbient = false
+                    wakeState.text = "麦克风已授权 · 正在准备录音…"
+                    OneTapVoice.get(this).toggle()
+                }
+            }
         } else {
-            pendingStart = false
+            pendingWake = false
+            pendingAmbient = false
+            wakeState.text = "麦克风未授权 · 可用下方文字输入，或到系统设置开启"
             showError("未授权麦克风：可在系统权限里开启；也可以直接在下方打字发送。")
-            stateLabel.text = "麦克风未授权 · 可用文字输入"
+        }
+    }
+
+    // ================= 卡片 A：一键唤醒 =================
+
+    private fun onWakeTap() {
+        if (OneTapVoice.get(this).isRecording) {
+            OneTapVoice.get(this).toggle()
+            return
+        }
+        if (!OneTapVoice.hasMic(this)) {
+            pendingWake = true
+            pendingAmbient = false
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
+            return
+        }
+        OneTapVoice.get(this).toggle()
+    }
+
+    override fun onState(state: String, detail: String) {
+        wakeState.text = if (detail.isBlank()) state else state + " · " + detail
+        wakeState.setTextColor(
+            if (state == OneTapVoice.RECORDING || state == OneTapVoice.TRANSCRIBING ||
+                state == OneTapVoice.EXECUTING
+            ) Ui.AMBER else Ui.CYAN
+        )
+        wakeBtn.text =
+            if (OneTapVoice.get(this).isRecording) "⏹ 点一下结束并识别" else "🎙 点一下开始说话"
+    }
+
+    override fun onHeard(text: String) {
+        heardLine.text = "听到：" + text
+    }
+
+    override fun onReply(say: String, result: JSONObject?) {
+        wakeReply.text = "榫卯：" + say.ifBlank { "（没有文字回复）" }
+        if (result != null) renderResult(result, "")
+    }
+
+    override fun onError(message: String) {
+        wakeState.text = "⚠ " + message
+        wakeState.setTextColor(Ui.AMBER)
+        errorText.text = message
+        LogBus.log(message)
+    }
+
+    // ================= 卡片 B：24 小时录制 =================
+
+    private fun onAmbientTap() {
+        if (AmbientRecordService.running) {
+            AmbientRecordService.stop(this)
+            Toast.makeText(this, "正在停止 24 小时录制…", Toast.LENGTH_SHORT).show()
+            ambientHandler.postDelayed({ refreshAmbientUi() }, 600)
+            ambientHandler.postDelayed({ refreshAmbientUi() }, 2000)
+            return
+        }
+        if (!OneTapVoice.hasMic(this)) {
+            pendingAmbient = true
+            pendingWake = false
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
+            return
+        }
+        startAmbient()
+    }
+
+    private fun startAmbient() {
+        try {
+            AmbientRecordService.start(this)
+            Toast.makeText(this, "24 小时录制已开启（常驻通知可停止）", Toast.LENGTH_LONG).show()
+            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Toast.makeText(this, "通知权限未开：常驻通知可能不显示，建议到设置开启", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "开启失败：" + (e.message ?: "") + "（请保持 App 在前台再试）", Toast.LENGTH_LONG).show()
+        }
+        ambientHandler.postDelayed({ refreshAmbientUi() }, 600)
+        ambientHandler.postDelayed({ refreshAmbientUi() }, 2200)
+    }
+
+    private fun refreshAmbientUi() {
+        if (!this::ambientBtn.isInitialized) return
+        val running = AmbientRecordService.running
+        ambientBtn.text = if (running) "⏹ 关闭 24 小时录制" else "⏺ 开启 24 小时录制"
+        ambientBtn.setTextColor(if (running) Ui.AMBER else Ui.CYAN)
+        val err = App.ambientLastError()
+        ambientState.text = buildString {
+            append("状态：").append(if (running) "运行中（手机前台服务持续录制）" else "未开启")
+            append(" · 今日 ").append(App.ambientSegmentsToday()).append(" 段")
+            val last = App.ambientLast()
+            if (last.isNotBlank()) append("\n最近：").append(last)
+            if (err.isNotBlank()) append("\n⚠ ").append(err.take(120))
+        }
+        ambientState.setTextColor(if (err.isNotBlank()) Ui.AMBER else Ui.GREY)
+    }
+
+    private fun openAmbientRecords() {
+        startActivity(
+            Intent(this, VoiceRecordsActivity::class.java)
+                .putExtra(VoiceRecordsActivity.EXTRA_TAB, VoiceRecordsActivity.TAB_AMBIENT)
+        )
+    }
+
+    private fun showOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("需要悬浮窗权限")
+                .setMessage("第一次使用请允许「显示在其他应用上层」。授权后回到 App 再点「显示悬浮窗」，退出 App 也能用。")
+                .setPositiveButton("去授权") { _, _ -> openOverlaySettings() }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
+        if (OverlayService.running) {
+            Toast.makeText(this, "悬浮窗已在运行（可拖动，展开后有两个按钮）", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            OverlayService.start(this)
+            Toast.makeText(this, "悬浮窗已显示：点球展开「一键唤醒」与「24h 开/关」", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "悬浮窗开启失败：" + (e.message ?: ""), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openOverlaySettings() {
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + packageName)
+                )
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开悬浮窗设置：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -371,7 +517,7 @@ class MainActivity : Activity() {
         dot.setTextColor(Ui.CYAN)
         if (authNeeded) {
             onlineLine.text = "中枢在线 · 需要操作令牌"
-            voiceLine.text = "到「设置」填写 operatorToken 后，录音转写与记录读取才会生效。"
+            voiceLine.text = "到「设置 → 中枢连接」填写 operatorToken 后，录音转写与记录读取才会生效。"
             return
         }
         val state = status?.optString("state", "idle") ?: "idle"
@@ -382,6 +528,7 @@ class MainActivity : Activity() {
         val ai = status?.optJSONObject("ai")
         val aiLabel = if (ai?.optBoolean("available", false) == true) ai.optString("model", "DeepSeek") else "规则引擎"
         voiceLine.text = "本地识别 " + asr + " · 云端理解 " + llm + " · AI " + aiLabel +
+                " · 手机 24h " + (if (AmbientRecordService.running) "开" else "关") +
                 " · 屏幕采集" + (if (App.screenEnabled()) "开" else "关")
     }
 
@@ -403,96 +550,27 @@ class MainActivity : Activity() {
     private fun restoreLastResult() {
         val raw = App.lastResultJson()
         if (raw.isBlank()) return
-        try { renderResult(JSONObject(raw), "") } catch (_: Exception) {}
+        try {
+            val result = JSONObject(raw)
+            renderResult(result, "")
+            val say = result.optString("say", result.optString("reply", ""))
+            if (say.isNotBlank()) wakeReply.text = "榫卯：" + say
+        } catch (_: Exception) {}
     }
 
-    // ================= 语音链路 =================
-
-    private fun ensureAudioPermission() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
-        }
-    }
-
-    private fun startVoice() {
-        if (busy) {
-            stateLabel.text = "还在处理上一条，稍等…"
-            return
-        }
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            pendingStart = true
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO)
-            return
-        }
-        if (!recorder.start()) {
-            showError("录音启动失败：检查麦克风权限或设备占用")
-            stateLabel.text = "录音启动失败"
-            return
-        }
-        errorText.text = ""
-        recordStartAt = SystemClock.elapsedRealtime()
-        recordTapMode = false
-        voiceButton.setBackgroundResource(R.drawable.bg_voice_ring_active)
-        voiceButton.text = "●\n录音中"
-        stateLabel.text = "正在录音… 松手发送，或再点一下结束"
-        liveLine.visibility = LinearLayout.VISIBLE
-        liveLine.text = "正在录音 0s · 音量 " + levelBar(0)
-        recognizedLine.text = "最近识别：—"
-        tickerHandler.removeCallbacks(ticker)
-        tickerHandler.post(ticker)
-        startPulse()
-    }
-
-    private fun stopVoice() {
-        if (!recorder.isRecording) return
-        stopPulse()
-        tickerHandler.removeCallbacks(ticker)
-        recordTapMode = false
-        voiceButton.setBackgroundResource(R.drawable.bg_voice_ring)
-        voiceButton.text = "按住说话\n或点一下"
-        liveLine.visibility = LinearLayout.GONE
-        val wav = recorder.stop()
-        if (wav == null) {
-            stateLabel.text = "录音太短，按住多说一会儿"
-            return
-        }
-        processWav(wav)
-    }
-
-    private fun processWav(file: File) {
-        recognizedLine.text = "识别中…"
-        setBusy(true, "识别中…（上传到电脑本地 ASR）")
-        bg {
-            try {
-                val tr = TenonClient.voiceTranscribe(file)
-                val text = tr.optString("text", "").trim()
-                if (text.isEmpty()) {
-                    ui {
-                        recognizedLine.text = "最近识别：—"
-                        finishBusy("没听清，再说一次？")
-                    }
-                    return@bg
-                }
-                ui {
-                    recognizedLine.text = "最近识别：" + text
-                    stateLabel.text = "执行中…（云端理解）"
-                }
-                runCommand(text)
-            } catch (e: TenonClient.VoiceHttpException) {
-                ui { onHttpError(e) }
-            } catch (e: Exception) {
-                ui { finishBusy("识别失败：" + readable(e)) }
-            } finally {
-                try { file.delete() } catch (_: Exception) {}
-            }
-        }
-    }
+    // ================= 文字指令 / 执行结果 =================
 
     private fun sendText() {
         val text = textInput.text.toString().trim()
-        if (text.isEmpty()) { stateLabel.text = "先输入一句话"; return }
-        if (busy) { stateLabel.text = "还在处理上一条，稍等…"; return }
-        recognizedLine.text = "最近识别：" + text
+        if (text.isEmpty()) {
+            statusLine.text = "先输入一句话"
+            return
+        }
+        if (busy) {
+            statusLine.text = "还在处理上一条，稍等…"
+            return
+        }
+        heardLine.text = "听到：" + text
         textInput.setText("")
         runCommand(text)
     }
@@ -504,10 +582,12 @@ class MainActivity : Activity() {
         bg {
             try {
                 val result = TenonClient.voiceCommand(text)
+                val say = result.optString("say", result.optString("reply", "")).trim()
                 ui {
                     renderResult(result, "")
                     setBusy(false, "完成 · 再说一句")
                     refreshHub()
+                    if (say.isNotBlank()) LocalTts.speak(say)
                 }
             } catch (e: TenonClient.VoiceHttpException) {
                 ui { onHttpError(e) }
@@ -526,14 +606,17 @@ class MainActivity : Activity() {
         val provider = result.optString("provider", "—")
         val latency = result.optLong("latencyMs", 0L)
         val needConfirm = result.optBoolean("needConfirm", false)
-        val ttsOk = result.optBoolean("tts", result.optJSONObject("tts")?.optBoolean("ok", false) ?: false)
+        val ttsObj = result.optJSONObject("tts")
+        val ttsOk = result.optBoolean("tts", ttsObj?.optBoolean("ok", false) ?: false)
+        val ttsSkipped = ttsObj?.optBoolean("skipped", false) == true
         replyMeta.text = buildString {
             append("provider ").append(provider)
             if (latency > 0) append(" · ").append(latency).append("ms")
             if (needConfirm) append(" · 需要确认")
-            if (ttsOk) append(" · 电脑端已播报")
+            if (ttsSkipped) append(" · 电脑端已跳过播报（手机朗读）")
+            else if (ttsOk) append(" · 电脑端已播报")
         }
-        if (prefix.isNotBlank()) recognizedLine.text = "最近识别：—"
+        if (prefix.isNotBlank()) heardLine.text = "听到：—"
         stepsBox.removeAllViews()
         val steps: JSONArray? = result.optJSONArray("steps") ?: result.optJSONArray("actions")
         if (steps != null) {
@@ -547,11 +630,10 @@ class MainActivity : Activity() {
         }
         lastConfirmId = result.optString("confirmId", "")
         confirmRow.visibility = if (needConfirm) LinearLayout.VISIBLE else LinearLayout.GONE
-        if (needConfirm) stateLabel.text = "不可逆操作：请确认后执行"
+        if (needConfirm) statusLine.text = "不可逆操作：请确认后执行"
         val err = result.optString("error", "")
         errorText.text = if (err.isNotBlank()) "错误：" + err else ""
         try { App.setLastResultJson(result.toString()) } catch (_: Exception) {}
-        if (App.ttsLocalEnabled()) speak(say)
     }
 
     private fun stepRow(icon: String, label: String, status: String, summary: String): TextView =
@@ -573,17 +655,12 @@ class MainActivity : Activity() {
 
     private fun finishBusy(message: String) {
         setBusy(false, message)
-        stateLabel.text = message
+        statusLine.text = message
     }
 
     private fun setBusy(b: Boolean, message: String) {
         busy = b
-        stateLabel.text = message
-    }
-
-    private fun levelBar(amp: Int): String {
-        val n = (amp / 3500).coerceIn(0, 8)
-        return "▮".repeat(n) + "▯".repeat(8 - n)
+        statusLine.text = message
     }
 
     // ================= 快捷：笔记 / 总结 =================
@@ -622,7 +699,7 @@ class MainActivity : Activity() {
     }
 
     private fun saveNote(text: String) {
-        stateLabel.text = "正在保存笔记…"
+        statusLine.text = "正在保存笔记…"
         bg {
             val msg = try {
                 TenonClient.noteCreate(text)
@@ -631,7 +708,7 @@ class MainActivity : Activity() {
                 "保存失败：" + failure(e)
             }
             ui {
-                stateLabel.text = msg
+                statusLine.text = msg
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
         }
@@ -698,7 +775,11 @@ class MainActivity : Activity() {
     }
 
     private fun bodyError(body: String): String =
-        try { JSONObject(body).optString("error", body.take(120)) } catch (_: Exception) { body.take(120) }
+        try {
+            JSONObject(body).optString("error", body.take(120))
+        } catch (_: Exception) {
+            body.take(120)
+        }
 
     private fun readable(e: Exception): String {
         val m = e.message ?: "网络错误"
@@ -712,60 +793,17 @@ class MainActivity : Activity() {
             "连不上中枢（检查同一 WiFi / 中枢地址 / 电脑 App 是否运行）"
         } else raw.take(120)
 
-    // ================= TTS =================
-
-    private fun initTts() {
-        try {
-            tts = TextToSpeech(this) { status ->
-                ttsReady = status == TextToSpeech.SUCCESS
-                if (ttsReady) {
-                    try { tts?.language = Locale.CHINA } catch (_: Exception) {}
-                }
-            }
-        } catch (e: Exception) {
-            LogBus.log("TTS 初始化失败：" + e.message)
-        }
-    }
-
-    private fun speak(text: String) {
-        if (!App.ttsLocalEnabled() || !ttsReady || text.isBlank()) return
-        try {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tenon-reply")
-        } catch (_: Exception) {}
-    }
-
-    // ================= 动画 / 确认 / 工具 =================
-
-    private fun startPulse() {
-        stopPulse()
-        pulse = ObjectAnimator.ofPropertyValuesHolder(
-            voiceButton,
-            PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.06f),
-            PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.06f)
-        ).apply {
-            duration = 520
-            repeatCount = ObjectAnimator.INFINITE
-            repeatMode = ObjectAnimator.REVERSE
-            start()
-        }
-    }
-
-    private fun stopPulse() {
-        pulse?.cancel()
-        pulse = null
-        voiceButton.scaleX = 1f
-        voiceButton.scaleY = 1f
-    }
+    // ================= 确认 / 工具 =================
 
     private fun showError(msg: String) {
         errorText.text = msg
         LogBus.log(msg)
     }
 
-    /** needConfirm 确认/取消（V4 确认闭环 /api/v2/voice/confirm）。 */
+    /** needConfirm 确认/取消（/api/v2/voice/confirm）。 */
     private fun confirmLast(yes: Boolean) {
         if (lastCommandText.isBlank() && lastConfirmId.isBlank()) {
-            stateLabel.text = "没有待确认的命令"
+            statusLine.text = "没有待确认的命令"
             return
         }
         confirmRow.visibility = LinearLayout.GONE
@@ -791,6 +829,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun bg(block: () -> Unit) { Thread(block).start() }
-    private fun ui(block: () -> Unit) { runOnUiThread(block) }
+    private fun bg(block: () -> Unit) {
+        Thread(block).start()
+    }
+
+    private fun ui(block: () -> Unit) {
+        runOnUiThread(block)
+    }
 }
