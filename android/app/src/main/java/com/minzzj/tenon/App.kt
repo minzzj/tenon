@@ -111,6 +111,14 @@ class App : Application() {
 
         fun screenLastError(): String = sp().getString("screenLastError", "") ?: ""
 
+        /** 0.6.10：最近一次上报结果（成功含中枢记录 id，失败含原因），设置页自检行用。 */
+        fun setScreenLastResult(info: String) = sp().edit().putString("screenLastResult", info).apply()
+        fun screenLastResult(): String = sp().getString("screenLastResult", "") ?: ""
+
+        /** 0.6.10：最近一次成功上报时间（毫秒），0 = 从未成功。 */
+        fun setScreenLastOkAt(ms: Long) = sp().edit().putLong("screenLastOkAt", ms).apply()
+        fun screenLastOkAt(): Long = sp().getLong("screenLastOkAt", 0L)
+
         // ---- 0.6.8：手机本机 24 小时录制（AmbientRecordService） ----
         fun ambientDesired(): Boolean = sp().getBoolean("ambientDesired", false)
         fun setAmbientDesired(v: Boolean) = sp().edit().putBoolean("ambientDesired", v).apply()

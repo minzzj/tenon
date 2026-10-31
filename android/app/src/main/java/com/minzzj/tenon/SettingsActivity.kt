@@ -62,7 +62,12 @@ class SettingsActivity : Activity() {
     // V0.5 屏幕内容采集
     private lateinit var screenSwitch: Switch
     private lateinit var screenStatus: TextView
+    private lateinit var screenSelfCheck: TextView
     private lateinit var screenBlacklistInput: EditText
+    /** 0.6.10：防止重复弹系统授权框（一次只允许一个 MediaProjection 授权在途）。 */
+    private var screenAuthPending = false
+    /** 0.6.10：用户点了「开启」但服务还在异步启动中——开关先保持亮，等服务回报真实状态。 */
+    private var screenWantOn = false
 
     // 0.6.8 悬浮窗 / 手机 24h 录制
     private lateinit var overlaySwitch: Switch
@@ -142,11 +147,15 @@ class SettingsActivity : Activity() {
 
         // ---------- 04 屏幕内容采集 ----------
         val sScreen = Ui.section(this, "04 · 屏幕内容采集（手机截屏上报）")
-        screenSwitch = Ui.switchRow(this, "开启屏幕内容采集", App.screenEnabled()) { on -> onScreenToggle(on) }
+        screenSwitch = Ui.switchRow(this, "开启屏幕内容采集", ScreenCaptureService.isActive()) { on -> onScreenToggle(on) }
         sScreen.addView(screenSwitch)
         screenStatus = Ui.body(this, "")
         screenStatus.textSize = 13f
         sScreen.addView(screenStatus)
+        // 0.6.10：自检行（权限 / 服务 / 最近错误 / 今日上传次数），失败时直接显示具体步骤错误
+        screenSelfCheck = Ui.body(this, "")
+        screenSelfCheck.textSize = 12f
+        sScreen.addView(screenSelfCheck)
         sScreen.addView(Ui.hint(this,
             "每间隔截屏一次（缩放到 ≤960px、JPEG 压缩）上报中枢 /api/v2/voice/screen，由电脑端识别屏幕文字并纳入每日总结。" +
             "首次需在系统弹窗授权「共享屏幕」；可随时暂停。"))
@@ -161,6 +170,11 @@ class SettingsActivity : Activity() {
         rowScreen.addView(Ui.button(this, "授权并开启采集", true) { requestScreenCapture() })
         rowScreen.addView(Ui.button(this, "暂停采集") { stopScreenCapture() })
         sScreen.addView(rowScreen)
+        val rowScreen2 = Ui.row(this)
+        rowScreen2.addView(Ui.button(this, "重新授权 / 重试") { retryScreenCapture() })
+        rowScreen2.addView(Ui.button(this, "自检刷新") { refreshScreenStatus() })
+        rowScreen2.addView(Ui.button(this, "看运行日志") { showScreenLog() })
+        sScreen.addView(rowScreen2)
         root.addView(sScreen)
 
         // ---------- 05 提醒与通知 ----------
@@ -400,6 +414,9 @@ class SettingsActivity : Activity() {
     // ================= 屏幕内容采集（MediaProjection 前台服务） =================
 
     private fun onScreenToggle(on: Boolean) {
+        // 程序化 setChecked 也会触发监听（CompoundButton.setChecked 会回调），
+        // 所以刷新状态时必须用 suppressSwitch 屏蔽，否则会把刚启动的服务 stopService 掉。
+        if (suppressSwitch) return
         if (on) {
             requestScreenCapture()
         } else {
@@ -408,6 +425,10 @@ class SettingsActivity : Activity() {
     }
 
     private fun requestScreenCapture() {
+        if (screenAuthPending) {
+            Toast.makeText(this, "系统授权弹窗已打开，请先完成授权", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -415,18 +436,64 @@ class SettingsActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF_SCREEN)
             return
         }
+        if (!App.isConfigured()) {
+            Toast.makeText(this, "先在 01 · 中枢连接里填写中枢地址并保存", Toast.LENGTH_LONG).show()
+            return
+        }
         App.setScreenBlacklist(screenBlacklistInput.text.toString())
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         Toast.makeText(this, "请在系统弹窗中选择「开始录制 / 共享屏幕」", Toast.LENGTH_LONG).show()
-        startActivityForResult(mpm.createScreenCaptureIntent(), REQ_SCREEN_CAPTURE)
+        LogBus.screen("开始授权", "弹出系统屏幕共享授权框")
+        screenAuthPending = true
+        try {
+            startActivityForResult(mpm.createScreenCaptureIntent(), REQ_SCREEN_CAPTURE)
+        } catch (e: Exception) {
+            screenAuthPending = false
+            val msg = "无法打开系统授权框：" + (e.message ?: e.javaClass.simpleName)
+            LogBus.screen("授权失败", msg)
+            App.setScreenLastError(msg)
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            refreshScreenStatus()
+        }
+    }
+
+    /** 0.6.10：重新授权/重试——先停掉旧 MediaProjection（Android 14 授权 token 一次性），再重新申请。 */
+    private fun retryScreenCapture() {
+        if (screenAuthPending) {
+            Toast.makeText(this, "授权弹窗已打开，请先完成授权", Toast.LENGTH_SHORT).show()
+            return
+        }
+        LogBus.screen("重新授权", "先停止旧服务/旧 MediaProjection")
+        screenAuthPending = true
+        screenWantOn = false
+        suppressSwitch = true
+        try { ScreenCaptureService.stop(this) } catch (_: Exception) {}
+        App.setScreenEnabled(false)
+        App.setScreenLastError("")
+        screenSwitch.isChecked = false
+        suppressSwitch = false
+        screenAuthPending = false
+        refreshScreenStatus()
+        // 旧 MediaProjection 停掉后稍等再申请，避免系统复用一个已失效的 token
+        screenStatus.postDelayed({ requestScreenCapture() }, 700)
     }
 
     private fun stopScreenCapture() {
         App.setScreenBlacklist(screenBlacklistInput.text.toString())
-        ScreenCaptureService.stop(this)
+        screenWantOn = false
+        suppressSwitch = true
+        try {
+            ScreenCaptureService.stop(this)
+            screenSwitch.isChecked = false
+        } finally {
+            suppressSwitch = false
+        }
         App.setScreenEnabled(false)
-        screenSwitch.isChecked = false
+        LogBus.screen("已暂停采集")
         refreshScreenStatus()
+        // stopService 是异步的：稍后再刷两次，否则界面会停在「运行中」
+        screenStatus.postDelayed({ refreshScreenStatus() }, 400)
+        screenStatus.postDelayed({ refreshScreenStatus() }, 1200)
         Toast.makeText(this, "屏幕采集已暂停", Toast.LENGTH_SHORT).show()
     }
 
@@ -439,16 +506,58 @@ class SettingsActivity : Activity() {
     private fun refreshScreenStatus() {
         if (!this::screenStatus.isInitialized) return
         val running = ScreenCaptureService.running
-        screenSwitch.isChecked = running
+        val starting = ScreenCaptureService.starting
+        val svcErr = ScreenCaptureService.serviceError
+        // 服务已明确报错且没在跑 → 放弃「期望开启」，让开关回到关，并显示错误
+        if (svcErr.isNotBlank() && !running && !starting) screenWantOn = false
+        val active = ScreenCaptureService.isActive() || screenWantOn
+        suppressSwitch = true
+        try { screenSwitch.isChecked = active } finally { suppressSwitch = false }
         val last = App.screenLast()
         val err = App.screenLastError()
         screenStatus.text = buildString {
-            append("状态：").append(if (running) "运行中" else "未运行")
+            append("状态：").append(
+                when {
+                    running -> "运行中"
+                    starting -> "启动中…"
+                    else -> "未运行"
+                }
+            )
             append(" · 间隔 ").append(App.screenInterval()).append(" 秒")
             append(" · 本机今日已上报 ").append(App.screenUploadsToday()).append(" 次")
             if (last.isNotBlank()) append("\n最近：").append(last)
             if (err.isNotBlank()) append("\n最近错误：").append(err.take(120))
         }
+        // 自检行：权限 / 服务 / 最近错误 / 今日次数，失败时把具体步骤错误显示出来
+        if (this::screenSelfCheck.isInitialized) {
+            val notifOk = Build.VERSION.SDK_INT < 33 ||
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            val lastOk = App.screenLastOkAt()
+            val lastOkText = if (lastOk > 0)
+                java.text.SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA).format(java.util.Date(lastOk))
+            else "从未成功"
+            screenSelfCheck.text = buildString {
+                append("自检 · 通知权限:").append(if (notifOk) "有" else "缺")
+                append(" · 中枢:").append(if (App.isConfigured()) "已配置" else "未配置")
+                append(" · 服务:").append(if (running) "running" else if (starting) "starting" else "stopped")
+                append(" · 今日上传:").append(App.screenUploadsToday()).append(" 次")
+                append("\n最近成功:").append(lastOkText)
+                val e = if (svcErr.isNotBlank()) svcErr else err
+                if (e.isNotBlank()) append("\n✖ 最近错误:").append(e.take(160))
+            }
+        }
+    }
+
+    /** 0.6.10：把 LogBus 里的屏幕采集步骤日志显示出来，便于用户直接反馈失败在哪一步。 */
+    private fun showScreenLog() {
+        val all = LogBus.snapshot().lines().filter { it.contains("[screen]") || it.contains("屏幕") }
+        val text = if (all.isEmpty()) "暂无屏幕采集日志。点「授权并开启采集」后再看这里。" else all.takeLast(40).joinToString("\n")
+        AlertDialog.Builder(this)
+            .setTitle("屏幕采集运行日志")
+            .setMessage(text)
+            .setPositiveButton("知道了", null)
+            .setNeutralButton("清空") { _, _ -> LogBus.clear() }
+            .show()
     }
 
     // ================= 0.6.8：悬浮窗 =================
@@ -540,18 +649,37 @@ class SettingsActivity : Activity() {
             return
         }
         if (requestCode != REQ_SCREEN_CAPTURE) return
+        screenAuthPending = false
         if (resultCode == RESULT_OK && data != null) {
-            App.setScreenEnabled(true)
             App.setScreenBlacklist(screenBlacklistInput.text.toString())
-            ScreenCaptureService.start(this, resultCode, data)
-            screenSwitch.isChecked = true
-            Toast.makeText(this, "屏幕采集已开启（前台服务运行中）", Toast.LENGTH_LONG).show()
+            LogBus.screen("授权成功", "resultCode=RESULT_OK，开始启动前台服务")
+            screenWantOn = true
+            // 关键：这里必须屏蔽监听，否则 setChecked(true) 会触发 onScreenToggle→再弹一次授权框
+            suppressSwitch = true
+            try { screenSwitch.isChecked = true } finally { suppressSwitch = false }
+            try {
+                ScreenCaptureService.start(this, resultCode, data)
+            } catch (e: Exception) {
+                val msg = "启动采集服务失败：" + (e.message ?: e.javaClass.simpleName)
+                App.setScreenLastError(msg)
+                LogBus.screen("启动服务异常", msg)
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
+            Toast.makeText(this, "屏幕采集已开启，约 2 秒后首次上传", Toast.LENGTH_LONG).show()
         } else {
             App.setScreenEnabled(false)
-            screenSwitch.isChecked = false
+            screenWantOn = false
+            suppressSwitch = true
+            try { screenSwitch.isChecked = false } finally { suppressSwitch = false }
+            val msg = "未授权屏幕共享（resultCode=" + resultCode + "）"
+            App.setScreenLastError(msg)
+            LogBus.screen("授权被拒绝", msg)
             Toast.makeText(this, "未授权屏幕共享，采集未开启", Toast.LENGTH_LONG).show()
         }
-        screenStatus.postDelayed({ refreshScreenStatus() }, 600)
+        // 启动是异步的：多刷几次，避免「还在启动中就显示未运行」
+        screenStatus.postDelayed({ refreshScreenStatus() }, 500)
+        screenStatus.postDelayed({ refreshScreenStatus() }, 1500)
+        screenStatus.postDelayed({ refreshScreenStatus() }, 3000)
     }
 
     override fun onRequestPermissionsResult(
