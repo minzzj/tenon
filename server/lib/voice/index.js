@@ -855,7 +855,12 @@ export function createVoiceService(opts = {}) {
       if (!fs.existsSync(script)) { console.warn('[voice] 悬浮球脚本不存在：' + script); return; }
       quickBallChild = spawn(config.workers.python || 'python', [script], {
         cwd: root, detached: true, windowsHide: true, stdio: 'ignore',
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8', TENON_HUB_URL: 'http://127.0.0.1:' + (process.env.TENON_PORT || 7410) },
+        env: {
+          ...process.env, PYTHONIOENCODING: 'utf-8',
+          TENON_HUB_URL: 'http://127.0.0.1:' + (process.env.TENON_PORT || 7410),
+          TENON_TOKEN: (secret && secret.operatorToken) || '',
+          TENON_DATA_DIR: dataDir,
+        },
       });
       quickBallChild.on('error', (e) => console.warn('[voice] 悬浮球启动失败：' + String(e && e.message)));
       quickBallChild.unref();

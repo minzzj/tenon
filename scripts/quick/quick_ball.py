@@ -21,8 +21,12 @@ HUB = os.environ.get("TENON_HUB_URL") or "http://127.0.0.1:7410"
 PID_FILE = os.path.join(ROOT, "data", "quick", "ball.pid")
 
 def read_token():
+    tok = os.environ.get("TENON_TOKEN") or ""
+    if tok:
+        return tok
     try:
-        return json.load(open(os.path.join(ROOT, "data", "secrets.json"), encoding="utf-8")).get("operatorToken", "")
+        base = os.environ.get("TENON_DATA_DIR") or os.path.join(ROOT, "data")
+        return json.load(open(os.path.join(base, "secrets.json"), encoding="utf-8")).get("operatorToken", "")
     except Exception:
         return ""
 
