@@ -5,6 +5,7 @@ import * as docxPkg from 'docx';
 import PDFDocument from 'pdfkit';
 import { createNotesStore } from '../notes/store.js';
 import { createDocumentsStore } from './store.js';
+import { isRealDay, isValidDocId } from './safe-path.js';
 
 const { Document, Packer, Paragraph, HeadingLevel, TextRun } = docxPkg;
 const CN_FONT = 'C:\\Windows\\Fonts\\simhei.ttf';
@@ -35,12 +36,14 @@ function arrOf(v, n = 10) { return (Array.isArray(v) ? v : (v == null ? [] : [v]
 export const DOCUMENT_KINDS = { 'note-summary': '笔记总结', 'daily': '每日总结', 'note-set': '笔记合集' };
 
 export function collectSources({ dataDir, date, ids = null, kind = 'note-summary', ledger = null } = {}) {
-  const day = date || localDay();
+  // P1 修复（S-04 / S-18）：day 来自请求 date，必须白名单 + 真实日期，否则回落到今天，绝不拼进文件路径。
+  const rawDay = String(date == null ? '' : date).trim();
+  const day = isRealDay(rawDay) ? rawDay : localDay();
   const notesStore = createNotesStore({ dataDir, ledger: null });
   let notes = [];
   try {
     if (Array.isArray(ids) && ids.length) {
-      notes = ids.map((id) => notesStore.get(id)).filter(Boolean);
+      notes = ids.map((id) => (isValidDocId(String(id)) ? notesStore.get(String(id)) : null)).filter(Boolean);
     } else {
       notes = notesStore.list({ date: day, limit: 100 }).items;
     }
@@ -198,7 +201,9 @@ function pdfOf({ title, day, kind, provider, degraded, structured }) {
 
 export async function writeDocument({ dataDir, ledger = null, kind = 'note-summary', date, title = '', provider = 'template', degraded = true, structured = null, sources = null } = {}) {
   const store = createDocumentsStore({ dataDir, ledger });
-  const day = date || (sources && sources.day) || localDay();
+  // P1 修复（S-04）：date 同时决定文档 id 与落盘目录，非法 date 一律回落今天（路由层已在入口返回 400）。
+  const rawDay = String(date == null || date === '' ? (sources && sources.day) || '' : date).trim();
+  const day = isRealDay(rawDay) ? rawDay : localDay();
   const finalTitle = String(title || '').trim() || ((DOCUMENT_KINDS[kind] || '总结') + ' · ' + day);
   const structuredObj = sanitizeStructured(structured || fallbackStructured(sources || {}, kind));
   const md = markdownOf({ title: finalTitle, day, kind, provider, degraded, structured: structuredObj, sources: sources || { notes: [], transcripts: [], screens: [], execs: [] } });

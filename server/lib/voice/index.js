@@ -17,6 +17,7 @@ import { planCommand, followUpPlan, buildCatalogText, sanitizePlan, extractJson,
 import { createExecutor } from './executor.js';
 import { resolvePrompts } from './prompts.js';
 import { createDiaryGenerator } from './diary.js';
+import { isRealDay } from '../documents/safe-path.js';
 
 export const VOICE_STATES = ['idle', 'starting', 'listening', 'wake', 'session', 'thinking', 'executing', 'reply', 'error'];
 export const WAKE_ALIASES = ['榫卯', '小榫', '你好榫卯', '榫卯在吗', '小助手', '孙某', '孙卯'];
@@ -992,6 +993,7 @@ export function createVoiceService(opts = {}) {
     { method: 'GET', path: '/voice/transcripts', handler: async (req, res, ctx) => {
       const u = ctx && ctx.url ? ctx.url : new URL(req.url, 'http://localhost');
       const date = String(u.searchParams.get('date') || dayKey());
+      if (!isRealDay(date)) { sendJson(res, 400, { ok: false, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' }); return; }
       const limit = Number(u.searchParams.get('limit') || 100);
       sendJson(res, 200, { ok: true, ...store.list(date, limit) });
     } },
@@ -1114,20 +1116,26 @@ export function createVoiceService(opts = {}) {
       method: 'GET', path: '/voice/screen', handler: async (req, res, ctx) => {
         const u = ctx && ctx.url ? ctx.url : new URL(req.url, 'http://localhost');
         const date = String(u.searchParams.get('date') || dayKey());
+        if (!isRealDay(date)) { sendJson(res, 400, { ok: false, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' }); return; }
         const limit = Number(u.searchParams.get('limit') || 200);
         sendJson(res, 200, { ok: true, ...screenStore.list(date, limit), stats: screenStore.stats() });
       },
     },    { method: 'POST', path: '/voice/diary/generate', handler: async (req, res, ctx) => {
       requireWrite(req, ctx);
       const body = await readJson(req).catch(() => ({}));
-      const result = await diary.generate({ date: body.date || dayKey(), by: body.by || 'manual', force: body.force === true });
+      const targetDate = String(body.date || dayKey());
+      if (!isRealDay(targetDate)) { sendJson(res, 400, { ok: false, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' }); return; }
+      const result = await diary.generate({ date: targetDate, by: body.by || 'manual', force: body.force === true });
+      if (result && result.ok === false) { sendJson(res, 400, result); return; }
       diaryBroadcast(result);
       sendJson(res, 200, result);
     } },
     { method: 'GET', path: '/voice/diary', handler: async (req, res, ctx) => {
       const u = ctx && ctx.url ? ctx.url : new URL(req.url, 'http://localhost');
       const date = String(u.searchParams.get('date') || dayKey());
-      sendJson(res, 200, diary.read(date));
+      if (!isRealDay(date)) { sendJson(res, 400, { ok: false, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' }); return; }
+      const diaryOfDate = diary.read(date);
+      sendJson(res, diaryOfDate && diaryOfDate.ok === false ? 400 : 200, diaryOfDate);
     } },
     { method: 'GET', path: '/voice/diary/list', handler: async (req, res) => {
       sendJson(res, 200, { ok: true, items: diary.list(30), diary: { enabled: !!(config.diary && config.diary.enabled), time: (config.diary && config.diary.time) || '23:00' }, lastDiary: status.lastDiary || null });

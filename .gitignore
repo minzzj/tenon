@@ -42,3 +42,8 @@ android/.gradle/
 android/app/build/
 *.pyc
 vendor/
+
+# 审计/排查产生的本地私有证据（含屏幕/语音文字，勿入库）
+_internal/audit/raw/
+_internal/audit/shots/
+_internal/op-data/

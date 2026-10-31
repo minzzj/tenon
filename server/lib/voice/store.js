@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { nowIso } from '../link/util.js';
 import { detectSensitive } from '../link/privacy.js';
+import { isRealDay, safeChild } from '../documents/safe-path.js';
 
 export const TRANSCRIPT_LIMIT_PER_READ = 200;
 
@@ -26,13 +27,20 @@ export function createTranscriptStore({ dataDir, retentionDays = 30 } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   let count = 0;
 
+  // P1 修复（S-04）：day 来自 ?date= 请求参数，必须 ^\d{4}-\d{2}-\d{2}$ 且为真实日期，
+  // 解析后必须仍位于本目录之下；非法返回 null，由调用方拒绝（路由层 400），绝不落到 fs 调用。
   function fileOf(day) {
-    return path.join(dir, String(day) + '.jsonl');
+    const key = String(day == null ? '' : day);
+    if (!isRealDay(key)) return null;
+    return safeChild(dir, key + '.jsonl');
   }
 
   function append(record) {
-    const day = dayKey(record.at || new Date());
+    // record.at 可能来自客户端 ts；非法时间戳回落到今天，避免写 NaN-NaN-NaN.jsonl，也不因此 500。
+    const rawDay = dayKey(record.at || new Date());
+    const day = isRealDay(rawDay) ? rawDay : dayKey();
     const file = fileOf(day);
+    if (!file) throw new Error('转写日期不合法');
     const row = { at: record.at || nowIso(), ...record };
     fs.appendFileSync(file, JSON.stringify(row) + '\n', 'utf8');
     count += 1;
@@ -40,13 +48,15 @@ export function createTranscriptStore({ dataDir, retentionDays = 30 } = {}) {
   }
 
   function list(day = dayKey(), limit = TRANSCRIPT_LIMIT_PER_READ) {
-    const file = fileOf(day);
-    if (!fs.existsSync(file)) return { date: day, items: [], total: 0 };
+    const key = String(day == null ? '' : day);
+    const file = fileOf(key);
+    if (!file) return { date: key, items: [], total: 0, ok: false, code: 'BAD_DATE' };
+    if (!fs.existsSync(file)) return { date: key, items: [], total: 0, ok: true };
     const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
     const items = lines.slice(-Math.max(1, Math.min(1000, Number(limit) || TRANSCRIPT_LIMIT_PER_READ))).map((line) => {
       try { return JSON.parse(line); } catch { return null; }
     }).filter(Boolean);
-    return { date: day, items, total: lines.length };
+    return { date: key, items, total: lines.length, ok: true };
   }
 
   function stats() {
@@ -79,19 +89,29 @@ export function createTranscriptStore({ dataDir, retentionDays = 30 } = {}) {
 export function createScreenStore({ dataDir } = {}) {
   const dir = path.join(dataDir, 'voice', 'screen');
   fs.mkdirSync(dir, { recursive: true });
-  function fileOf(day) { return path.join(dir, String(day) + '.jsonl'); }
+  // P1 修复（S-04）：屏幕 OCR 按日期落盘，同样只接受白名单 + 真实日期 + 目录前缀校验。
+  function fileOf(day) {
+    const key = String(day == null ? '' : day);
+    if (!isRealDay(key)) return null;
+    return safeChild(dir, key + '.jsonl');
+  }
   function append(record) {
-    const day = dayKey(record.at || new Date());
+    const rawDay = dayKey(record.at || new Date());
+    const day = isRealDay(rawDay) ? rawDay : dayKey();
+    const file = fileOf(day);
+    if (!file) throw new Error('屏幕文本日期不合法');
     const row = { id: record.id || ('sc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)), at: record.at || nowIso(), app: String(record.app || '').slice(0, 80), title: String(record.title || '').slice(0, 200), text: String(record.text || '').slice(0, 4000), confidence: Number(record.confidence) || null, source: record.source || 'pc', region: record.region || null, image: record.image || null, ocrMs: Number(record.ocrMs) || null, engine: record.engine || null, ...(record.redacted ? { redacted: true } : {}) };
-    fs.appendFileSync(fileOf(day), JSON.stringify(row) + '\n', 'utf8');
+    fs.appendFileSync(file, JSON.stringify(row) + '\n', 'utf8');
     return row;
   }
   function list(day = dayKey(), limit = 500) {
-    const file = fileOf(day);
-    if (!fs.existsSync(file)) return { date: day, items: [], total: 0 };
+    const key = String(day == null ? '' : day);
+    const file = fileOf(key);
+    if (!file) return { date: key, items: [], total: 0, ok: false, code: 'BAD_DATE' };
+    if (!fs.existsSync(file)) return { date: key, items: [], total: 0, ok: true };
     const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
     const items = lines.slice(-Math.max(1, Math.min(2000, Number(limit) || 500))).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-    return { date: day, items, total: lines.length };
+    return { date: key, items, total: lines.length, ok: true };
   }
   function stats() {
     try { const files = fs.readdirSync(dir).filter((n) => n.endsWith('.jsonl')); return { days: files.length, files: files.slice(-7), dir: path.relative(dataDir, dir) }; } catch { return { days: 0, files: [], dir: 'voice/screen' }; }

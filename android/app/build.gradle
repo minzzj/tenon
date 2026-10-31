@@ -11,18 +11,20 @@ android {
         applicationId "com.minzzj.tenon"
         minSdk 26
         targetSdk 34
-        versionCode 7
-        versionName "0.6.5"
+        versionCode 8
+        versionName "0.6.6"
 
-        // 默认中枢地址 / 操作令牌：从 local.properties 读取（该文件已 .gitignore，不随仓库分发）
-        // 手机首次打开即可直接连上本机 hub；用户可在「设置」里修改。
+        // 默认中枢地址：从 local.properties 读取（该文件已 .gitignore，不随仓库分发）。
+        // P0 安全修复（0.6.6）：DEFAULT_TOKEN 永远为空字符串，构建脚本不再读取 local.properties
+        // 的 tenon.defaultToken —— 公开分发的 APK 绝不能内置构建机 operatorToken。
+        // 操作令牌由用户在「设置 · 中枢连接」中手动填写。
         def lp = new Properties()
         def lpFile = rootProject.file("local.properties")
         if (lpFile.exists()) {
             lpFile.withInputStream { lp.load(it) }
         }
         def defaultHub = lp.getProperty("tenon.defaultHub", "http://192.168.3.123:7410")
-        def defaultToken = lp.getProperty("tenon.defaultToken", "")
+        def defaultToken = ""
         buildConfigField "String", "DEFAULT_HUB", "\"${defaultHub}\""
         buildConfigField "String", "DEFAULT_TOKEN", "\"${defaultToken}\""
     }

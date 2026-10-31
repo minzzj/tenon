@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { newId } from './ledger.js';
@@ -12,6 +13,25 @@ import { runCheckup } from './checkup.js';
 import { createV2 } from './v2/index.js';
 
 const HUB_CAPS = new Set(['channel.notify', 'llm.summarize']);
+
+// P0 鉴权修复：/api/v2/** 的 GET 也必须鉴权（此前 GET 全部放行，公网映射下匿名可读
+// 笔记/语音转写/文档/设备状态等）。这里只保留「不含隐私、必须匿名可用」的最小公开白名单：
+//   - /api/v2/health：存活探测（不返回隐私数据）
+//   - /api/v2/update/*：手机/桌面即使没有 operatorToken 也要能检查并下载更新
+//   - /api/v2/link/*：配对/发现/剪贴板/传输由 link 模块内部自带鉴权（operatorToken / nodeToken /
+//     配对后 peerToken，含匿名凭密码配对），这里保持原样、不改其内部逻辑。
+// /api/auth、/api/logout 与静态 /download/* 不在 v2 分发内，行为不变。
+const V2_PUBLIC_GET = new Set([
+  '/api/v2/health',
+  '/api/v2/update/info',
+  '/api/v2/update/manifest',
+  '/api/v2/update/android.apk',
+]);
+function isV2Public(method, pathname) {
+  if (pathname === '/api/v2/link' || pathname.startsWith('/api/v2/link/')) return true;
+  if (method !== 'GET' && method !== 'HEAD') return false;
+  return V2_PUBLIC_GET.has(pathname);
+}
 
 // P0 修复：只读实例只放行「不写账本」的纯读接口；其余 /api/* 一律 423（含节点接口与 GET 写路径）。
 const READ_ONLY_GET = new Set(['/api/state', '/api/stream', '/api/messages', '/api/impact']);
@@ -164,13 +184,50 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
     });
   }
 
-  function tokenOf(req) {
+  // P0 鉴权修复：鉴权凭据来源（按优先级）
+  //   1) x-tenon-token 头：桌面/手机 Web UI、Android APK（TenonHttp）、node-agent（operatorToken 或 nodeToken）
+  //   2) x-tenon-node 头：node-agent 只配了 nodeToken 时的兜底（hub.js 会同时带 x-tenon-node）
+  //   3) tenon_token Cookie：POST /api/auth 登录后由浏览器自动携带（EventSource 也带）
+  //   4) ?token= 查询参数：仅 GET/HEAD。EventSource 无法自定义请求头，旧版/嵌入式前端只能这样带；
+  //      服务端不把 req.url 写入日志，401/404 响应也不回显 token，避免令牌进日志。
+  function tokenOf(req, url) {
     const h = req.headers['x-tenon-token'];
     if (h) return String(h);
-    return parseCookie(req.headers.cookie || '').tenon_token || '';
+    const n = req.headers['x-tenon-node'];
+    if (n) return String(n);
+    const cookie = parseCookie(req.headers.cookie || '').tenon_token;
+    if (cookie) return String(cookie);
+    // 查询参数令牌只允许读请求，避免 POST/PUT 的令牌出现在 URL/代理日志里。
+    if (req.method !== 'GET' && req.method !== 'HEAD') return '';
+    try {
+      const u = url || new URL(req.url || '/', 'http://127.0.0.1');
+      return String(u.searchParams.get('token') || '');
+    } catch {
+      return '';
+    }
   }
 
-  const authed = (req) => tokenOf(req) === secret.operatorToken;
+  // 定长比较，避免令牌比对可被计时探测。
+  function safeEqual(a, b) {
+    const x = Buffer.from(String(a == null ? '' : a), 'utf8');
+    const y = Buffer.from(String(b == null ? '' : b), 'utf8');
+    if (!x.length || x.length !== y.length) return false;
+    return crypto.timingSafeEqual(x, y);
+  }
+
+  const operatorToken = String((secret && secret.operatorToken) || '');
+  const nodeToken = String((secret && secret.nodeToken) || '');
+
+  // authed：兼容 operatorToken（桌面/手机 UI、Android APK）与 nodeToken（node-agent）。
+  // 配对 peerToken（pt_*）不在本函数处理：它只对 /api/v2/link/* 有效，由 link 模块内部
+  // pairing.authPeerToken 校验，逻辑保持原样不动。
+  const authed = (req, u) => {
+    const tok = tokenOf(req, u);
+    if (!tok) return false;
+    if (operatorToken && safeEqual(tok, operatorToken)) return true;
+    if (nodeToken && safeEqual(tok, nodeToken)) return true;
+    return false;
+  };
   const v2 = await createV2({ root, ledger, state, ai, secret, readOnly, dataDir: dataDir || path.join(root, 'data'), authed });
 
   function serveFile(res, rel) {
@@ -194,7 +251,8 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
   }
 
   async function handleNode(req, res, u, pathname) {
-    if (String(req.headers['x-tenon-node'] || '') !== secret.nodeToken) return json(res, 401, { error: '节点令牌无效' });
+    // 节点接口仍只认 x-tenon-node（nodeToken）；定长比较防计时探测。
+    if (!nodeToken || !safeEqual(req.headers['x-tenon-node'], nodeToken)) return json(res, 401, { error: '节点令牌无效' });
     if (pathname === '/api/node/register' && req.method === 'POST') {
       const b = await readBody(req);
       if (!b.nodeId) return json(res, 400, { error: 'nodeId required' });
@@ -344,12 +402,18 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
   }
 
   async function handleApi(req, res, u, pathname) {
+    // 更新检查/存活探测常用 HEAD：只对公开白名单路径把 HEAD 归一为 GET（Node 对 HEAD 自动不写响应体），
+    // 受保护接口不做归一，避免用 HEAD 探测受保护资源。
+    if (req.method === 'HEAD' && V2_PUBLIC_GET.has(pathname)) req.method = 'GET';
     const method = req.method;
     // P0 修复：只读实例必须在鉴权与路由分发之前统一拦截。此前 /api/node/* 在 readOnly 判断之前分发、
     // GET /api/audit/export 会 append audit.exported，导致第二实例也能写账本、写坏哈希链。
     if (readOnly && !readOnlyAllowed(method, pathname)) {
       return json(res, 423, { error: '另一窗口为只读' });
     }
+    // P0 修复（S-02）：legacy GET 也必须鉴权（/api/state、/api/stream、/api/messages、审计导出等均含隐私数据）
+    // legacy GET 鉴权；/api/v2 由下方独立白名单/鉴权分支处理（不能在此提前拦截，否则 health/update 会被 401）
+    if (method === 'GET' && !pathname.startsWith('/api/v2/') && !authed(req, u)) return json(res, 401, { error: '需要登录令牌' });
     if (pathname === '/api/state' && method === 'GET') return json(res, 200, buildSnapshot());
     if (pathname === '/api/stream' && method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
@@ -360,8 +424,9 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
     }
     if (pathname === '/api/auth' && method === 'POST') {
       const b = await readBody(req);
-      if (String(b.token || '') !== secret.operatorToken) return json(res, 401, { error: '令牌不正确' });
-      res.setHeader('Set-Cookie', 'tenon_token=' + encodeURIComponent(secret.operatorToken) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800');
+      // 定长比较（防计时探测）；空令牌一律拒绝。
+      if (!operatorToken || !safeEqual(b.token, operatorToken)) return json(res, 401, { error: '令牌不正确' });
+      res.setHeader('Set-Cookie', 'tenon_token=' + encodeURIComponent(operatorToken) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800');
       return json(res, 200, { ok: true });
     }
     if (pathname === '/api/logout' && method === 'POST') {
@@ -370,10 +435,10 @@ export async function createHttpServer({ root, ledger, state, ai, secret, mode, 
     }
     if (pathname.startsWith('/api/v2/')) {
       if (readOnly && method !== 'GET') return json(res, 423, { error: '另一窗口为只读' });
-      // link 模块内部自带鉴权（operatorToken / nodeToken / 配对后的 peerToken，含匿名凭配对码配对），
-      // 其余 v2 模块仍由这里统一要求 operator token。
-      const isLinkModule = pathname.startsWith('/api/v2/link/');
-      if (method !== 'GET' && !isLinkModule && !authed(req)) return json(res, 401, { error: '需要登录令牌' });
+      // P0 修复：v2 的 GET 与写操作统一鉴权（此前 GET 全部放行）。只放行：
+      //   - 最小公开白名单 health/update（见 V2_PUBLIC_GET）
+      //   - /api/v2/link/*：配对/发现类，link 模块内部自带鉴权（operatorToken / nodeToken / peerToken）
+      if (!isV2Public(method, pathname) && !authed(req, u)) return json(res, 401, { error: '需要登录令牌' });
       return v2.handle(req, res, u, pathname);
     }
     if (pathname === '/api/shutdown' && method === 'POST') {

@@ -2,6 +2,23 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.6] - 2026-10-31（安全修复 + 两功能分页 + 屏幕记录 + 手机 0.6.6 一键更新）
+
+### Security（专项智能体审计后修复）
+- **P0 上传鉴权**：`/api/v2/**` 的 **GET 也鉴权**，仅放行最小白名单（health / update info|manifest|apk / link 配对）；SSE 支持 `?token=`；legacy `/api/state`、`/api/stream`、`/api/messages` 同样要求登录令牌。
+- **P0 APK 内置令牌**：构建移除 `DEFAULT_TOKEN`（APK 不再内置 operatorToken）；**轮换 operatorToken**（旧 tok_bc1d… 作废，新令牌见交付说明），桌面 App 启动时从 Electron 安全桥同步新令牌。
+- **P1 路径穿越**：语音记录/屏幕记录 `date` 参数与文档 id/date 增加格式与路径前缀校验（`../` 直接 400），删除文档前再次校验。
+- 修复桌面悬浮球单击触发 start+stop 的重复绑定 bug（现在单击即可录音）。
+- 修复 `/api/v2/update` HEAD/OPTIONS 401、APK Range 负区间等问题（更新接口保持免令牌可用）。
+
+### UI（用户要求：两个功能彻底拆开）
+- 首页只保留「今日看板 + 两个入口」：**语音唤醒 / 快捷录音** 与 **24 小时录音记录** 两个独立页面；录音、命令输入、最近说过只在唤醒页；24h 开关、全天记录、屏幕内容记录、今日总结入口只在 24h 页；底栏 5 页签保留。
+- 24h 页新增：电脑**屏幕内容记录**（看了什么）列表 + 今日总结入口；记录页只放笔记/总结，不再混排。
+
+### 手机
+- APK **0.6.6**（versionCode 8，2,911,759B，sha256 661B7790…）：移除内置令牌、一键更新（启动自动检查/设置页检查更新）、两功能页、允许未知应用安装；新旧 APK 均可后续一键更新。
+- 公网入口 `http://103.40.14.91:36996`（映射电脑 7410）；二维码/说明见桌面 `榫卯超级终端\`。
+
 ## [0.6.5] - 2026-10-31（手机一键更新/自动更新）
 
 ### Added

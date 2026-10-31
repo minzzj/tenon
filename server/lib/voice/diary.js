@@ -8,6 +8,7 @@ import { nowIso } from '../link/util.js';
 import { filterTranscript, dayKey } from './store.js';
 import { resolvePrompts } from './prompts.js';
 import { structuredFromMarkdown, generateDocumentFromMarkdown } from '../documents/generate.js';
+import { isRealDay, safeChild } from '../documents/safe-path.js';
 
 export const DIARY_VERSION = '3.0.0';
 
@@ -21,10 +22,22 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
   const dir = path.join(dataDir, 'voice', 'diary');
   fs.mkdirSync(dir, { recursive: true });
 
-  function fileOf(date) { return path.join(dir, String(date) + '.md'); }
+  // P1 修复（S-04）：date 必须 ^\d{4}-\d{2}-\d{2}$ 且是真实日历日期（用 UTC 判定，避免本地时区把合法日期判成非法）。
+  function isValidDay(v) { return isRealDay(String(v == null ? '' : v)); }
+  function assertDay(v) {
+    if (!isValidDay(v)) { const e = new Error('非法日期格式（应为 YYYY-MM-DD 且真实日期）'); e.statusCode = 400; e.code = 'BAD_DATE'; throw e; }
+    return String(v);
+  }
+  // 拼接后再做前缀校验：解析结果必须仍在 voice/diary 之下。
+  function fileOf(date) {
+    const day = assertDay(date);
+    return safeChild(path.resolve(dir), day + '.md');
+  }
 
   function transcriptDigest(date) {
-    const file = path.join(dataDir, 'voice', 'transcripts', String(date) + '.jsonl');
+    assertDay(date);
+    const file = safeChild(path.resolve(dataDir, 'voice', 'transcripts'), String(date) + '.jsonl');
+    if (!file) return [];
     const lines = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean) : [];
     const items = [];
     for (const line of lines.slice(-400)) {
@@ -41,11 +54,12 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
   }
 
   function screenDigest(date) {
+    assertDay(date);
     // V4：优先读 data/voice/screen/YYYY-MM-DD.jsonl（字库 OCR 采集全文），回退 state.voice.screenLog
     const out = [];
     try {
-      const file = path.join(dataDir, 'voice', 'screen', String(date) + '.jsonl');
-      if (fs.existsSync(file)) {
+      const file = safeChild(path.resolve(dataDir, 'voice', 'screen'), String(date) + '.jsonl');
+      if (file && fs.existsSync(file)) {
         const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(-600);
         for (const line of lines) {
           try {
@@ -151,8 +165,11 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
   }
 
   async function generate({ date = dayKey(), by = 'scheduler', force = false } = {}) {
-    const targetDate = String(date || dayKey());
+    // 非法 date 返回错误对象（路由层转 400），不抛异常，避免 v2 分发层把 400 吞成 500。
+    const targetDate = String(date == null || date === '' ? dayKey() : date);
+    if (!isValidDay(targetDate)) return { ok: false, date: targetDate, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' };
     const file = fileOf(targetDate);
+    if (!file) return { ok: false, date: targetDate, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' };
     if (!force && fs.existsSync(file) && fs.statSync(file).size > 0) {
       const existingMd = fs.readFileSync(file, 'utf8');
       return { ok: true, already: true, date: targetDate, path: path.relative(root, file).split(path.sep).join('/'), provider: 'existing', structured: structuredFromMarkdown(existingMd) };
@@ -219,9 +236,13 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
   }
 
   function read(date = dayKey()) {
-    const file = fileOf(String(date || dayKey()));
-    if (!fs.existsSync(file)) return { ok: true, date: String(date), exists: false, markdown: '', path: path.relative(root, file).split(path.sep).join('/') };
-    return { ok: true, date: String(date), exists: true, markdown: fs.readFileSync(file, 'utf8'), path: path.relative(root, file).split(path.sep).join('/'), updatedAt: fs.statSync(file).mtime.toISOString() };
+    // 非法 date 不触碰文件系统，直接返回错误对象（路由层转 400），不再向上抛异常。
+    const day = String(date == null || date === '' ? dayKey() : date);
+    if (!isValidDay(day)) return { ok: false, date: day, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' };
+    const file = fileOf(day);
+    if (!file) return { ok: false, date: day, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' };
+    if (!fs.existsSync(file)) return { ok: true, date: day, exists: false, markdown: '', path: path.relative(root, file).split(path.sep).join('/') };
+    return { ok: true, date: day, exists: true, markdown: fs.readFileSync(file, 'utf8'), path: path.relative(root, file).split(path.sep).join('/'), updatedAt: fs.statSync(file).mtime.toISOString() };
   }
 
   function list(limit = 14) {
@@ -248,7 +269,8 @@ export function createDiaryGenerator({ root, dataDir, ledger, getState, workers,
     const cfg = typeof getConfig === 'function' ? getConfig() : {};
     if (!(cfg.diary && cfg.diary.enabled !== false)) return false;
     const date = dayKey(now);
-    if (fs.existsSync(fileOf(date)) && fs.statSync(fileOf(date)).size > 0) return false;
+    const file = fileOf(date);
+    if (file && fs.existsSync(file) && fs.statSync(file).size > 0) return false;
     return dueNow(now);
   }
 

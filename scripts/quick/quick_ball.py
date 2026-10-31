@@ -72,9 +72,7 @@ class Ball:
         self.root.bind("<ButtonPress-1>", self.on_press)
         self.root.bind("<B1-Motion>", self.on_drag)
         self.root.bind("<ButtonRelease-1>", self.on_release)
-        self.canvas.bind("<ButtonPress-1>", self.on_press)
-        self.canvas.bind("<B1-Motion>", self.on_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        # 只保留 root 绑定：事件会从 canvas 冒泡到 root，重复绑定会导致单击触发 start+stop 两个动作
         self.root.bind("<Button-3>", self.on_right_click)
         threading.Thread(target=self.hotkey_loop, daemon=True).start()
         threading.Thread(target=self.poll_loop, daemon=True).start()

@@ -166,14 +166,19 @@
     }
   };
 
-  /* ---------------- 页面切换 ---------------- */
-  var TAB_PAGES = { home: 'page-home', records: 'page-records', reminders: 'page-reminders', documents: 'page-documents', settings: 'page-settings', devices: 'page-devices', today: 'page-today' };
+  /* ---------------- 页面切换（首页 / 唤醒 / 24h 记录 / 记录 / 提醒 / 文档 / 设置 + 旧页） ---------------- */
+  var TAB_PAGES = { home: 'page-home', wake: 'page-wake', ambient: 'page-ambient', records: 'page-records', reminders: 'page-reminders', documents: 'page-documents', settings: 'page-settings', devices: 'page-devices', today: 'page-today' };
+  /* 唤醒 / 24h 记录是首页下的子页面：底栏高亮「首页」，返回按钮切回 home */
+  var SUB_PAGES = { wake: 'home', ambient: 'home' };
   function switchTab(name) {
     if (!TAB_PAGES[name]) name = 'home';
     S.tab = name;
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
+    var activeTab = SUB_PAGES[name] || name;
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === activeTab); });
     Array.prototype.forEach.call(document.querySelectorAll('.page'), function (p) { p.classList.toggle('active', p.id === TAB_PAGES[name]); });
-    if (name === 'records') { loadNotes(); loadAmbientRecords(); }
+    if (name === 'records') loadNotes();
+    else if (name === 'wake') refreshStatus();
+    else if (name === 'ambient') { loadAmbientRecords(); refreshStatus(); loadScreenRecords(); loadTodaySummary(); }
     else if (name === 'reminders') loadReminders();
     else if (name === 'documents') loadDocuments();
     else if (name === 'settings') fillSettings();
@@ -211,7 +216,8 @@
       var od = $('online-dot'); if (od) od.classList.add('on');
       if (st.workers && st.workers.asr && st.workers.asr.state === 'running') { var cv = $('chip-voice'); if (cv) cv.classList.add('on'); }
       var lt = st.lastTranscript;
-      if (lt && lt.text && lt.at) {
+      /* 24h 全天记录只出现在 ambient 页：不进入唤醒页字幕 / 最近说过 */
+      if (lt && lt.text && lt.at && lt.source !== 'ambient') {
         var key = lt.text + '|' + lt.at;
         if (key !== S._lastTranscriptKey) { S._lastTranscriptKey = key; setCaption(lt.text); }
       }
@@ -223,7 +229,10 @@
       var amb = st.ambient || {};
       var ca = $('chip-ambient');
       if (ca) { ca.textContent = amb.enabled === false ? '24h记录 关' : '24h记录 开'; ca.classList.toggle('off', amb.enabled === false); }
-      if ($('ambient-state')) $('ambient-state').textContent = amb.enabled === false ? '已关闭' : '正在后台记录（只留痕，不执行命令）';
+      renderWakeListen(st);
+      renderAmbientToggle();
+      var wp = $('wake-provider-chip');
+      if (wp) wp.textContent = '识别：' + ((st.providers && st.providers.asr) || (st.workers && st.workers.asr && st.workers.asr.provider) || '本机');
       var sc = $('chip-screen');
       if (sc) sc.textContent = (window.tenonDesktop && window.tenonDesktop.screenCapture === false) ? '屏幕采集暂停' : '屏幕采集';
       var ag = $('chip-agent'); if (ag) ag.textContent = S.agent === 'openclaw' ? 'OpenClaw 小龙虾' : '自研执行器';
@@ -239,23 +248,35 @@
     if (keys.length > 300) keys.slice(0, 100).forEach(function (k) { delete S.evSeen[k]; });
     return false;
   }
+  /* P0 鉴权修复：EventSource 不能自定义请求头，服务端 GET /api/v2/** 现在也要求令牌，
+     所以 SSE URL 统一用 ?token= 带上（同源、仅用于本机/局域网；每次重连都重新读 localStorage，
+     令牌保存后无需刷新页面即可恢复）。 */
+  function sseUrl(path) {
+    var t = tok();
+    if (!t) return path;
+    return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(t);
+  }
   function connectSSE() {
     if (typeof EventSource === 'undefined') return;
     try {
       if (S.es) { try { S.es.close(); } catch (e) {} }
-      S.es = new EventSource('/api/v2/voice/stream');
+      S.es = new EventSource(sseUrl('/api/v2/voice/stream'));
       S.es.onmessage = function (ev) {
         var m = null; try { m = JSON.parse(ev.data || '{}'); } catch (e) { return; }
         if (!m || !m.type) return;
         if (m.type === 'transcript' && m.text) {
-          setCaption(m.text);
-          if (m.source === 'mic') setRecUI(false, '', '');
-          addTalk(m.text, { kind: m.source === 'ambient' ? '全天' : (m.source === 'mic' ? '语音' : '输入'), at: m.at });
-          if (m.source === 'ambient') loadAmbientRecords();
+          if (m.source === 'ambient') {
+            /* 24h 全天记录只进 ambient 页列表，不进唤醒页字幕 / 最近说过 */
+            loadAmbientRecords();
+          } else {
+            setCaption(m.text);
+            if (m.source === 'mic') setRecUI(false, '', '');
+            addTalk(m.text, { kind: m.source === 'mic' ? '语音' : '输入', at: m.at });
+          }
           if (S.rec.active && m.source === 'mic') { S.rec.active = false; recPollStop(); setRecUI(false, '', ''); }
           scheduleRefreshAfterVoice();
         }
-        else if (m.type === 'partial' && m.text) { setCaption(undefined, m.text); if (S.rec.active) setRecUI(true, '正在录音…请说话', titleLive(m.text)); }
+        else if (m.type === 'partial' && m.text) { if (m.source !== 'ambient') setCaption(undefined, m.text); if (S.rec.active) setRecUI(true, '正在录音…请说话', titleLive(m.text)); }
         else if (m.type === 'wake') { setCaption('「' + (m.word || '榫卯') + '」我在，请说'); if (S.rec.active) setRecUI(true, '已唤醒，请说…', ''); }
         else if (m.type === 'reply' && m.text) { addTalk(m.text, { kind: '执行', at: m.at }); if (S.rec.active) setRecUI(true, '已执行：' + String(m.text).slice(0, 40), ''); }
         else if (m.type === 'reply' && m.text) { renderResult(m); setCaption(m.text); scheduleRefreshAfterVoice(); }
@@ -279,7 +300,7 @@
   }
   function connectAuxSse(path, handler) {
     try {
-      var es = new EventSource(path);
+      var es = new EventSource(sseUrl(path));
       S.aux.push(es);
       es.onmessage = function (ev) {
         var m = null; try { m = JSON.parse(ev.data || '{}'); } catch (e) { return; }
@@ -1094,7 +1115,7 @@
     }).join('') || '<div class="muted">今天还没有语音记录</div>';
     var sr = await softApi('GET', '/api/v2/voice/screen?limit=60');
     var sitems = (sr.data && sr.data.items) || [];
-    var sl = $('screen-list');
+    var sl = $('today-screen-list');
     if (sl) sl.innerHTML = sitems.slice(-40).reverse().map(function (it) {
       return '<div class="item"><span class="t">' + esc(fmtTime(it.at || it.ts)) + '</span>' + esc((it.app || '') + ' ' + (it.title || '')) + '<br><span class="muted">' + esc((it.text || '').slice(0, 200)) + '</span></div>';
     }).join('') || '<div class="muted">今天还没有屏幕文字</div>';
@@ -1132,15 +1153,53 @@
     if (r.ok) { toast('设置已保存', 'ok'); refreshStatus(); }
   }
 
-  /* ---------------- 麦克风 ---------------- */
-  async function toggleMic() {
+  /* ---------------- 唤醒监听（wake 页，独立于 24h 记录） ---------------- */
+  function listenStateText(st) {
+    st = st || {};
+    var enabled = !!st.enabled;
+    var asr = (st.workers && st.workers.asr) || {};
+    if (!enabled) return '唤醒监听已暂停（点「开启唤醒监听」恢复）';
+    if (st.state === 'session' || st.state === 'wake' || st.state === 'listening') return '唤醒监听中：说「榫卯」即可下命令';
+    if (asr.state === 'starting') return '唤醒监听启动中…（首次加载模型约 20-40 秒）';
+    if (asr.state === 'running' || asr.state === 'mock') return '唤醒监听中：说「榫卯」即可下命令';
+    if (asr.state === 'unavailable' || asr.state === 'error' || st.state === 'error') return '唤醒引擎未就绪：仍可点「开始录音」或输入命令';
+    return '唤醒监听已开启';
+  }
+  function renderWakeListen(st) {
+    st = st || S.status || {};
+    var enabled = !!st.enabled;
+    var asr = (st.workers && st.workers.asr) || {};
+    var label = $('wake-listen-state');
+    if (label) label.textContent = listenStateText(st);
+    var dot = $('wake-dot');
+    if (dot) {
+      dot.classList.toggle('on', enabled);
+      dot.classList.toggle('warn', enabled && /starting/.test(String(asr.state)));
+    }
+    var btn = $('wake-toggle');
+    if (btn && !btn.disabled) {
+      btn.textContent = enabled ? '暂停唤醒监听' : '开启唤醒监听';
+      btn.classList.toggle('on', enabled);
+    }
+    var hint = $('wake-listen-hint');
+    if (hint) hint.textContent = enabled
+      ? '唤醒词：' + (((st.wakeWords || [])[0]) || '榫卯') + ' · 常驻监听中；关闭只影响唤醒，不影响 24h 全天记录'
+      : '监听已暂停：点右侧按钮恢复常驻唤醒；24h 全天记录在另一页独立开关';
+  }
+  async function toggleWakeListen() {
     var st = S.status || {};
     var on = !!st.enabled;
+    var btn = $('wake-toggle');
+    if (btn) { btn.disabled = true; btn.textContent = on ? '暂停中…' : '开启中…'; }
     try {
-      await api('POST', on ? '/api/v2/voice/stop' : '/api/v2/voice/start', {});
-      setCaption(on ? '已暂停语音监听' : '正在开启语音监听…');
-      setTimeout(refreshStatus, 800);
-    } catch (e) { setCaption('语音开关失败：' + e.message); }
+      if (on && S.rec.active) await stopRecording();
+      var r = await api('POST', on ? '/api/v2/voice/stop' : '/api/v2/voice/start', {});
+      if (r.ok) toast(on ? '已暂停唤醒监听' : '已开启唤醒监听', 'ok');
+      else toast('语音开关失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)), 'bad');
+      if (r.data && r.data.status) S.status = r.data.status;
+    } catch (e) { toast('语音开关失败：' + e.message, 'bad'); }
+    if (btn) btn.disabled = false;
+    await refreshStatus();
   }
 
   /* ---------------- V6 录音面板 / 最近说过（修 bug：点击录音必须可见、可看实时文字） ---------------- */
@@ -1176,7 +1235,7 @@
       var r = await softApi('GET', '/api/v2/voice/transcripts?limit=12');
       var items = (r.data && (r.data.items || r.data.transcripts)) || [];
       items.slice().reverse().forEach(function (it) {
-        if (it && it.text) addTalk(it.text, { at: it.at, kind: it.source === 'mic' ? '语音' : '输入' });
+        if (it && it.text && it.source !== 'ambient') addTalk(it.text, { at: it.at, kind: it.source === 'mic' ? '语音' : '输入' });
       });
     } catch (e) { /* ignore */ }
     renderTalk();
@@ -1252,14 +1311,47 @@
   }
   function toggleRecording() { if (S.rec.active) stopRecording(); else startRecording(); }
 
-  /* ---------------- 24 小时录音（与唤醒命令分开展示） ---------------- */
-  async function toggleAmbient() {
-    var cur = !(S.status && S.status.ambient && S.status.ambient.enabled === false);
-    var r = await api('PATCH', '/api/v2/voice/config', { ambient: { enabled: !cur } });
+  /* ---------------- 24 小时录音（独立页：只留痕、不执行） ---------------- */
+  function ambientEnabled() {
+    return !(S.status && S.status.ambient && S.status.ambient.enabled === false);
+  }
+  function renderAmbientToggle() {
+    var on = ambientEnabled();
+    var sw = $('ambient-switch'); if (sw) sw.classList.toggle('off', !on);
+    var title = $('ambient-toggle-title'); if (title) title.textContent = '24h 录音：' + (on ? '开' : '关');
+    var btn = $('ambient-toggle');
+    if (btn && !btn.disabled) {
+      btn.textContent = on ? '关闭 24h 录音' : '开启 24h 录音';
+      btn.classList.toggle('primary', !on);
+      btn.classList.toggle('ghost', on);
+    }
+    var ico = $('ambient-toggle-ico'); if (ico) ico.style.opacity = on ? '1' : '.45';
+    var state = $('ambient-state');
+    if (state) state.textContent = on ? '正在后台记录（只留痕，不执行命令）' : '已关闭（不再新增全天记录）';
+    var homeChip = $('home-ambient-state');
+    if (homeChip) { homeChip.textContent = on ? '已开启' : '已关闭'; homeChip.classList.toggle('warn', !on); }
+  }
+  async function setAmbient(on) {
+    on = !!on;
+    var btn = $('ambient-toggle');
+    if (btn) { btn.disabled = true; btn.textContent = on ? '开启中…' : '关闭中…'; }
+    var r = await api('PATCH', '/api/v2/voice/config', { ambient: { enabled: on } });
     if (r.ok) {
-      toast(cur ? '已关闭 24 小时录音（唤醒功能不受影响）' : '已开启 24 小时录音（后台持续留痕）', 'ok');
-      setTimeout(refreshStatus, 800);
-    } else toast('切换失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)), 'bad');
+      S.status = S.status || {};
+      S.status.ambient = S.status.ambient || {};
+      S.status.ambient.enabled = on;
+      renderAmbientToggle();
+      toast(on ? '已开启 24 小时录音（后台持续留痕）' : '已关闭 24 小时录音（唤醒功能不受影响）', 'ok');
+      setTimeout(refreshStatus, 900);
+    } else {
+      toast('切换失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)), 'bad');
+    }
+    if (btn) btn.disabled = false;
+    renderAmbientToggle();
+  }
+  function toggleAmbient(force) {
+    var target = typeof force === 'boolean' ? force : !ambientEnabled();
+    return setAmbient(target);
   }
   async function loadAmbientRecords() {
     var box = $('ambient-list'); if (!box) return;
@@ -1268,11 +1360,49 @@
       var items = (r.data && (r.data.items || r.data.transcripts)) || [];
       var amb = items.filter(function (it) { return it && (it.source === 'ambient'); });
       var c = $('ambient-count'); if (c) c.textContent = String(amb.length);
-      if (!amb.length) { box.innerHTML = '<li class="empty">暂无全天记录：保持 App 打开并开启「24 小时录音」，平时说话会自动留痕</li>'; return; }
-      box.innerHTML = amb.slice(0, 60).map(function (it) {
+      if (!amb.length) {
+        box.innerHTML = '<li class="empty">暂无全天记录：开启「24h 录音」并保持 App 打开，平时说话会自动留痕（只记录、不执行命令）</li>';
+        return;
+      }
+      box.innerHTML = amb.slice(0, 80).map(function (it) {
         return '<li><span class="t">' + esc(fmtClock(it.at)) + '</span><span class="k">24h</span><span class="x">' + esc(it.text || '') + '</span></li>';
       }).join('');
     } catch (e) { box.innerHTML = '<li class="empty">加载失败：' + esc(e.message) + '</li>'; }
+  }
+
+  /* ---------------- 电脑屏幕内容记录 + 今日总结（24h 页） ---------------- */
+  function screenSnippet(t) { return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 90); }
+  async function loadScreenRecords() {
+    var box = $('screen-list'); if (!box) return;
+    try {
+      var r = await softApi('GET', '/api/v2/voice/screen?limit=30');
+      var items = (r.data && (r.data.items || r.data.records)) || [];
+      var cnt = $('screen-count'); if (cnt) cnt.textContent = String((r.data && r.data.total) || items.length);
+      if (!items.length) { box.innerHTML = '<li class="empty">暂无屏幕记录：电脑端开启「屏幕采集」后，你看过/操作过的屏幕文字会自动记录在这里</li>'; return; }
+      box.innerHTML = items.map(function (it) {
+        var app = it.app || it.application || '';
+        var title = it.title || it.window || '';
+        var txt = screenSnippet(it.text || it.snippet || '');
+        var head = [app, title].filter(Boolean).join(' · ') || '屏幕';
+        return '<li><span class="t">' + esc(fmtClock(it.at || it.createdAt)) + '</span><span class="k">🖥</span><span class="x"><b>' + esc(head) + '</b> ' + esc(txt) + '</span></li>';
+      }).join('');
+    } catch (e) { box.innerHTML = '<li class="empty">加载失败：' + esc(e.message) + '</li>'; }
+  }
+  async function loadTodaySummary() {
+    var st = $('summary-status'); if (!st) return;
+    try {
+      var r = await softApi('GET', '/api/v2/documents?limit=20');
+      var items = (r.data && (r.data.items || r.data.documents)) || [];
+      var today = todayKey();
+      var doc = items.find(function (d) { return d && (d.kind === 'daily' || d.kind === 'note-summary') && String(d.date || d.createdAt || '').slice(0, 10) === today; }) || items[0];
+      if (doc) st.textContent = '已生成 · ' + (doc.title || '今日总结') + '（' + (doc.provider || '') + '，可去文档页下载 MD/DOCX/PDF）';
+      else st.textContent = '还没有今日总结，可以点「生成今日总结」';
+    } catch (e) { st.textContent = '检查失败：' + e.message; }
+  }
+  function bindAmbientExtras() {
+    if ($('screen-refresh')) $('screen-refresh').onclick = loadScreenRecords;
+    if ($('summary-open')) $('summary-open').onclick = function () { switchTab('documents'); };
+    if ($('summary-gen')) $('summary-gen').onclick = function () { switchTab('documents'); if (typeof generateDaily === 'function') generateDaily(); };
   }
 
   /* ---------------- 事件绑定 / 初始化 ---------------- */
@@ -1280,7 +1410,14 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.onclick = function () { switchTab(b.getAttribute('data-tab')); }; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-goto]'), function (b) { b.onclick = function () { switchTab(b.getAttribute('data-goto')); }; });
     if ($('btn-settings')) $('btn-settings').onclick = function () { switchTab('settings'); };
-    if ($('chip-ambient')) $('chip-ambient').onclick = toggleAmbient;
+    /* 顶栏 24h chip：只跳转「24 小时录音记录」页，不再在头栏直接切换开关 */
+    if ($('chip-ambient')) {
+      $('chip-ambient').onclick = function () { switchTab('ambient'); };
+      $('chip-ambient').onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchTab('ambient'); } };
+    }
+    if ($('wake-toggle')) $('wake-toggle').onclick = toggleWakeListen;
+    if ($('ambient-toggle')) $('ambient-toggle').onclick = function () { toggleAmbient(); };
+    if ($('ambient-refresh')) $('ambient-refresh').onclick = function () { refreshStatus(); loadAmbientRecords(); };
     if ($('mic-orb')) $('mic-orb').onclick = toggleRecording;
     if ($('btn-record')) $('btn-record').onclick = toggleRecording;
     if ($('rec-stop')) $('rec-stop').onclick = stopRecording;
@@ -1347,6 +1484,14 @@
     S.inited = true;
     MOCK.build();
     S.token = tok();
+  // 桌面 App：令牌轮换/首次启动时从 Electron 安全桥同步中枢令牌（浏览器/手机端走 localStorage 手填）
+  try {
+    if (window.tenonDesktop && typeof window.tenonDesktop.getToken === 'function') {
+      window.tenonDesktop.getToken().then(function (t) {
+        if (t && t !== tok()) { setToken(String(t)); refreshStatus(); }
+      }).catch(function () {});
+    }
+  } catch (e) {}
     bindEvents();
     if ($('records-date')) $('records-date').value = todayKey();
     var d = new Date(Date.now() + 30 * 60 * 1000);
@@ -1360,11 +1505,24 @@
     setInterval(function () { if (!document.hidden) { if (S.tab === 'reminders') loadReminders(); else loadBoard(); } }, 30000);
     setInterval(function () { if (!document.hidden && S.tab === 'records') loadNotes(); }, 20000);
     setInterval(function () { if (!document.hidden && S.tab === 'documents') loadDocuments(); }, 20000);
+    setInterval(function () { if (!document.hidden && S.tab === 'ambient') loadAmbientRecords(); }, 20000);
     setInterval(function () { if (!document.hidden) refreshStatus(); }, 3000);
     loadTalkHistory();
-  renderTalk();
-  loadAmbientRecords();
-  window.__tenonV5 = { state: S, mock: MOCK, switchTab: switchTab, refresh: function () { loadBoard(); if (S.tab === 'records') loadNotes(); if (S.tab === 'reminders') loadReminders(); if (S.tab === 'documents') loadDocuments(); }, api: api, toast: toast };
+    renderTalk();
+    renderWakeListen(S.status);
+    renderAmbientToggle();
+    loadAmbientRecords();
+    bindAmbientExtras();
+    loadScreenRecords();
+    loadTodaySummary();
+    window.__tenonV5 = {
+      state: S, mock: MOCK, switchTab: switchTab,
+      refresh: function () { loadBoard(); if (S.tab === 'records') loadNotes(); if (S.tab === 'reminders') loadReminders(); if (S.tab === 'documents') loadDocuments(); if (S.tab === 'ambient') loadAmbientRecords(); },
+      api: api, toast: toast,
+      loadAmbientRecords: loadAmbientRecords, refreshStatus: refreshStatus,
+      toggleAmbient: toggleAmbient, toggleWakeListen: toggleWakeListen,
+      startRecording: startRecording, stopRecording: stopRecording
+    };
   }
   async function resolveToken() {
     if (tok()) { S.token = tok(); return; }

@@ -1,8 +1,11 @@
 // V5 · 文档中心服务：结构化总结文档（md/docx/pdf）
 // 挂载：server/lib/v2/index.js 追加 { dir:'documents', name:'documents', factory:'createDocumentsService' }
+// P1 修复（S-03/S-04）：所有 :id / format / date / ids 入口先做白名单校验，非法一律 400；
+// 文件路径由 store 统一做 path.resolve 前缀校验，下载文件名固定生成。
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDocumentsStore } from './store.js';
+import { isValidDocId, isRealDay, isDownloadFormat } from './safe-path.js';
 import { generateDocument, collectSources, DOCUMENT_KINDS } from './generate.js';
 
 function sendJson(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
@@ -26,6 +29,8 @@ export async function createDocumentsService({ root, ledger, ai = null, dataDir,
     const ok = (ctx && typeof ctx.authed === 'function' && ctx.authed(req)) || (typeof authed === 'function' && authed(req));
     if (!ok) throw httpError(401, '需要登录令牌');
   }
+  function idParamOf(ctx) { return String((ctx && ctx.params && ctx.params.id) || ''); }
+  function rejectBadId(res) { sendJson(res, 400, { ok: false, error: '文档 id 不合法（^[A-Za-z0-9_-]{4,80}$）', code: 'BAD_DOCUMENT_ID' }); }
 
   const routes = [
     { method: 'GET', path: '/documents', handler: async (req, res, ctx) => {
@@ -46,38 +51,53 @@ export async function createDocumentsService({ root, ledger, ai = null, dataDir,
       const body = await readJson(req);
       const kind = String(body.kind || 'note-summary');
       if (!DOCUMENT_KINDS[kind]) { sendJson(res, 400, { ok: false, error: 'kind 只能是 note-summary|daily|note-set', code: 'BAD_KIND' }); return; }
-      const doc = await generateDocument({ ai, dataDir, ledger, kind, date: body.date || '', ids: Array.isArray(body.ids) ? body.ids : null, title: body.title || '' });
+      const date = body.date == null ? '' : String(body.date).trim();
+      if (date && !isRealDay(date)) { sendJson(res, 400, { ok: false, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' }); return; }
+      let ids = null;
+      if (Array.isArray(body.ids)) {
+        if (body.ids.some((x) => !isValidDocId(String(x)))) { sendJson(res, 400, { ok: false, error: 'ids 含非法笔记 id（^[A-Za-z0-9_-]{4,80}$）', code: 'BAD_NOTE_ID' }); return; }
+        ids = body.ids.map((x) => String(x));
+      }
+      const doc = await generateDocument({ ai, dataDir, ledger, kind, date, ids, title: body.title || '' });
       status.generated += 1;
       status.lastDoc = { at: nowIso(), id: doc.id, kind: doc.kind, provider: doc.provider, degraded: !!doc.degraded };
       broadcast({ type: 'document', id: doc.id, title: doc.title, kind: doc.kind, kindLabel: doc.kindLabel, provider: doc.provider, degraded: !!doc.degraded, download: '/api/v2/documents/' + doc.id + '/download?format=docx', files: Object.keys(doc.files || {}), createdAt: doc.createdAt, ts: Date.now() });
       sendJson(res, 201, { ok: true, document: doc, id: doc.id, structured: doc.structured, downloads: doc.downloads || { md: '/api/v2/documents/' + doc.id + '/download?format=md', docx: '/api/v2/documents/' + doc.id + '/download?format=docx', pdf: '/api/v2/documents/' + doc.id + '/download?format=pdf' }, provider: doc.provider, degraded: !!doc.degraded });
     } },
     { method: 'GET', path: '/documents/:id', handler: async (req, res, ctx) => {
-      const doc = store.get(ctx.params.id);
+      const id = idParamOf(ctx);
+      if (!isValidDocId(id)) { rejectBadId(res); return; }
+      const doc = store.get(id);
       if (!doc) { sendJson(res, 404, { ok: false, error: '文档不存在', code: 'DOCUMENT_NOT_FOUND' }); return; }
       let markdown = '';
-      try { markdown = fs.readFileSync(store.pathOf(doc.id, 'md'), 'utf8'); } catch { /* ignore */ }
+      const mdFile = store.pathOf(id, 'md');
+      if (mdFile) { try { markdown = fs.readFileSync(mdFile, 'utf8'); } catch { /* ignore */ } }
       sendJson(res, 200, { ok: true, document: doc, markdown });
     } },
     { method: 'GET', path: '/documents/:id/download', handler: async (req, res, ctx) => {
       const u = ctx.url;
+      const id = idParamOf(ctx);
+      if (!isValidDocId(id)) { rejectBadId(res); return; }
       const format = String(u.searchParams.get('format') || 'md').toLowerCase();
-      if (!['md', 'docx', 'pdf'].includes(format)) { sendJson(res, 400, { ok: false, error: 'format 只能是 md|docx|pdf' }); return; }
-      const file = store.pathOf(ctx.params.id, format);
+      if (!isDownloadFormat(format)) { sendJson(res, 400, { ok: false, error: 'format 只能是 md|docx|pdf', code: 'BAD_FORMAT' }); return; }
+      const file = store.pathOf(id, format);
       if (!file) { sendJson(res, 404, { ok: false, error: '该格式文件不存在', code: 'FILE_NOT_FOUND' }); return; }
       const types = { md: 'text/markdown; charset=utf-8', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pdf: 'application/pdf' };
-      const meta = store.get(ctx.params.id);
-      const base = String((meta && meta.title) || ctx.params.id).replace(/[\\/:*?"<>|\r\n]+/g, '_').slice(0, 60);
-      const asciiName = 'tenon-summary-' + ctx.params.id + '.' + format;
+      const meta = store.get(id);
+      const base = String((meta && meta.title) || id).replace(/[\\/:*?"<>|\r\n]+/g, '_').slice(0, 60) || id;
+      // 文件名固定由已校验的 id 生成，不使用任何请求原文。
+      const asciiName = 'tenon-summary-' + id + '.' + format;
       res.writeHead(200, { 'Content-Type': types[format], 'Content-Disposition': "attachment; filename=\"" + asciiName + "\"; filename*=UTF-8''" + encodeURIComponent(base + '.' + format), 'Cache-Control': 'private, max-age=300', 'Content-Length': fs.statSync(file).size });
       fs.createReadStream(file).pipe(res);
     } },
     { method: 'DELETE', path: '/documents/:id', handler: async (req, res, ctx) => {
       requireWrite(req, ctx);
-      const ok = store.remove(ctx.params.id);
-      if (!ok) { sendJson(res, 404, { ok: false, error: '文档不存在' }); return; }
-      broadcast({ type: 'document_deleted', id: ctx.params.id, ts: Date.now() });
-      sendJson(res, 200, { ok: true, id: ctx.params.id, deleted: true });
+      const id = idParamOf(ctx);
+      if (!isValidDocId(id)) { rejectBadId(res); return; }
+      const ok = store.remove(id);
+      if (!ok) { sendJson(res, 404, { ok: false, error: '文档不存在', code: 'DOCUMENT_NOT_FOUND' }); return; }
+      broadcast({ type: 'document_deleted', id, ts: Date.now() });
+      sendJson(res, 200, { ok: true, id, deleted: true });
     } },
   ];
 
