@@ -25,9 +25,29 @@ async def _ocr_file(path, region=None):
     stream.seek(0)
     decoder = await BitmapDecoder.create_async(stream)
     bitmap = await decoder.get_software_bitmap_async()
-    engine = OcrEngine.try_create_from_language(OcrEngine.available_recognizer_languages[0])
+    engine = None
+    # 精准优先：显式选中文（简体）识别器，避免默认拿第一个语言导致中文错字
+    try:
+        langs = list(OcrEngine.available_recognizer_languages)
+        preferred = []
+        for want in ("zh-Hans", "zh-CN", "zh"):
+            for lang in langs:
+                tag = str(getattr(lang, "language_tag", "") or "")
+                if tag.lower().startswith(want.lower()):
+                    preferred.append(lang)
+        for lang in preferred:
+            engine = OcrEngine.try_create_from_language(lang)
+            if engine is not None:
+                break
+    except Exception:
+        engine = None
     if engine is None:
-        engine = OcrEngine.try_create_from_user_profile_languages()
+        try:
+            engine = OcrEngine.try_create_from_user_profile_languages()
+        except Exception:
+            engine = None
+    if engine is None:
+        engine = OcrEngine.try_create_from_language(OcrEngine.available_recognizer_languages[0])
     if engine is None:
         raise RuntimeError("Windows OCR 引擎不可用（缺少语言包）")
     result = await engine.recognize_async(bitmap)
@@ -127,10 +147,50 @@ def _line_similarity(gray_img, line):
     except Exception:
         return None
 
-def ocr_image(path, region=None, font_match=False):
+def _clean_text(text):
+    import re
+    t = str(text or "")
+    # 中文/数字之间 OCR 常插空格（"中 枢 语 音"、"8 ： 46"），清理掉以提高可读性/相似合并命中率
+    t = re.sub(r"(?<=[\u4e00-\u9fff\d])\s+(?=[\u4e00-\u9fff\d])", "", t)
+    t = re.sub(r"\s+([，。！？、；：（）【】《》“”‘’…·,.!?;:()\[\]])", r"\1", t)
+    t = re.sub(r"([，。！？、；：（）【】《》“”‘’…·])\s+", r"\1", t)
+    t = re.sub(r"(?<=\d)\s*[：:]\s*(?=\d)", ":", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip()
+
+def _preprocess(path):
+    """精准优先：按宽度放大到 ~1600px（Windows OCR 对小字中文很差），再做灰度/对比度/锐化。"""
+    try:
+        from PIL import Image, ImageOps, ImageFilter
+        im = Image.open(path)
+        if im.mode in ("RGBA", "LA", "P"):
+            bg = Image.new("RGB", im.size, (255, 255, 255))
+            rgba = im.convert("RGBA")
+            bg.paste(rgba, mask=rgba.split()[-1])
+            im = bg
+        else:
+            im = im.convert("RGB")
+        w, h = im.size
+        # 目标宽度 1600：手机 1080 宽 → 1.48x；桌面 2560 宽 → 缩小到 1600 反而省时间且不损小字
+        target = 1600
+        scale = target / float(w) if w > 0 else 1.0
+        if scale < 0.6: scale = 0.6
+        if scale > 2.0: scale = 2.0
+        if abs(scale - 1.0) > 0.08:
+            im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
+        # 仅放大（RGB）：系统 OCR 自带预处理，灰度/锐化在部分样本上反而引入错字
+        pass
+        out = os.path.join(os.path.dirname(path), "ocr-up-%d.png" % int(time.time() * 1000))
+        im.save(out, "PNG")
+        return out
+    except Exception:
+        return None
+
+def ocr_image(path, region=None, font_match=False, upscale=True):
     t0 = time.time()
     # 区域裁剪（可选）
     tmp = None
+    pre = None
     if region:
         from PIL import Image
         im = Image.open(path)
@@ -140,12 +200,17 @@ def ocr_image(path, region=None, font_match=False):
         src = tmp
     else:
         src = path
+    if upscale:
+        pre = _preprocess(src)
+        if pre:
+            src = pre
     try:
         lines = asyncio.run(_ocr_file(src))
     finally:
-        if tmp and os.path.exists(tmp):
-            try: os.remove(tmp)
-            except Exception: pass
+        for f in (tmp, pre):
+            if f and os.path.exists(f):
+                try: os.remove(f)
+                except Exception: pass
     # 字库/字体相似度校验（仅在 fontMatch 时计算，避免日常采集开销）
     out_avg = None
     if font_match:
@@ -161,7 +226,9 @@ def ocr_image(path, region=None, font_match=False):
             out_avg = round(sum(sims) / len(sims), 3) if sims else None
         except Exception:
             out_avg = None
-    text = "\n".join(l["text"] for l in lines)
+    for l in lines:
+        l["text"] = _clean_text(l.get("text", ""))
+    text = "\n".join(l["text"] for l in lines if l["text"])
     out = {"ok": True, "engine": "windows-ocr", "provider": "windows.media.ocr",
            "language": "zh-Hans-CN", "lines": lines, "text": text,
            "avgSimilarity": out_avg,

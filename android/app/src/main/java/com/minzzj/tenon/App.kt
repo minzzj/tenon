@@ -82,9 +82,9 @@ class App : Application() {
         fun screenEnabled(): Boolean = sp().getBoolean("screenEnabled", false)
         fun setScreenEnabled(v: Boolean) = sp().edit().putBoolean("screenEnabled", v).apply()
 
-        /** 屏幕采集间隔（秒），默认 120，允许 30–600。 */
-        fun screenInterval(): Int = sp().getInt("screenInterval", 120).coerceIn(30, 600)
-        fun setScreenInterval(v: Int) = sp().edit().putInt("screenInterval", v.coerceIn(30, 600)).apply()
+        /** 屏幕采集间隔（秒），默认 5（0.6.11：5 秒一次高清采集），允许 5–600。 */
+        fun screenInterval(): Int = sp().getInt("screenInterval", 5).coerceIn(5, 600)
+        fun setScreenInterval(v: Int) = sp().edit().putInt("screenInterval", v.coerceIn(5, 600)).apply()
 
         fun screenBlacklist(): String = sp().getString("screenBlacklist", "") ?: ""
         fun setScreenBlacklist(v: String) = sp().edit().putString("screenBlacklist", v).apply()

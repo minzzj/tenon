@@ -33,8 +33,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * V4 屏幕内容采集前台服务：
- * 用户授权 MediaProjection 后，每 App.screenInterval() 秒截屏一次 → 缩放到 ≤960px → JPEG(55) →
+ * 用户授权 MediaProjection 后，每 App.screenInterval() 秒截屏一次（0.6.11 默认 5 秒）→
+ * 保留高分辨率（最大宽度 1440px，手机 1080 宽原样不放大）→ JPEG(85) → 提升 OCR 精准度 →
  * POST /api/v2/voice/screen {source:'phone', app, title, imageBase64}。
+ *
+ * 0.6.11：截图间隔默认 5 秒；压缩上限从 960px/JPEG55 提升到 1440px/JPEG85，
+ * 截屏/缩放/压缩/上传仍全部在后台线程（HandlerThread + 上传 Thread），不会退回主线程。
  *
  * 0.6.10 修复要点（0.6.9 在 Android 14 上必崩，报 ForegroundServiceDidNotStartInTimeException）：
  *  1. 设置页会因开关监听回环在 startForegroundService 之后立刻 stopService，导致服务来不及
@@ -53,6 +57,12 @@ class ScreenCaptureService : Service() {
         const val NOTIF_ID = 7420
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_RESULT_DATA = "resultData"
+
+        /** 0.6.11：高清采集上限——最大宽度 1440px（1080 宽手机原样不放大，2K 屏缩到 1440）。 */
+        private const val MAX_WIDTH = 1440
+
+        /** 0.6.11：JPEG 质量 85（原 55 太糊，OCR 错字多）。 */
+        private const val JPEG_QUALITY = 85
 
         /** 真正在采集（虚拟屏已创建、定时器已开跑）。 */
         @Volatile
@@ -318,19 +328,19 @@ class ScreenCaptureService : Service() {
         } finally {
             try { image.close() } catch (_: Exception) {}
         }
-        val scaled: Bitmap = if (bitmap.width > 960) {
-            val w = 960
-            val h = (bitmap.height * (960f / bitmap.width)).toInt().coerceAtLeast(1)
+        val scaled: Bitmap = if (bitmap.width > MAX_WIDTH) {
+            val w = MAX_WIDTH
+            val h = (bitmap.height * (MAX_WIDTH.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
             Bitmap.createScaledBitmap(bitmap, w, h, true).also { bitmap.recycle() }
         } else bitmap
         val sw = scaled.width
         val sh = scaled.height
         val baos = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 55, baos)
+        scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, baos)
         scaled.recycle()
         val bytes = baos.toByteArray()
         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-        LogBus.screen("截屏成功", sw.toString() + "x" + sh + " jpeg=" + bytes.size + "B")
+        LogBus.screen("截屏成功", sw.toString() + "x" + sh + " jpeg=" + bytes.size + "B q=" + JPEG_QUALITY + " maxW=" + MAX_WIDTH)
         if (!uploading.compareAndSet(false, true)) {
             LogBus.screen("上一张还在上传，跳过本帧")
             return
@@ -359,7 +369,7 @@ class ScreenCaptureService : Service() {
                     App.setScreenLastError("")
                     serviceError = ""
                     LogBus.screen("上传成功", "id=" + id + " 今日=" + App.screenUploadsToday())
-                    notify("已上报 " + App.screenUploadsToday() + " 次 · 每 " + App.screenInterval() + " 秒采集")
+                    notify("已上报 " + App.screenUploadsToday() + " 次 · 每 " + App.screenInterval() + " 秒一次")
                 } else {
                     // 中枢收到了，但 OCR 没抽到文字 → 不入库。0.6.9 把这当成功，用户就「看不到记录」。
                     val why = resp.optString("message", "图片中未识别到文字")

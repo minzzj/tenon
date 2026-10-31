@@ -498,6 +498,9 @@ export function createVoiceService(opts = {}) {
 
   // ---------------- 生命周期 ----------------
   function start({ by = 'user' } = {}) {
+    // 启动时清掉历史截图（用户要求识别完成后自动删除截图）
+    try { cleanupScreenTmp(0); } catch { /* ignore */ }
+
     if (readOnly) throw httpError(423, '只读实例不能开启语音服务');
     const curAsr = workers.state && workers.state.asr ? workers.state.asr.state : 'stopped';
     if (status.enabled && (curAsr === 'running' || curAsr === 'starting')) {
@@ -729,6 +732,26 @@ export function createVoiceService(opts = {}) {
     const dir = path.join(dataDir, 'voice', 'screen', 'tmp');
     fs.mkdirSync(dir, { recursive: true });
     return dir;
+  }
+
+  // 截图临时文件自动清理：OCR 完成后立即删除；启动时清掉历史残留；定时兜底清 >1 小时
+  let lastScreenTmpClean = 0;
+  function cleanupScreenTmp(maxAgeMs = 3600 * 1000) {
+    const dir = path.join(dataDir, 'voice', 'screen', 'tmp');
+    try {
+      if (!fs.existsSync(dir)) return 0;
+      let removed = 0;
+      const now = Date.now();
+      for (const name of fs.readdirSync(dir)) {
+        const fp = path.join(dir, name);
+        try {
+          const st = fs.statSync(fp);
+          if (!st.isFile()) continue;
+          if (maxAgeMs <= 0 || now - st.mtimeMs >= maxAgeMs) { fs.rmSync(fp, { force: true }); removed++; }
+        } catch { /* ignore */ }
+      }
+      return removed;
+    } catch { return 0; }
   }
 
   async function ocrImage(base64, { source = 'phone' } = {}) {
@@ -1094,10 +1117,13 @@ export function createVoiceService(opts = {}) {
       method: 'POST', path: '/voice/screen', handler: async (req, res, ctx) => {
         requireWrite(req, ctx);
         const body = await readJson(req);
+        let screenTmpFileForCleanup = null; // finally 可访问（try 内 let 在 finally 中不可见）
+        try {
         const source = body.source === 'phone' ? 'phone' : 'pc';
         let raw = String(body.text || '').trim();
         let ocr = null;
         let imageInfo = null;
+        let imageTmpPath = null;
         let ocrMs = Number(body.ocrMs) || null;
         let engine = body.engine || null;
         if (body.imageBase64) {
@@ -1106,8 +1132,11 @@ export function createVoiceService(opts = {}) {
             raw = String(ocr.text || '').trim();
             ocrMs = ocr.ocrMs || ocrMs;
             engine = ocr.engine || engine;
-            imageInfo = { path: path.relative(root, ocr.file).split(path.sep).join('/'), bytes: ocr.bytes, engine: ocr.engine };
+            imageTmpPath = ocr.file;
+            screenTmpFileForCleanup = ocr.file;
+            imageInfo = { bytes: ocr.bytes, engine: ocr.engine };
           } catch (err) {
+            try { if (ocr && ocr.file) fs.unlinkSync(ocr.file); } catch { /* ignore */ }
             sendJson(res, 502, { ok: false, stored: false, error: String((err && err.message) || err), code: 'OCR_FAILED' });
             return;
           }
@@ -1124,20 +1153,20 @@ export function createVoiceService(opts = {}) {
         const at = body.ts || nowIso();
         const sensitive = !!priv.redacted;
         if (sensitive && imageInfo) {
-          // 敏感屏幕内容不保留截图（只保留「已过滤」标记）
-          try { fs.unlinkSync(path.resolve(root, imageInfo.path)); } catch { /* ignore */ }
+          // 敏感屏幕内容不保留任何截图（图片统一在 finally 删除，只留「已过滤」标记）
           imageInfo = null;
         }
         const safeText = sensitive ? '' : raw;
         const id = 'sc_' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
         let record = null;
         try {
-          record = screenStore.append({ id, at, app: body.app, title: body.title, text: safeText, confidence: body.confidence, source, region: body.region, image: imageInfo ? imageInfo.path : null, ocrMs, engine, redacted: sensitive });
+          // 用户要求：识别完成后自动删除截图 → 记录里不保存图片路径（只保留 OCR 文本/统计）
+          record = screenStore.append({ id, at, app: body.app, title: body.title, text: safeText, confidence: body.confidence, source, region: body.region, image: null, ocrMs, engine, redacted: sensitive });
         } catch (err) {
           sendJson(res, 500, { ok: false, stored: false, error: '屏幕文本落盘失败：' + String((err && err.message) || err) });
           return;
         }
-        append('voice.screen', { kind: 'screen', id: record.id, app: record.app, title: record.title, text: safeText, confidence: record.confidence, source, image: record.image, ocrMs, engine, sensitive, ...(sensitive ? { sensitiveType: priv.sensitiveType, length: priv.length } : {}) });
+        append('voice.screen', { kind: 'screen', id: record.id, app: record.app, title: record.title, text: safeText, confidence: record.confidence, source, image: null, ocrMs, engine, sensitive, ...(sensitive ? { sensitiveType: priv.sensitiveType, length: priv.length } : {}) });
         status.counters.screenTexts = (status.counters.screenTexts || 0) + 1;
         hub.broadcast({ type: 'screen', id: record.id, at, app: record.app, title: record.title, text: sensitive ? priv.redactedPreview : safeText.slice(0, 300), confidence: record.confidence, source, sensitive, ts: Date.now() });
         sendJson(res, 200, {
@@ -1151,11 +1180,29 @@ export function createVoiceService(opts = {}) {
           ocrMs,
           engine,
           confidence: record.confidence,
-          image: imageInfo,
+          image: null,
           sensitive,
           sensitiveType: priv.sensitiveType || null,
           preview: sensitive ? priv.redactedPreview : safeText.slice(0, 200),
         });
+        } finally {
+          // 自动删除截图：OCR 完成后不保留图片文件（用户要求省空间/隐私，总结只用文本）
+          if (screenTmpFileForCleanup) {
+            const tmpFile = screenTmpFileForCleanup;
+            screenTmpFileForCleanup = null;
+            const tryDel = (attempt) => {
+              try { fs.unlinkSync(tmpFile); }
+              catch { if (attempt < 5) setTimeout(() => tryDel(attempt + 1), 250 * (attempt + 1)); }
+            };
+            tryDel(0);
+            // 兜底：2 秒后再扫一遍 tmp，避免 Windows 文件句柄释放延迟
+            setTimeout(() => { try { tryDel(0); cleanupScreenTmp(60 * 1000); } catch { /* ignore */ } }, 2000);
+          }
+          if (Date.now() - lastScreenTmpClean > 10 * 60 * 1000) {
+            lastScreenTmpClean = Date.now();
+            try { cleanupScreenTmp(); } catch { /* ignore */ }
+          }
+        }
       },
     },
     {

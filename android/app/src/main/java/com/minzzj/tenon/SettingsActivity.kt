@@ -157,13 +157,18 @@ class SettingsActivity : Activity() {
         screenSelfCheck.textSize = 12f
         sScreen.addView(screenSelfCheck)
         sScreen.addView(Ui.hint(this,
-            "每间隔截屏一次（缩放到 ≤960px、JPEG 压缩）上报中枢 /api/v2/voice/screen，由电脑端识别屏幕文字并纳入每日总结。" +
+            "每 5 秒截屏一次（默认）· 高清采集：最大宽度 1440px、JPEG 85（1080 宽手机原样不放大），" +
+            "上报中枢 /api/v2/voice/screen，由电脑端识别屏幕文字并纳入每日总结。" +
             "首次需在系统弹窗授权「共享屏幕」；可随时暂停。"))
         val rowInt = Ui.row(this)
-        rowInt.addView(Ui.button(this, "60 秒") { setScreenInterval(60) })
-        rowInt.addView(Ui.button(this, "120 秒（默认）") { setScreenInterval(120) })
-        rowInt.addView(Ui.button(this, "300 秒") { setScreenInterval(300) })
+        rowInt.addView(Ui.button(this, "5 秒（默认）") { setScreenInterval(5) })
+        rowInt.addView(Ui.button(this, "10 秒") { setScreenInterval(10) })
         sScreen.addView(rowInt)
+        val rowInt2 = Ui.row(this)
+        rowInt2.addView(Ui.button(this, "30 秒") { setScreenInterval(30) })
+        rowInt2.addView(Ui.button(this, "60 秒") { setScreenInterval(60) })
+        rowInt2.addView(Ui.button(this, "120 秒") { setScreenInterval(120) })
+        sScreen.addView(rowInt2)
         screenBlacklistInput = Ui.input(this, "黑名单应用（逗号分隔，如 银行,微信；供电脑端过滤敏感屏幕）")
         sScreen.addView(screenBlacklistInput)
         val rowScreen = Ui.row(this)

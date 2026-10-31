@@ -4,6 +4,7 @@ import path from 'node:path';
 import * as docxPkg from 'docx';
 import PDFDocument from 'pdfkit';
 import { createNotesStore } from '../notes/store.js';
+import { mergeScreens, formatScreenGroup } from './screen-merge.js';
 import { createDocumentsStore } from './store.js';
 import { isRealDay, isValidDocId } from './safe-path.js';
 
@@ -53,7 +54,11 @@ export function collectSources({ dataDir, date, ids = null, kind = 'note-summary
     .filter((x) => x.text);
   const byDevice = { pc: [], phone: [] };
   for (const t of transcripts) (byDevice[t.device === 'phone' ? 'phone' : 'pc'] || byDevice.pc).push(t.text);
-  const screens = readJsonLines(path.join(dataDir, 'voice', 'screen', day + '.jsonl'), 300).filter((x) => x && x.text && !x.redacted).map((x) => ({ at: x.at, app: x.app, title: x.title, text: String(x.text).slice(0, 300) }));
+  const screens = readJsonLines(path.join(dataDir, 'voice', 'screen', day + '.jsonl'), 300)
+    .filter((x) => x && x.text && !x.redacted)
+    .map((x) => ({ at: x.at, app: x.app, title: x.title, text: String(x.text).slice(0, 300), source: String(x.source || ''), device: String(x.device || (x.source === 'phone' ? 'phone' : 'pc')) }));
+  // 5 秒一截图 → 原始条数可能上万；总结前先按相似内容合并并计数，显著降低 token
+  const screenGroups = mergeScreens(screens);
   let diaryMarkdown = '';
   try { const f = path.join(dataDir, 'voice', 'diary', day + '.md'); if (fs.existsSync(f)) diaryMarkdown = fs.readFileSync(f, 'utf8'); } catch { diaryMarkdown = ''; }
   const execs = [];
@@ -68,7 +73,7 @@ export function collectSources({ dataDir, date, ids = null, kind = 'note-summary
     const dev = String(sc.device || sc.source || '').toLowerCase() === 'phone' ? 'phone' : 'pc';
     screenByDevice[dev].push(sc);
   }
-  return { day, notes, transcripts, transcriptTexts: transcripts.map((t) => t.text), byDevice, screens, screenByDevice, diaryMarkdown, execs: execs.slice(-40) };
+  return { day, notes, transcripts, transcriptTexts: transcripts.map((t) => t.text), byDevice, screens, screenGroups, screenByDevice, diaryMarkdown, execs: execs.slice(-40) };
 }
 
 export function buildPrompt(kind = 'note-summary') {
@@ -97,13 +102,14 @@ export function sanitizeStructured(parsed, fallback = {}) {
 
 export function fallbackStructured(sources = {}, kind = 'note-summary') {
   const notes = sources.notes || [];
-  const screens = sources.screens || [];
+  const screens = sources.screenGroups || sources.screens || [];
   const transcripts = (sources.transcriptTexts || sources.transcripts || []).map((t) => (typeof t === 'string' ? t : t.text)).filter(Boolean);
   const execs = sources.execs || [];
   const noteLines = notes.map((n) => '「' + (n.title || '') + '」' + String(n.text || '').slice(0, 120));
-  const videoLines = screens.map((s) => (s.app ? '[' + s.app + '] ' : '') + (s.title || '') + '：' + String(s.text || '').slice(0, 100));
+  const rawScreenCount = (sources.screens || []).length;
+  const videoLines = screens.map((s) => formatScreenGroup(s, { excerpt: 100 }));
   const 摘要 = notes.length || screens.length || transcripts.length
-    ? '今天记录了 ' + notes.length + ' 条笔记、' + transcripts.length + ' 条语音转写、' + screens.length + ' 条屏幕文本' + (videoLines.length ? '；屏幕内容包含：' + videoLines.slice(0, 3).join('；') : '') + '。'
+    ? '今天记录了 ' + notes.length + ' 条笔记、' + transcripts.length + ' 条语音转写、' + rawScreenCount + ' 条屏幕文本（相似内容合并后 ' + screens.length + ' 组）' + (videoLines.length ? '；屏幕内容包含：' + videoLines.slice(0, 3).join('；') : '') + '。'
     : '今天还没有足够的笔记/语音/屏幕数据，先记录一些内容再生成总结。';
   const 重点 = [...noteLines.slice(0, 4), ...videoLines.slice(0, 4), ...execs.slice(-3).map((e) => '执行：' + e.text)].slice(0, 6);
   const 待办 = notes.map((n) => String(n.text || '')).filter((t) => /待办|明天|要|记得|安排|需要/.test(t)).slice(0, 5).map((t) => t.slice(0, 80));
@@ -124,7 +130,7 @@ export async function generateStructured({ ai = null, kind = 'note-summary', dat
         '【笔记】\n' + (sources.notes.length ? sources.notes.map((n, i) => (i + 1) + '. ' + (n.title || '') + '（' + (n.source === 'voice' ? '语音' : '文字') + '）：' + String(n.text || '').slice(0, 600)).join('\n') : '（无）'),
         '【电脑端记录】\n' + (((sources.byDevice || {}).pc || []).length ? (sources.byDevice.pc.slice(-40).map((t) => '- ' + t).join('\n')) : '（无）'),
         '【手机端记录】\n' + (((sources.byDevice || {}).phone || []).length ? (sources.byDevice.phone.slice(-40).map((t) => '- ' + t).join('\n')) : '（无）'),
-        '【屏幕文本（看了什么）】\n' + (sources.screens.length ? sources.screens.slice(-80).map((s) => '- ' + String(s.at).slice(11, 16) + ' [' + (s.app || '屏幕') + '] ' + (s.title ? s.title + '：' : '') + s.text).join('\n') : '（无）'),
+        '【屏幕文本（已按相似内容合并，计数为出现次数；原始 ' + ((sources.screens || []).length) + ' 条 → 合并 ' + ((sources.screenGroups || []).length) + ' 组）】\n' + (((sources.screenGroups || []).length) ? sources.screenGroups.slice(-60).map((g) => '- ' + formatScreenGroup(g, { excerpt: 160 })).join('\n') : '（无）'),
         '【已执行操作】\n' + (sources.execs.length ? sources.execs.map((e) => '- ' + (e.ok ? '✓' : '✗') + ' ' + e.text).join('\n') : '（无）'),
         sources.diaryMarkdown ? '【已有晚间日记】\n' + sources.diaryMarkdown.slice(0, 2500) : '',
       ].filter(Boolean).join('\n\n');
@@ -154,11 +160,15 @@ function markdownOf({ title, day, kind, provider, degraded, structured, sources 
   lines.push('## 设备记录', '', '- 电脑端语音：' + ((dev.pc || []).length) + ' 条', '- 手机端语音：' + ((dev.phone || []).length) + ' 条', '');
   if ((dev.pc || []).length) { lines.push('### 🖥 电脑端记录', ''); for (const t of dev.pc.slice(-25)) lines.push('- ' + String(t).slice(0, 160)); lines.push(''); }
   if ((dev.phone || []).length) { lines.push('### 📱 手机端记录', ''); for (const t of dev.phone.slice(-25)) lines.push('- ' + String(t).slice(0, 160)); lines.push(''); }
+  const sg = sources.screenGroups || [];
+  lines.push('## 屏幕记录（相似内容已合并，共 ' + sg.length + ' 组 / 原始 ' + ((sources.screens || []).length) + ' 条）', '');
+  if (sg.length) { for (const g of sg.slice(0, 80)) lines.push('- ' + formatScreenGroup(g)); } else { lines.push('- （无）'); }
+  lines.push('');
   lines.push('## 今日数据', '', '- 笔记：' + ((sources.notes || []).length) + ' 条', '- 语音转写：' + ((sources.transcripts || []).length) + ' 条', '- 屏幕文本：' + ((sources.screens || []).length) + ' 条', '- 执行操作：' + ((sources.execs || []).length) + ' 条', '');
   return lines.join('\n');
 }
 
-function docxOf({ title, day, kind, provider, degraded, structured }) {
+function docxOf({ title, day, kind, provider, degraded, structured, screenGroups = [] }) {
   const children = [
     new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
     new Paragraph({ children: [new TextRun({ text: day + ' · ' + (DOCUMENT_KINDS[kind] || '总结') + ' · ' + provider + (degraded ? '（降级模板）' : ''), size: 18, color: '666666' })], spacing: { after: 240 } }),
@@ -176,10 +186,13 @@ function docxOf({ title, day, kind, provider, degraded, structured }) {
   section('回顾', structured.回顾);
   children.push(new Paragraph({ text: '日记', heading: HeadingLevel.HEADING_1 }));
   children.push(new Paragraph({ text: structured.日记 || '（无）', spacing: { after: 200 } }));
+  children.push(new Paragraph({ text: '屏幕记录（相似内容已合并）', heading: HeadingLevel.HEADING_1 }));
+  if (!screenGroups.length) children.push(new Paragraph({ text: '（无）', spacing: { after: 120 } }));
+  else for (const g of screenGroups.slice(0, 80)) children.push(new Paragraph({ text: '• ' + formatScreenGroup(g), bullet: { level: 0 }, spacing: { after: 60 } }));
   return Packer.toBuffer(new Document({ creator: '榫卯 Tenon', title, description: '榫卯结构化总结', sections: [{ children }] }));
 }
 
-function pdfOf({ title, day, kind, provider, degraded, structured }) {
+function pdfOf({ title, day, kind, provider, degraded, structured, screenGroups = [] }) {
   return new Promise((resolve) => {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 48, info: { Title: title, Creator: '榫卯 Tenon' } });
@@ -208,6 +221,10 @@ function pdfOf({ title, day, kind, provider, degraded, structured }) {
       writeList('待办', structured.待办);
       writeList('回顾', structured.回顾);
       doc.fontSize(13).text('日记'); doc.moveDown(0.2); doc.fontSize(10.5).text(structured.日记 || '（无）');
+      doc.moveDown(0.6);
+      doc.fontSize(13).text('屏幕记录（相似内容已合并）'); doc.moveDown(0.2); doc.fontSize(10.5);
+      if (!screenGroups.length) doc.text('（无）');
+      else for (const g of screenGroups.slice(0, 80)) doc.text('• ' + formatScreenGroup(g), { indent: 10 });
       doc.end();
     } catch { resolve(null); }
   });
@@ -223,12 +240,13 @@ export async function writeDocument({ dataDir, ledger = null, kind = 'note-summa
   const md = markdownOf({ title: finalTitle, day, kind, provider, degraded, structured: structuredObj, sources: sources || { notes: [], transcripts: [], screens: [], execs: [] } });
   const id = 'doc_' + day.replace(/-/g, '') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   let docxBuffer = null; let pdfBuffer = null; let errors = [];
-  try { docxBuffer = await docxOf({ title: finalTitle, day, kind, provider, degraded, structured: structuredObj }); } catch (err) { errors.push('docx: ' + String((err && err.message) || err)); }
-  try { pdfBuffer = await pdfOf({ title: finalTitle, day, kind, provider, degraded, structured: structuredObj }); } catch (err) { errors.push('pdf: ' + String((err && err.message) || err)); }
+  const screenGroups = (sources && sources.screenGroups) || [];
+  try { docxBuffer = await docxOf({ title: finalTitle, day, kind, provider, degraded, structured: structuredObj, screenGroups }); } catch (err) { errors.push('docx: ' + String((err && err.message) || err)); }
+  try { pdfBuffer = await pdfOf({ title: finalTitle, day, kind, provider, degraded, structured: structuredObj, screenGroups }); } catch (err) { errors.push('pdf: ' + String((err && err.message) || err)); }
   const meta = {
     id, title: finalTitle, date: day, kind, kindLabel: DOCUMENT_KINDS[kind] || '总结', provider, degraded,
     structured: structuredObj, summary: structuredObj.摘要, chars: md.length,
-    sourceStats: { notes: (sources && sources.notes ? sources.notes.length : 0), transcripts: (sources && sources.transcripts ? sources.transcripts.length : 0), screens: (sources && sources.screens ? sources.screens.length : 0), execs: (sources && sources.execs ? sources.execs.length : 0) },
+    sourceStats: { notes: (sources && sources.notes ? sources.notes.length : 0), transcripts: (sources && sources.transcripts ? sources.transcripts.length : 0), screens: (sources && sources.screens ? sources.screens.length : 0), screenGroups: screenGroups.length, execs: (sources && sources.execs ? sources.execs.length : 0) },
     errors,
   };
   const saved = store.save({ id, meta, markdown: md, docxBuffer, pdfBuffer });

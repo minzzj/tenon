@@ -11,8 +11,8 @@ android {
         applicationId "com.minzzj.tenon"
         minSdk 26
         targetSdk 34
-        versionCode 12
-        versionName "0.6.10"
+        versionCode 13
+        versionName "0.6.11"
 
         // 0.6.8：公开分发的 APK 不内置中枢地址、不内置操作令牌。
         // 首次安装请在「设置 → 中枢连接」选择局域网/公网地址并填写 operatorToken；
