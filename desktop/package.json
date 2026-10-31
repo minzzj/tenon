@@ -1,7 +1,7 @@
 {
   "name": "tenon-super-terminal",
   "version": "0.6.12",
-  "description": "榫卯超级终端 · 单程序桌面 App（语音/屏幕/每日总结/设备控制）",
+  "description": "榫卯超级终端 Tenon · 本地 AI 语音助手 / 电脑自动化(RPA) / 手机电脑协同 / 智能家居物联网控制 / 24h 录音与屏幕记录总结",
   "main": "main.js",
   "author": "minzzj",
   "license": "CC-BY-NC-SA-4.0",
@@ -71,5 +71,20 @@
       "artifactName": "TenonSuperTerminal-${version}-portable.${ext}"
     },
     "compression": "normal"
-  }
+  },
+  "keywords": [
+    "tenon",
+    "榫卯",
+    "超级终端",
+    "ai-assistant",
+    "voice-assistant",
+    "pc-automation",
+    "rpa",
+    "iot",
+    "smart-home",
+    "screen-capture",
+    "speech-to-text",
+    "local-first",
+    "electron"
+  ]
 }
