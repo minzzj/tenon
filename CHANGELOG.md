@@ -2,6 +2,19 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-10-31 上午（修 UI：点录音可见 / 实时文字 / 最近说过）
+
+### Fixed
+- **点「录音」没有任何反馈**：主界面麦克风球/新增「开始录音」按钮现在点击立即进入录音会话（调用 `/voice/quick/start`，无需唤醒词），显示红色录音面板「正在录音…」+ 计时，「停止并发送」或再点一下结束；不会再出现“点了没反应/不显示”。
+- **看不到实时识别内容**：录音面板实时显示 `partial` 识别文字；说完后识别结果进入下方「最近说过 / 已记录」列表（保留最近 20 条，重启后从 `/voice/transcripts` 回填），可直接用于后续总结。
+- **识别字幕被回复覆盖**：回复只进结果卡/气泡；录音/识别区只显示“听到的话”。
+- 首页原「说「榫卯」唤醒，或点击麦克风」提示更新为「点一下开始，说完再点一下结束 · 无需唤醒词」。
+
+### Research（用户问 DSH 用什么识别）
+- DSH（DeepSeek Harness）语音输入 = **本地 SenseVoiceSmall ONNX（sherpa-onnx，int8）+ Silero VAD**，CPU 推理，模型缓存 `%USERPROFILE%\.dsh\speech-to-text\sensevoice\models`（model.int8.onnx 239MB + silero_vad.onnx）。
+- 本机实测同一组 11 条音频：DSH 同款 SenseVoiceSmall ONNX 平均字符准确率 **80.3%**（命令 5/6 全对，唤醒词全部识别为“孙卯/小损/孙某”），低于我们当前 **Paraformer-large + 热词** 的 **97.9%**；因此保留 Paraformer-large，但采用 DSH 的“整句 VAD + 推说完再显示”的思路改善交互（录音面板实时 partial + 整句 final）。
+- 若仍想要 DSH 同款引擎，可直接复用其模型缓存（已存在本机），后续可作为“兼容模式”切换。
+
 ## [0.6.2] - 2026-10-31 凌晨（修 bug + 快捷录音悬浮球）
 
 ### Added

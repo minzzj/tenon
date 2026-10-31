@@ -34,6 +34,25 @@
         <span id="sub-final" class="final">说「榫卯」唤醒，或点击麦克风</span>
       </div>
 
+      <!-- 录音面板：点「开始录音」立即进入录音（无需唤醒词），实时显示听到的文字 -->
+      <div id="rec-panel" class="rec-panel hidden" data-testid="rec-panel">
+        <div class="rec-row">
+          <span class="rec-dot" id="rec-dot"></span>
+          <span id="rec-status" class="rec-status" data-testid="rec-status">正在录音…</span>
+          <span id="rec-timer" class="muted"></span>
+          <button id="rec-stop" class="mini" data-testid="rec-stop">停止并发送</button>
+        </div>
+        <div id="rec-live" class="rec-live" data-testid="rec-live"></div>
+      </div>
+      <div class="rec-actions">
+        <button id="btn-record" class="primary rec-btn" data-testid="btn-record">开始录音</button>
+        <span class="muted rec-hint">点一下开始，说完再点一下结束 · 无需唤醒词</span>
+      </div>
+      <div class="talk" id="talk-wrap">
+        <div class="talk-head"><h3>最近说过 / 已记录</h3><span class="muted" id="talk-count" data-testid="talk-count"></span></div>
+        <ul id="talk-log" class="talk-log" data-testid="talk-log"></ul>
+      </div>
+
       <!-- 今日看板 -->
       <div class="board" data-testid="board-card">
         <div class="board-head"><h3>今日看板</h3><span class="muted" id="board-date" data-testid="board-date"></span>

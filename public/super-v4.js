@@ -243,9 +243,16 @@
       S.es.onmessage = function (ev) {
         var m = null; try { m = JSON.parse(ev.data || '{}'); } catch (e) { return; }
         if (!m || !m.type) return;
-        if (m.type === 'transcript' && m.text) { setCaption(m.text); scheduleRefreshAfterVoice(); }
-        else if (m.type === 'partial' && m.text) setCaption(undefined, m.text);
-        else if (m.type === 'wake') setCaption('「' + (m.word || '榫卯') + '」我在，请说');
+        if (m.type === 'transcript' && m.text) {
+          setCaption(m.text);
+          if (m.source === 'mic') setRecUI(false, '', '');
+          addTalk(m.text, { kind: m.source === 'mic' ? '语音' : '输入', at: m.at });
+          if (S.rec.active && m.source === 'mic') { S.rec.active = false; recPollStop(); setRecUI(false, '', ''); }
+          scheduleRefreshAfterVoice();
+        }
+        else if (m.type === 'partial' && m.text) { setCaption(undefined, m.text); if (S.rec.active) setRecUI(true, '正在录音…请说话', titleLive(m.text)); }
+        else if (m.type === 'wake') { setCaption('「' + (m.word || '榫卯') + '」我在，请说'); if (S.rec.active) setRecUI(true, '已唤醒，请说…', ''); }
+        else if (m.type === 'reply' && m.text) { addTalk(m.text, { kind: '执行', at: m.at }); if (S.rec.active) setRecUI(true, '已执行：' + String(m.text).slice(0, 40), ''); }
         else if (m.type === 'reply' && m.text) { renderResult(m); setCaption(m.text); scheduleRefreshAfterVoice(); }
         else if (m.type === 'status' || m.type === 'status_snapshot') refreshStatus();
         else if (m.type === 'error' && m.text) { renderResult({ say: m.text, error: true }); }
@@ -1128,12 +1135,123 @@
     } catch (e) { setCaption('语音开关失败：' + e.message); }
   }
 
+  /* ---------------- V6 录音面板 / 最近说过（修 bug：点击录音必须可见、可看实时文字） ---------------- */
+  S.rec = { active: false, busy: false, polling: null, startedAt: 0, live: '' };
+  S.talk = S.talk || [];
+
+  function fmtClock(ts) {
+    try { var d = ts ? new Date(ts) : new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+    catch (e) { return ''; }
+  }
+  function renderTalk() {
+    var box = $('talk-log'); if (!box) return;
+    var items = S.talk.slice(0, 20);
+    if (!items.length) { box.innerHTML = '<li class="empty">还没有记录：点「开始录音」说一句，或直接输入命令</li>'; }
+    else {
+      box.innerHTML = items.map(function (it) {
+        return '<li><span class="t">' + esc(fmtClock(it.at)) + '</span><span class="k">' + esc(it.kind || '语音') + '</span><span class="x">' + esc(it.text || '') + '</span></li>';
+      }).join('');
+    }
+    var c = $('talk-count'); if (c) c.textContent = items.length ? ('共 ' + items.length + ' 条') : '';
+  }
+  function addTalk(text, meta) {
+    var t = String(text || '').trim();
+    if (!t) return;
+    var it = { text: t, at: (meta && meta.at) || new Date().toISOString(), kind: (meta && meta.kind) || '语音' };
+    if (S.talk.length && S.talk[0].text === it.text && S.talk[0].kind === it.kind) return;
+    S.talk.unshift(it);
+    if (S.talk.length > 30) S.talk.length = 30;
+    renderTalk();
+  }
+  async function loadTalkHistory() {
+    try {
+      var r = await softApi('GET', '/api/v2/voice/transcripts?limit=12');
+      var items = (r.data && (r.data.items || r.data.transcripts)) || [];
+      items.slice().reverse().forEach(function (it) {
+        if (it && it.text) addTalk(it.text, { at: it.at, kind: it.source === 'mic' ? '语音' : '输入' });
+      });
+    } catch (e) { /* ignore */ }
+    renderTalk();
+  }
+  function setRecUI(on, statusText, liveText) {
+    var panel = $('rec-panel'); var btn = $('btn-record'); var st = $('rec-status'); var lv = $('rec-live'); var tm = $('rec-timer');
+    if (panel) panel.classList.toggle('hidden', !on);
+    if (st) st.textContent = statusText || (on ? '正在录音…请说话' : '');
+    if (lv && liveText !== undefined) { S.rec.live = liveText; lv.textContent = liveText || ''; }
+    if (btn) { btn.textContent = on ? '停止录音' : '开始录音'; btn.classList.toggle('danger', !!on); }
+    var orb = $('mic-orb'); if (orb) orb.classList.toggle('listening', !!on);
+    if (tm) {
+      if (on) {
+        var tick = function () {
+          if (!S.rec.active) { tm.textContent = ''; return; }
+          var sec = Math.max(0, Math.round((Date.now() - S.rec.startedAt) / 1000));
+          tm.textContent = sec + 's';
+          $('rec-timer')._t = setTimeout(tick, 500);
+        };
+        tick();
+      } else { tm.textContent = ''; }
+    }
+  }
+  function recPollStop() { if (S.rec.polling) { clearInterval(S.rec.polling); S.rec.polling = null; } }
+  function recPollStart() {
+    recPollStop();
+    S.rec.polling = setInterval(async function () {
+      if (!S.rec.active) { recPollStop(); return; }
+      try {
+        var r = await api('GET', '/api/v2/voice/status'); var d = r.data || {};
+        var lt = d.lastTranscript;
+        if (lt && lt.source === 'mic' && lt.text) {
+          setRecUI(true, '正在录音…请说话', titleLive(lt.text));
+        }
+        if (d.lastReply && d.lastReply.at && Date.parse(d.lastReply.at) >= S.rec.startedAt - 800) {
+          if (S.rec.active) {
+            setRecUI(true, '已执行：' + (d.lastReply.text || '').slice(0, 40));
+            addTalk(d.lastReply.text || '', { kind: '执行', at: d.lastReply.at });
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }, 900);
+  }
+  function titleLive(t) { return '听到：' + String(t || '').slice(-60); }
+  async function startRecording() {
+    if (S.rec.active || S.rec.busy) return;
+    S.rec.busy = true;
+    S.rec.startedAt = Date.now();
+    setRecUI(true, '正在启动录音…（等引擎就绪）', '');
+    try {
+      var r = await api('POST', '/api/v2/voice/quick/start', {});
+      if (r.ok && (r.data || {}).ok !== false) {
+        S.rec.active = true;
+        setRecUI(true, '正在录音…请说话（说完点停止）', '');
+        setCaption('', '');
+        recPollStart();
+      } else {
+        var err = (r.data && r.data.error) || ('HTTP ' + r.status);
+        setRecUI(true, '启动失败：' + err, '');
+        setTimeout(function () { if (!S.rec.active) setRecUI(false); }, 4000);
+      }
+    } catch (e) { setRecUI(true, '启动失败：' + e.message, ''); }
+    finally { S.rec.busy = false; }
+  }
+  async function stopRecording() {
+    if (!S.rec.active && !S.rec.busy) return;
+    S.rec.active = false;
+    recPollStop();
+    setRecUI(false, '', '');
+    try { await api('POST', '/api/v2/voice/quick/stop', {}); } catch (e) { /* ignore */ }
+    if (S.rec.live) addTalk(S.rec.live.replace(/^听到：/, ''), { kind: '语音' });
+    S.rec.live = '';
+  }
+  function toggleRecording() { if (S.rec.active) stopRecording(); else startRecording(); }
+
   /* ---------------- 事件绑定 / 初始化 ---------------- */
   function bindEvents() {
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.onclick = function () { switchTab(b.getAttribute('data-tab')); }; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-goto]'), function (b) { b.onclick = function () { switchTab(b.getAttribute('data-goto')); }; });
     if ($('btn-settings')) $('btn-settings').onclick = function () { switchTab('settings'); };
-    if ($('mic-orb')) $('mic-orb').onclick = toggleMic;
+    if ($('mic-orb')) $('mic-orb').onclick = toggleRecording;
+    if ($('btn-record')) $('btn-record').onclick = toggleRecording;
+    if ($('rec-stop')) $('rec-stop').onclick = stopRecording;
     if ($('cmd-send')) $('cmd-send').onclick = function () { var v = $('cmd-input') ? $('cmd-input').value : ''; if ($('cmd-input')) $('cmd-input').value = ''; sendCommand(v); };
     if ($('cmd-input')) $('cmd-input').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { var v = $('cmd-input').value; $('cmd-input').value = ''; sendCommand(v); }
@@ -1211,7 +1329,9 @@
     setInterval(function () { if (!document.hidden && S.tab === 'records') loadNotes(); }, 20000);
     setInterval(function () { if (!document.hidden && S.tab === 'documents') loadDocuments(); }, 20000);
     setInterval(function () { if (!document.hidden) refreshStatus(); }, 3000);
-    window.__tenonV5 = { state: S, mock: MOCK, switchTab: switchTab, refresh: function () { loadBoard(); if (S.tab === 'records') loadNotes(); if (S.tab === 'reminders') loadReminders(); if (S.tab === 'documents') loadDocuments(); }, api: api, toast: toast };
+    loadTalkHistory();
+  renderTalk();
+  window.__tenonV5 = { state: S, mock: MOCK, switchTab: switchTab, refresh: function () { loadBoard(); if (S.tab === 'records') loadNotes(); if (S.tab === 'reminders') loadReminders(); if (S.tab === 'documents') loadDocuments(); }, api: api, toast: toast };
   }
   async function resolveToken() {
     if (tok()) { S.token = tok(); return; }
