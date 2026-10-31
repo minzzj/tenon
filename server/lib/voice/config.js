@@ -15,6 +15,8 @@ export const DEFAULT_CONFIG = {
   asrProvider: 'auto', // auto | paraformer | funasr | windows | mock | off
   // V6：唤醒与记录分离（唤醒用短片段快速检测；记录用完整模型+标点；均本地）
   asrSplit: true,
+  // V6.4：24 小时录音（唤醒与全天记录是两个独立功能）
+  ambient: { enabled: true, saveTranscripts: true },
   asr: {
     wakeProvider: 'paraformer',
     recordProvider: 'paraformer',
@@ -134,6 +136,7 @@ export function publicConfig(cfg) {
     wakeTimeoutMs: cfg.wakeTimeoutMs,
     asrProvider: cfg.asrProvider,
     asrSplit: cfg.asrSplit !== false,
+    ambient: { enabled: cfg.ambient ? cfg.ambient.enabled !== false : true },
     asr: {
       wakeProvider: (cfg.asr && cfg.asr.wakeProvider) || 'paraformer',
       recordProvider: (cfg.asr && cfg.asr.recordProvider) || 'paraformer',
@@ -151,6 +154,6 @@ export function publicConfig(cfg) {
 }
 
 /** PATCH 只允许这些路径，避免误改执行器 token 之类 */
-export const PATCHABLE_KEYS = ['enabled', 'wakeWords', 'language', 'silenceTimeoutMs', 'asrProvider', 'llmProvider', 'tts', 'micDevice', 'retentionDays', 'diary', 'prompts'];
+export const PATCHABLE_KEYS = ['enabled', 'wakeWords', 'language', 'silenceTimeoutMs', 'asrProvider', 'llmProvider', 'tts', 'micDevice', 'retentionDays', 'diary', 'prompts', 'ambient'];
 
 export default { VOICE_VERSION, DEFAULT_CONFIG, loadConfig, saveConfig, normalizeConfig, publicConfig, deepMerge, configFileOf };

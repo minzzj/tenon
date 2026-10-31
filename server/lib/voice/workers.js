@@ -161,6 +161,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
       args.push('--record-silence-ms', String(asrCfg.recordSilenceMs || 1000));
       args.push('--record-max-ms', String(asrCfg.recordMaxMs || 15000));
       args.push('--session-timeout-ms', String(asrCfg.sessionTimeoutMs || config.silenceTimeoutMs || 6000));
+      if (config.ambient && config.ambient.enabled !== false) args.push('--ambient');
     }
     try {
       setAsr({ state: 'starting', provider: split ? 'paraformer' : (config.asrProvider === 'auto' ? 'funasr' : config.asrProvider), split, lastError: null });
@@ -181,6 +182,8 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
           emitAsr({ type: 'wake', text: String(obj.text || ''), word: String(obj.word || ''), via: String(obj.via || ''), rest: String(obj.rest || ''), pinyin: String(obj.pinyin || ''), provider: obj.provider || state.asr.provider, ms: obj.ms || null, at: nowIso() });
         } else if (obj && (obj.type === 'session_start' || obj.type === 'session_end')) {
           emitAsr({ type: obj.type, reason: obj.reason || null, at: nowIso() });
+        } else if (obj && obj.type === 'ambient') {
+          emitAsr({ type: 'ambient', text: String(obj.text || ''), pinyin: String(obj.pinyin || ''), provider: obj.provider || state.asr.provider, ms: obj.ms || null, at: nowIso() });
         } else if (obj && (obj.type === 'partial' || obj.type === 'final')) {
           emitAsr({ type: obj.type, text: String(obj.text || ''), pinyin: String(obj.pinyin || ''), source: 'mic', provider: obj.provider || state.asr.provider, ms: obj.ms || null, at: nowIso() });
         } else if (obj && obj.type === 'speech_start') {

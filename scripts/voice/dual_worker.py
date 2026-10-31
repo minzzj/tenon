@@ -268,6 +268,9 @@ class DualEngine:
                     if w["wake"]:
                         emit({"type": "wake", "text": r["text"], "word": w["word"], "via": w["via"], "rest": w["rest"], "pinyin": r["pinyin"], "provider": r["provider"], "ms": r["ms"]})
                         return "session"
+                    if getattr(self.args, "ambient", False) and r.get("text") and len(r["text"]) >= 2:
+                        # 24 小时录音：未被唤醒的说话也持续转写留痕（不执行任何命令）
+                        emit({"type": "ambient", "text": r["text"], "pinyin": r.get("pinyin", ""), "provider": r["provider"], "ms": r["ms"], "ts": int(time.time() * 1000)})
                     return "wake"
                 else:
                     emit({"type": "speech_start"})
@@ -365,6 +368,7 @@ def list_devices():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mic", action="store_true")
+    ap.add_argument("--ambient", action="store_true", help="24 小时录音：持续转写留痕")
     ap.add_argument("--simulate", nargs="*", default=None)
     ap.add_argument("--simulate-quick", nargs="*", default=None)
     ap.add_argument("--devices", action="store_true")

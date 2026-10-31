@@ -173,7 +173,7 @@
     S.tab = name;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
     Array.prototype.forEach.call(document.querySelectorAll('.page'), function (p) { p.classList.toggle('active', p.id === TAB_PAGES[name]); });
-    if (name === 'records') loadNotes();
+    if (name === 'records') { loadNotes(); loadAmbientRecords(); }
     else if (name === 'reminders') loadReminders();
     else if (name === 'documents') loadDocuments();
     else if (name === 'settings') fillSettings();
@@ -220,6 +220,10 @@
         renderResult({ say: st.lastReply.text, provider: st.lastReply.provider, latencyMs: st.lastReply.latencyMs, needConfirm: st.lastReply.needConfirm, confirmId: st.lastReply.confirmId, actions: st.lastCommand && st.lastCommand.actions });
         /* 修复：回复不再覆盖识别框（识别框只显示“听到的话”） */
       }
+      var amb = st.ambient || {};
+      var ca = $('chip-ambient');
+      if (ca) { ca.textContent = amb.enabled === false ? '24h记录 关' : '24h记录 开'; ca.classList.toggle('off', amb.enabled === false); }
+      if ($('ambient-state')) $('ambient-state').textContent = amb.enabled === false ? '已关闭' : '正在后台记录（只留痕，不执行命令）';
       var sc = $('chip-screen');
       if (sc) sc.textContent = (window.tenonDesktop && window.tenonDesktop.screenCapture === false) ? '屏幕采集暂停' : '屏幕采集';
       var ag = $('chip-agent'); if (ag) ag.textContent = S.agent === 'openclaw' ? 'OpenClaw 小龙虾' : '自研执行器';
@@ -246,7 +250,8 @@
         if (m.type === 'transcript' && m.text) {
           setCaption(m.text);
           if (m.source === 'mic') setRecUI(false, '', '');
-          addTalk(m.text, { kind: m.source === 'mic' ? '语音' : '输入', at: m.at });
+          addTalk(m.text, { kind: m.source === 'ambient' ? '全天' : (m.source === 'mic' ? '语音' : '输入'), at: m.at });
+          if (m.source === 'ambient') loadAmbientRecords();
           if (S.rec.active && m.source === 'mic') { S.rec.active = false; recPollStop(); setRecUI(false, '', ''); }
           scheduleRefreshAfterVoice();
         }
@@ -732,6 +737,8 @@
       var cfg = (c.data && c.data.config) || {};
       if ($('set-token')) $('set-token').value = S.token || '';
       if ($('set-enabled')) $('set-enabled').checked = !!cfg.enabled;
+      var ambCfg = cfg.ambient || {};
+      if ($('set-ambient')) $('set-ambient').checked = ambCfg.enabled !== false;
       if ($('set-wakewords')) $('set-wakewords').value = (cfg.wakeWords || []).join(',');
       if ($('set-tts')) $('set-tts').checked = !!(cfg.tts && cfg.tts.play);
       if ($('set-diary-time')) $('set-diary-time').value = (cfg.diary && cfg.diary.time) || '23:00';
@@ -1113,6 +1120,7 @@
     var chipA = $('chip-agent'); if (chipA) chipA.textContent = S.agent === 'openclaw' ? 'OpenClaw 小龙虾' : '自研执行器';
     var body = {
       enabled: $('set-enabled') ? $('set-enabled').checked : false,
+      ambient: { enabled: $('set-ambient') ? $('set-ambient').checked : true },
       wakeWords: ($('set-wakewords') ? $('set-wakewords').value : '').split(',').map(function (s) { return s.trim(); }).filter(Boolean),
       tts: { play: $('set-tts') ? $('set-tts').checked : true },
       diary: { time: ($('set-diary-time') && $('set-diary-time').value) || '23:00' },
@@ -1244,11 +1252,35 @@
   }
   function toggleRecording() { if (S.rec.active) stopRecording(); else startRecording(); }
 
+  /* ---------------- 24 小时录音（与唤醒命令分开展示） ---------------- */
+  async function toggleAmbient() {
+    var cur = !(S.status && S.status.ambient && S.status.ambient.enabled === false);
+    var r = await api('PATCH', '/api/v2/voice/config', { ambient: { enabled: !cur } });
+    if (r.ok) {
+      toast(cur ? '已关闭 24 小时录音（唤醒功能不受影响）' : '已开启 24 小时录音（后台持续留痕）', 'ok');
+      setTimeout(refreshStatus, 800);
+    } else toast('切换失败：' + ((r.data && r.data.error) || ('HTTP ' + r.status)), 'bad');
+  }
+  async function loadAmbientRecords() {
+    var box = $('ambient-list'); if (!box) return;
+    try {
+      var r = await softApi('GET', '/api/v2/voice/transcripts?limit=100');
+      var items = (r.data && (r.data.items || r.data.transcripts)) || [];
+      var amb = items.filter(function (it) { return it && (it.source === 'ambient'); });
+      var c = $('ambient-count'); if (c) c.textContent = String(amb.length);
+      if (!amb.length) { box.innerHTML = '<li class="empty">暂无全天记录：保持 App 打开并开启「24 小时录音」，平时说话会自动留痕</li>'; return; }
+      box.innerHTML = amb.slice(0, 60).map(function (it) {
+        return '<li><span class="t">' + esc(fmtClock(it.at)) + '</span><span class="k">24h</span><span class="x">' + esc(it.text || '') + '</span></li>';
+      }).join('');
+    } catch (e) { box.innerHTML = '<li class="empty">加载失败：' + esc(e.message) + '</li>'; }
+  }
+
   /* ---------------- 事件绑定 / 初始化 ---------------- */
   function bindEvents() {
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.onclick = function () { switchTab(b.getAttribute('data-tab')); }; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-goto]'), function (b) { b.onclick = function () { switchTab(b.getAttribute('data-goto')); }; });
     if ($('btn-settings')) $('btn-settings').onclick = function () { switchTab('settings'); };
+    if ($('chip-ambient')) $('chip-ambient').onclick = toggleAmbient;
     if ($('mic-orb')) $('mic-orb').onclick = toggleRecording;
     if ($('btn-record')) $('btn-record').onclick = toggleRecording;
     if ($('rec-stop')) $('rec-stop').onclick = stopRecording;
@@ -1331,6 +1363,7 @@
     setInterval(function () { if (!document.hidden) refreshStatus(); }, 3000);
     loadTalkHistory();
   renderTalk();
+  loadAmbientRecords();
   window.__tenonV5 = { state: S, mock: MOCK, switchTab: switchTab, refresh: function () { loadBoard(); if (S.tab === 'records') loadNotes(); if (S.tab === 'reminders') loadReminders(); if (S.tab === 'documents') loadDocuments(); }, api: api, toast: toast };
   }
   async function resolveToken() {

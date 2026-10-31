@@ -231,3 +231,11 @@ button{font-family:inherit}.composer button,.primary{background:#1f6feb;color:#f
 .talk-log li .k { flex: 0 0 auto; font-size: 11px; padding: 0 6px; border-radius: 8px; background: rgba(90,170,255,.16); color: #8fc2ff; }
 .talk-log li .x { flex: 1 1 auto; word-break: break-all; }
 .talk-log .empty { color: #7f93a8; justify-content: center; }
+
+
+/* ===== V6.4 24 小时录音记录（与唤醒功能分开） ===== */
+#chip-ambient { cursor: pointer; }
+#chip-ambient.off { opacity: .55; }
+.ambient-box { margin-top: 14px; }
+.ambient-box .col-head { display: flex; align-items: baseline; justify-content: space-between; }
+.ambient-box .talk-log { max-height: 220px; }

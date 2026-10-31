@@ -2,6 +2,21 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.4] - 2026-10-31 上午（唤醒功能 与 24 小时录音 分开）
+
+### Added
+- **24 小时录音（全天留痕）**：独立于唤醒功能的后台持续转写。开启后，平时说话（未被唤醒词触发的）也会被本地 Paraformer 识别并保存到语音记录（`source=ambient`），只记录、不执行任何命令；用于之后回看/总结。
+- **两个功能独立开关**：
+  - 顶部 chip「24h记录 开/关」一点即可切换（不需要进设置）；
+  - 设置页新增「24 小时录音记录（全天留痕，不执行）」勾选；
+  - 「常驻语音监听（唤醒功能）」仍单独控制麦克风/唤醒。
+- 记录页新增「**全天语音记录（24h）**」区块（时间 + 内容，最近 60 条），与「笔记列表」分开展示；首页「最近说过」中 24h 内容以 `全天` 标签显示。
+- 启动默认开启 24h 录音；关闭后唤醒功能不受影响，反之亦然（同一麦克风，监听关闭则两者都不录音）。
+
+### Changed
+- dual_worker 增加 `--ambient`：未唤醒语句复用已完成的识别结果发出 ambient 事件（几乎不增加 CPU）；中枢新增 `handleAmbient` 落库/广播/计数，不进入命令执行。
+- header/设置/记录页 UI 同步；配置 `ambient.enabled` 切换后自动重启 ASR worker 使参数生效。
+
 ## [0.6.3] - 2026-10-31 上午（修 UI：点录音可见 / 实时文字 / 最近说过）
 
 ### Fixed

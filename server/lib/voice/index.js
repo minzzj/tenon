@@ -125,7 +125,7 @@ export function createVoiceService(opts = {}) {
     lastWake: null,
     lastTts: null,
     busy: false,
-    counters: { transcripts: 0, wakes: 0, commands: 0, replies: 0, ttsFiles: 0, redacted: 0, failures: 0 },
+    counters: { transcripts: 0, wakes: 0, ambient: 0, commands: 0, replies: 0, ttsFiles: 0, redacted: 0, failures: 0 },
     session: null,
     updatedAt: nowIso(),
   };
@@ -212,6 +212,7 @@ export function createVoiceService(opts = {}) {
   function handleAsrEvent(ev) {
     if (!ev || !ev.type) return;
     if (ev.type === 'wake') { handleWakeEvent(ev).catch((err) => setError('唤醒处理失败：' + String(err && err.message))); return; }
+    if (ev.type === 'ambient') { handleAmbient(ev.text, ev); return; }
     if (ev.type === 'session_start') { if (!status.session) startSession('dual'); hub.broadcast({ type: 'session_start', ts: Date.now() }); return; }
     if (ev.type === 'session_end') { endSession(ev.reason || 'asr-session-end'); return; }
     if (ev.type === 'partial') {
@@ -262,6 +263,17 @@ export function createVoiceService(opts = {}) {
     const payload = { type: 'transcript', text: sensitive ? priv.preview : safeText, source, wake: !!wake, sensitive, sensitiveType: priv.sensitiveType || null, sessionId, provider, at };
     hub.broadcast(payload);
     return { sensitive, safeText, preview: priv.preview, priv };
+  }
+
+  // 24 小时录音：未被唤醒的说话持续转写留痕（只记录，不执行）
+  function handleAmbient(text, ev = {}) {
+    if (!config.ambient || config.ambient.enabled === false) return { ok: true, skipped: true };
+    const raw = String(text || '').trim();
+    if (!raw) return { ok: false, error: '空转写' };
+    const rec = recordTranscript(raw, { source: 'ambient', wake: false, pinyin: ev.pinyin || '', sessionId: null, provider: ev.provider || null });
+    status.counters.ambient = (status.counters.ambient || 0) + 1;
+    status.lastAmbient = { at: nowIso(), text: rec.sensitive ? rec.preview : raw, provider: ev.provider || null };
+    return { ok: true, ambient: true, redacted: !!rec.sensitive };
   }
 
   async function handleFinal(text, { pinyin = '', source = 'mic', provider = null, ms = null } = {}) {
@@ -516,8 +528,13 @@ export function createVoiceService(opts = {}) {
       if (key === 'tts' && patch.tts && typeof patch.tts === 'object') next.tts = { ...next.tts, ...patch.tts };
       else next[key] = patch[key];
     }
+    const ambientChanged = patch.ambient !== undefined;
     config = saveConfig(dataDir, next);
     workers.updateConfig ? workers.updateConfig(config) : null;
+    if (ambientChanged && status.enabled) {
+      try { workers.stopAsr(); } catch (err) { /* ignore */ }
+      setTimeout(() => { try { workers.startAsr(); } catch (err) { /* ignore */ } }, 400);
+    }
     if (patch.enabled === true && !status.enabled) start({ by: 'config' });
     if (patch.enabled === false && status.enabled) stop({ by: 'config' });
     hub.broadcast({ type: 'config', config: publicConfig(config), ts: Date.now() });
@@ -557,6 +574,7 @@ export function createVoiceService(opts = {}) {
       version: VOICE_VERSION,
       state: status.state,
       enabled: status.enabled,
+      ambient: { enabled: !(config.ambient && config.ambient.enabled === false), last: status.lastAmbient || null },
       aiAvailable: !!(ai && ai.available),
       sessionId: status.sessionId,
       session: status.session,
