@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
+import readline from 'node:readline';
 import { replay } from '../state.js';
 import { nowIso } from '../link/util.js';
 import { loadConfig, saveConfig, publicConfig, PATCHABLE_KEYS, VOICE_VERSION } from './config.js';
@@ -132,6 +133,7 @@ export function createVoiceService(opts = {}) {
   };
   let sessionTimer = null;
   let busy = false;
+  let voiceStopping = false;
   let autoStartTimer = null;
 
   function currentState() {
@@ -514,7 +516,8 @@ export function createVoiceService(opts = {}) {
     let asrOk = false;
     try { asrOk = workers.startAsr(); } catch (err) { status.lastError = 'ASR 启动失败：' + String((err && err.message) || err); }
     try { workers.startLlm(); } catch (err) { console.warn('[voice] LLM 启动失败（降级规则）：' + String((err && err.message) || err)); }
-    try { if (typeof workers.startTranscribeWorker === 'function') workers.startTranscribeWorker(); } catch (err) { console.warn('[voice] 常驻转写进程启动失败：' + String((err && err.message) || err)); }
+    voiceStopping = false;
+    try { startOcrWorker(); } catch (err) { console.warn('[voice] 常驻 OCR 启动失败：' + String((err && err.message) || err)); }
     if (!asrOk) {
       status.lastError = workers.state.asr.lastError || 'ASR 未就绪（可用文本命令）';
       if (!config.mock.enabled) setState('error');
@@ -708,6 +711,14 @@ export function createVoiceService(opts = {}) {
     });
   }
 
+  function spawnPython(args = []) {
+    return spawn(config.workers.python || 'python', args, {
+      cwd: root,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
+    });
+  }
+
   function runPythonJson(args = [], timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
       const bin = String(process.env.TENON_PYTHON || 'python');
@@ -719,6 +730,67 @@ export function createVoiceService(opts = {}) {
         }
         reject(new Error('python 输出不是 JSON：' + String(stdout || stderr || '').slice(-240)));
       });
+    });
+  }
+
+  // 常驻 OCR 进程（每 5 秒截图如果都 spawn python+winrt 会很耗 CPU/内存）
+  const ocrWorker = { child: null, rl: null, seq: 0, ready: false, waiters: new Map(), stopRequested: false };
+  const lastScreenImages = new Map();
+  function startOcrWorker() {
+    if (ocrWorker.child) return true;
+    const script = path.join(root, 'scripts', 'screen', 'ocr_worker.py');
+    if (!fs.existsSync(script)) return false;
+    try {
+      ocrWorker.stopRequested = false;
+      const child = spawnPython([script]);
+      ocrWorker.child = child;
+      ocrWorker.rl = readline.createInterface({ input: child.stdout });
+      ocrWorker.rl.on('line', (line) => {
+        const text = String(line || '').trim();
+        if (!text) return;
+        let obj = null;
+        try { obj = JSON.parse(text); } catch { return; }
+        if (obj.type === 'ready') { ocrWorker.ready = true; console.warn('[voice] 常驻 OCR 进程就绪'); return; }
+        if (obj.type === 'error') { console.warn('[voice] 常驻 OCR 错误：' + String(obj.error || '')); return; }
+        const w = ocrWorker.waiters.get(obj.id);
+        if (!w) return;
+        ocrWorker.waiters.delete(obj.id);
+        clearTimeout(w.timer);
+        if (obj.ok === false) w.reject(new Error(String(obj.error || 'OCR 失败')));
+        else w.resolve({ text: String(obj.text || ''), lines: Array.isArray(obj.lines) ? obj.lines : [], engine: obj.engine || 'windows-ocr', ocrMs: obj.ocrMs || null });
+      });
+      child.stderr.on('data', (buf) => { const t = String(buf || '').trim(); if (t) console.warn('[voice-ocr] ' + t.slice(0, 300)); });
+      child.stdout.on('error', () => {});
+      child.stderr.on('error', () => {});
+      child.on('error', () => {});
+      if (child.stdin) child.stdin.on('error', () => {});
+      child.on('exit', (code) => {
+        ocrWorker.child = null; ocrWorker.ready = false;
+        for (const [, w] of ocrWorker.waiters) { clearTimeout(w.timer); w.reject(new Error('OCR 进程已退出（code=' + code + '）')); }
+        ocrWorker.waiters.clear();
+        if (!ocrWorker.stopRequested && !voiceStopping) setTimeout(() => { try { startOcrWorker(); } catch { /* ignore */ } }, 1500);
+      });
+      console.warn('[voice] 常驻 OCR 进程启动 pid=' + child.pid);
+      return true;
+    } catch (err) {
+      console.warn('[voice] 常驻 OCR 启动失败：' + String((err && err.message) || err));
+      return false;
+    }
+  }
+  function stopOcrWorker() {
+    ocrWorker.stopRequested = true;
+    try { if (ocrWorker.rl) ocrWorker.rl.close(); } catch { /* ignore */ }
+    try { if (ocrWorker.child) ocrWorker.child.kill(); } catch { /* ignore */ }
+    ocrWorker.child = null; ocrWorker.ready = false;
+  }
+  function ocrViaWorker(file, { timeoutMs = 25000 } = {}) {
+    if (!ocrWorker.child) return Promise.reject(new Error('常驻 OCR 未启动'));
+    const id = ++ocrWorker.seq;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { ocrWorker.waiters.delete(id); reject(new Error('OCR 超时')); }, timeoutMs);
+      ocrWorker.waiters.set(id, { resolve, reject, timer });
+      try { ocrWorker.child.stdin.write(JSON.stringify({ id, file }) + '\n'); }
+      catch (err) { clearTimeout(timer); ocrWorker.waiters.delete(id); reject(err); }
     });
   }
 
@@ -765,10 +837,26 @@ export function createVoiceService(opts = {}) {
     const ext = isPng ? 'png' : 'jpg';
     const file = path.join(screenTmpDir(), 'phone-' + Date.now().toString(36) + '-' + crypto.randomBytes(2).toString('hex') + '.' + ext);
     fs.writeFileSync(file, buf);
+    // 优先常驻 OCR（避免每 5 秒 spawn python+winrt）
+    if (ocrWorker.child) {
+      try {
+        const r = await ocrViaWorker(file);
+        return { text: String(r.text || '').trim(), lines: r.lines || [], engine: r.engine || 'windows-ocr', ocrMs: r.ocrMs, file, bytes: buf.length, ext };
+      } catch (err) {
+        console.warn('[voice] 常驻 OCR 失败，回退单次脚本：' + String((err && err.message) || err));
+      }
+    }
+    const cleanupOnError = () => { try { fs.unlinkSync(file); } catch { /* ignore */ } };
     const script = ocrScriptPath();
-    if (!fs.existsSync(script)) throw new Error('未找到字库 OCR 脚本：' + script);
-    const out = await runPythonJson([script, '--image', file], 45000);
-    if (!out || out.ok === false) throw new Error('OCR 失败：' + String((out && out.error) || '未知错误'));
+    if (!fs.existsSync(script)) { cleanupOnError(); throw new Error('未找到字库 OCR 脚本：' + script); }
+    let out = null;
+    try {
+      out = await runPythonJson([script, '--image', file], 45000);
+    } catch (err) {
+      cleanupOnError();
+      throw err;
+    }
+    if (!out || out.ok === false) { cleanupOnError(); throw new Error('OCR 失败：' + String((out && out.error) || '未知错误')); }
     const text = String(out.text || (Array.isArray(out.lines) ? out.lines.join('\n') : '')).trim();
     return { text, lines: Array.isArray(out.lines) ? out.lines : [], engine: out.engine || 'windows-ocr', ocrMs: out.elapsedMs || out.ocrMs || null, file, bytes: buf.length, ext };
   }
@@ -1120,6 +1208,19 @@ export function createVoiceService(opts = {}) {
         let screenTmpFileForCleanup = null; // finally 可访问（try 内 let 在 finally 中不可见）
         try {
         const source = body.source === 'phone' ? 'phone' : 'pc';
+        // 同一设备 60 秒内上传完全相同图片 → 跳过 OCR（静止画面不重复识别，省 CPU/内存）
+        if (body.imageBase64) {
+          try {
+            const rawB64 = String(body.imageBase64).replace(/^data:image\/[a-z0-9.+;-]+;base64,/i, '');
+            const imgHash = crypto.createHash('sha256').update(rawB64).digest('hex');
+            const prev = lastScreenImages.get(source);
+            if (prev && prev.hash === imgHash && Date.now() - prev.at < 60000) {
+              sendJson(res, 200, { ok: true, skipped: true, reason: 'same-screen', message: '画面未变化，已跳过重复识别' });
+              return;
+            }
+            lastScreenImages.set(source, { hash: imgHash, at: Date.now() });
+          } catch { /* ignore */ }
+        }
         let raw = String(body.text || '').trim();
         let ocr = null;
         let imageInfo = null;

@@ -96,7 +96,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     stopping: false,
   };
 
-  const asr = { child: null, rl: null, stopRequested: false, restartTimer: null };
+  const asr = { child: null, rl: null, stopRequested: false, restartTimer: null, transcribeSeq: 0, transcribeWaiters: new Map() };
   const llm = { child: null, rl: null, stopRequested: false, restartTimer: null, waiters: [] };
   const transcribe = { child: null, rl: null, waiters: new Map(), seq: 0, ready: false, startedAt: null, lastMs: null };
 
@@ -176,6 +176,16 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
         let obj = null;
         try { obj = JSON.parse(text); } catch { return; }
         setAsr({ lastLineAt: nowIso() });
+        if (obj && obj.type === 'transcribe_result') {
+          const w = asr.transcribeWaiters.get(obj.id);
+          if (w) {
+            asr.transcribeWaiters.delete(obj.id);
+            clearTimeout(w.timer);
+            if (obj.ok === false) w.reject(new Error(String(obj.error || 'ASR 文件转写失败')));
+            else w.resolve({ ok: true, text: String(obj.text || ''), pinyin: String(obj.pinyin || ''), provider: obj.provider || 'paraformer', ms: obj.ms || null });
+          }
+          return;
+        }
         if (obj && obj.type === 'ready') {
           setAsr({ state: 'running', provider: obj.wakeProvider || obj.provider || 'paraformer', recordProvider: obj.recordProvider || null, mic: obj.mic || config.micDevice || null, split: !!obj.recordProvider, lastError: null });
           emitAsr({ type: 'ready', provider: obj.provider || 'funasr', mic: obj.mic || null, at: nowIso() });
@@ -330,10 +340,63 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     return false;
   }
 
+  async function waitAsrReady(ms = 90000) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      if (state.asr.state === 'running' && asr.child && asr.child.stdin && !asr.child.stdin.destroyed) return true;
+      if (!asr.child && !asr.stopRequested && state.asr.state !== 'starting') {
+        try { startAsr(); } catch { /* ignore */ }
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return state.asr.state === 'running' && !!asr.child;
+  }
+
+  // 手机上传的 WAV 直接交给已在跑的 ASR 进程（复用同一个 Paraformer 模型，省内存/启动时间）
+  function transcribeViaAsr(file, { timeoutMs = 120000 } = {}) {
+    return new Promise((resolve, reject) => {
+      if (!asr.child || !asr.child.stdin || asr.child.stdin.destroyed || state.asr.state !== 'running') {
+        reject(new Error('ASR 进程未运行'));
+        return;
+      }
+      const id = ++asr.transcribeSeq;
+      const timer = setTimeout(() => {
+        asr.transcribeWaiters.delete(id);
+        reject(new Error('ASR 文件转写超时（' + timeoutMs + 'ms）'));
+      }, timeoutMs);
+      asr.transcribeWaiters.set(id, { resolve, reject, timer });
+      try {
+        asr.child.stdin.write(JSON.stringify({ cmd: 'transcribe_file', id, file }) + '\n');
+      } catch (err) {
+        clearTimeout(timer);
+        asr.transcribeWaiters.delete(id);
+        reject(err);
+      }
+    });
+  }
+
   async function transcribeFile(file, { timeoutMs = 120000 } = {}) {
     const wav = abs(root, file);
     if (!fileExists(wav)) throw new Error('WAV 文件不存在：' + wav);
-    // 优先用常驻进程（模型已加载，通常 <1s），避免每次重启 FunASR 30-45s 导致手机超时
+    // split 模式：只复用主 ASR 进程的同一个模型（不加载第二个大模型，省 1.5–4GB 内存）
+    const splitMode = !!(asr.child || state.asr.split || state.asr.split === true);
+    if (!config.mock.enabled && config.asrProvider !== 'mock' && splitMode) {
+      const ready = await waitAsrReady(Math.min(90000, timeoutMs));
+      if (!ready) throw new Error('ASR 进程尚未就绪，请稍后再试（首次启动约需 30–60 秒）');
+      let lastErr = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const startedAt = Date.now();
+          const r = await transcribeViaAsr(wav, { timeoutMs });
+          return { ok: true, text: r.text, pinyin: r.pinyin || '', confidence: null, provider: r.provider || 'paraformer', ms: r.ms || (Date.now() - startedAt), totalMs: Date.now() - startedAt, file: wav, cached: true };
+        } catch (err) {
+          lastErr = err;
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+      throw lastErr || new Error('ASR 文件转写失败');
+    }
+    // 非 split（旧 ASR 或 mock 关闭）才回退独立常驻转写进程
     if (!config.mock.enabled && config.asrProvider !== 'mock') {
       try {
         if (!transcribe.child) startTranscribeWorker();
@@ -343,7 +406,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
         const r = await transcribeWithWorker(wav, { timeoutMs });
         return { ok: true, text: r.text, pinyin: r.pinyin || '', confidence: null, provider: r.provider || 'paraformer', ms: r.ms || (Date.now() - startedAt), totalMs: Date.now() - startedAt, file: wav, cached: true };
       } catch (err) {
-        log('[voice] 常驻转写失败，回退单次脚本：' + String((err && err.message) || err));
+        console.warn('[voice] 常驻转写失败，回退单次脚本：' + String((err && err.message) || err));
       }
     }
     if (config.mock.enabled || config.asrProvider === 'mock') {
@@ -394,6 +457,16 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
         if (!text) return;
         let obj = null;
         try { obj = JSON.parse(text); } catch { return; }
+        if (obj && obj.type === 'transcribe_result') {
+          const w = asr.transcribeWaiters.get(obj.id);
+          if (w) {
+            asr.transcribeWaiters.delete(obj.id);
+            clearTimeout(w.timer);
+            if (obj.ok === false) w.reject(new Error(String(obj.error || 'ASR 文件转写失败')));
+            else w.resolve({ ok: true, text: String(obj.text || ''), pinyin: String(obj.pinyin || ''), provider: obj.provider || 'paraformer', ms: obj.ms || null });
+          }
+          return;
+        }
         if (obj && obj.type === 'ready') {
           setLlm({ state: 'running', provider: 'local', model: obj.model || obj.provider || 'local-qwen', lastError: null });
           return;

@@ -1,6 +1,6 @@
 {
   "name": "tenon-super-terminal",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "榫卯超级终端 · 单程序桌面 App（语音/屏幕/每日总结/设备控制）",
   "main": "main.js",
   "author": "minzzj",

@@ -86,6 +86,13 @@ class App : Application() {
         fun screenInterval(): Int = sp().getInt("screenInterval", 5).coerceIn(5, 600)
         fun setScreenInterval(v: Int) = sp().edit().putInt("screenInterval", v.coerceIn(5, 600)).apply()
 
+        /**
+         * 0.6.12：仅在屏幕画面变化时才解码/压缩/上传（默认 true）。
+         * 关闭后回到 0.6.11 行为：每 5 秒无条件上传一帧。
+         */
+        fun screenChangeOnly(): Boolean = sp().getBoolean("screenChangeOnly", true)
+        fun setScreenChangeOnly(v: Boolean) = sp().edit().putBoolean("screenChangeOnly", v).apply()
+
         fun screenBlacklist(): String = sp().getString("screenBlacklist", "") ?: ""
         fun setScreenBlacklist(v: String) = sp().edit().putString("screenBlacklist", v).apply()
 

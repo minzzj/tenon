@@ -12,6 +12,7 @@ import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -33,11 +34,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * V4 屏幕内容采集前台服务：
- * 用户授权 MediaProjection 后，每 App.screenInterval() 秒截屏一次（0.6.11 默认 5 秒）→
- * 保留高分辨率（最大宽度 1440px，手机 1080 宽原样不放大）→ JPEG(85) → 提升 OCR 精准度 →
+ * 用户授权 MediaProjection 后，每 App.screenInterval() 秒截屏一次（0.6.11 起默认 5 秒）→
+ * 保留高分辨率（最大宽度 1440px，手机 1080 宽原样不放大）→ JPEG(80) → 提升 OCR 精准度 →
  * POST /api/v2/voice/screen {source:'phone', app, title, imageBase64}。
  *
- * 0.6.11：截图间隔默认 5 秒；压缩上限从 960px/JPEG55 提升到 1440px/JPEG85，
+ * 0.6.12（性能优化，节拍不变）：
+ *  1. 每 5 秒照常 acquireLatestImage 取帧，但对 image.planes[0].buffer 先做**廉价采样哈希**
+ *     （按 HASH_STRIDE≈4096 字节步长绝对读 4 字节 → FNV-1a 64 位混合，不复制整幅图、不解码）。
+ *  2. 与上一次**成功上传**的哈希相同且 App.screenChangeOnly()（默认 true）→ 不解码、不压缩、
+ *     不上传，日志「画面未变化，跳过上传」；5 秒取帧节拍保持不变。
+ *  3. 不同 / 首次 / 关闭变化检测 → 走原链路：解码 → 缩到 ≤1440px → JPEG80 → 上传，成功后更新 lastHash。
+ *  4. 网络慢时「上一张还在上传」的判断提前到解码之前，避免白解码一帧。
+ *  5. 解码/压缩/上传仍在 HandlerThread + 上传 Thread；任何异常都保证 image.close()。
+ *
+ * 0.6.11：截图间隔默认 5 秒；压缩上限从 960px/JPEG55 提升到 1440px/JPEG80，
  * 截屏/缩放/压缩/上传仍全部在后台线程（HandlerThread + 上传 Thread），不会退回主线程。
  *
  * 0.6.10 修复要点（0.6.9 在 Android 14 上必崩，报 ForegroundServiceDidNotStartInTimeException）：
@@ -61,8 +71,32 @@ class ScreenCaptureService : Service() {
         /** 0.6.11：高清采集上限——最大宽度 1440px（1080 宽手机原样不放大，2K 屏缩到 1440）。 */
         private const val MAX_WIDTH = 1440
 
-        /** 0.6.11：JPEG 质量 85（原 55 太糊，OCR 错字多）。 */
-        private const val JPEG_QUALITY = 85
+        /** 0.6.12：JPEG 质量 80（画面变化才上传，80 已足够 OCR，且比 85 少约 25% 字节）。 */
+        private const val JPEG_QUALITY = 80
+
+        /** 0.6.12：采样哈希步长（字节）。1080x1729 RGBA（rowStride 4352）约 7.5MB → 约 1800 次读 4 字节。 */
+        private const val HASH_STRIDE = 4096
+
+        /**
+         * 0.6.12：哈希跳过顶部状态栏 160 行（≈38dp，420dpi）。
+         * 状态栏里的时钟（每分钟）、电量、屏幕共享隐私指示器会在「画面其实没变」时改变像素，
+         * 不排除就会被时钟每分钟顶一次上传。状态栏不属于需要 OCR 的内容。
+         */
+        private const val STATUS_BAR_SKIP_ROWS = 160
+
+        /** FNV-1a 64 位常量。offset basis 0xcbf29ce484222325 用负数表示（Kotlin Long 放不下正数）。 */
+        private const val HASH_PRIME = 0x100000001b3L
+        private const val HASH_SEED = -0x340d631b7bdddcdbL
+
+        /** 0.6.12：上一次**成功上传**那一帧的采样哈希；0 = 还没有成功上传过（首帧必传）。 */
+        @Volatile
+        var lastHash: Long = 0L
+            private set
+
+        /** 0.6.12：本次服务会话里因「画面未变化」跳过的帧数（设置页/通知展示，便于用户确认生效）。 */
+        @Volatile
+        var skippedStatic: Long = 0L
+            private set
 
         /** 真正在采集（虚拟屏已创建、定时器已开跑）。 */
         @Volatile
@@ -118,7 +152,6 @@ class ScreenCaptureService : Service() {
     private var uploads = 0
     private var failures = 0
     private var missStreak = 0
-    private var recreates = 0
     private val uploading = AtomicBoolean(false)
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.CHINA)
 
@@ -203,8 +236,10 @@ class ScreenCaptureService : Service() {
             projection = null
             virtualDisplay = null
             imageReader = null
-            recreates = 0
             missStreak = 0
+            // 0.6.12：新一轮授权/服务重启后首帧必须上传（lastHash=0），跳过计数清零
+            lastHash = 0L
+            skippedStatic = 0L
 
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val proj = mpm.getMediaProjection(code, data)
@@ -277,20 +312,17 @@ class ScreenCaptureService : Service() {
             imageReader?.surface, null, null
         )
 
-    /** 静屏时 mirror 可能长时间不给新帧：连续多次拿不到帧就重建虚拟屏强制出帧。 */
+    /**
+     * 静屏时 mirror 长时间不给新帧——这本身就是「画面没变」的正常表现，不需要新帧。
+     * 0.6.12：**不再重建虚拟屏**。实机（Android 14）复测发现：release 掉当前唯一的 VirtualDisplay
+     * 会连带把 MediaProjection 停掉（onStop → 服务直接结束，10:46:19 复现），
+     * 之后再 createVirtualDisplay 只会报「Don't re-use the resultData…」。
+     * 现在缺帧只记数（第 3 次、之后每 60 次记一条），5 秒节拍照旧；画面一变 ImageReader 会重新给帧。
+     */
     private fun recoverIfNoFrame() {
         missStreak += 1
-        if (missStreak < 3 || recreates >= 5) return
-        missStreak = 0
-        recreates += 1
-        try {
-            val proj = projection ?: return
-            val metrics = resources.displayMetrics
-            virtualDisplay?.release()
-            virtualDisplay = createDisplay(proj, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi)
-            LogBus.screen("连续无新帧，已重建虚拟屏", "第 " + recreates + " 次")
-        } catch (e: Exception) {
-            LogBus.screen("重建虚拟屏失败", e.message ?: e.javaClass.simpleName)
+        if (missStreak == 3 || missStreak % 60 == 0) {
+            LogBus.screen("静屏暂无新帧", "连续 " + missStreak + " 次 · 画面变化后自动恢复（不重建虚拟屏）")
         }
     }
 
@@ -306,6 +338,39 @@ class ScreenCaptureService : Service() {
             return
         }
         missStreak = 0
+
+        // 0.6.12：上一张还在上传（网络慢）→ 本帧连解码都省掉（原行为是解码/压缩完再丢弃，白烧 CPU）
+        if (uploading.get()) {
+            try { image.close() } catch (_: Exception) {}
+            LogBus.screen("上一张还在上传，跳过本帧")
+            return
+        }
+
+        // 0.6.12：廉价采样哈希——只按步长绝对读 buffer，不解码、不复制整幅图（约 1800 次 4 字节读取）
+        var hash = 0L
+        var hashOk = false
+        try {
+            hash = sampledHash(image)
+            hashOk = hash != 0L
+        } catch (e: Exception) {
+            LogBus.screen("采样哈希失败，按画面变化处理", e.message ?: e.javaClass.simpleName)
+        }
+
+        // 0.6.12：画面没变 → 不解码、不压缩、不上传，只保留 5 秒取帧节拍
+        if (hashOk && App.screenChangeOnly() && lastHash != 0L && hash == lastHash) {
+            try { image.close() } catch (_: Exception) {}
+            skippedStatic += 1
+            LogBus.screen(
+                "画面未变化，跳过上传",
+                "第 " + skippedStatic + " 次 · 仍每 " + App.screenInterval() + " 秒取帧"
+            )
+            // 通知每 12 次（约 1 分钟）刷一次：避免每 5 秒刷通知本身变成新的负担
+            if (skippedStatic == 1L || skippedStatic % 12L == 0L) {
+                notify("画面未变化 · 已跳过 " + skippedStatic + " 次 · 仍每 " + App.screenInterval() + " 秒取帧")
+            }
+            return
+        }
+
         val bitmap: Bitmap
         try {
             val plane = image.planes[0]
@@ -354,6 +419,9 @@ class ScreenCaptureService : Service() {
                     text = "",
                     blacklist = App.screenBlacklist()
                 )
+                // 0.6.12：HTTP 200 即上传成功 → 记住这一帧的哈希，之后静止画面不再重复上传。
+                // （stored=false 表示图里没识别到文字，同一张图重试也不会有文字，故同样更新。）
+                if (hashOk) lastHash = hash
                 val stored = resp.optBoolean("stored", false)
                 val id = resp.optString("id", "")
                 val ocrMs = resp.optLong("ocrMs", 0L)
@@ -403,6 +471,39 @@ class ScreenCaptureService : Service() {
                 uploading.set(false)
             }
         }.start()
+    }
+
+    /**
+     * 0.6.12：屏幕内容「廉价采样哈希」。
+     * 不创建 Bitmap、不复制 buffer：对 planes[0].buffer 按 HASH_STRIDE 字节步长做绝对读
+     * （ByteBuffer.get(index) 不移动 position、不分配内存），每 4 字节 XOR 进 FNV-1a 64 位。
+     * 1080x1729 RGBA（rowStride 4352）约 7.5MB → 约 1800 次 4 字节读取，亚毫秒级；
+     * 宽/高/rowStride 也混进哈希，分辨率变化一定算「变了」。
+     * 返回 0 表示拿不到可用 buffer（调用方按「画面变化」处理：宁可多传一帧，也不漏传）。
+     */
+    private fun sampledHash(image: Image): Long {
+        val plane = image.planes[0]
+        val buf = plane.buffer
+        val start = buf.position()
+        val end = buf.limit()
+        if (end - start < HASH_STRIDE) return 0L
+        var h = HASH_SEED
+        h = (h xor image.width.toLong()) * HASH_PRIME
+        h = (h xor image.height.toLong()) * HASH_PRIME
+        h = (h xor plane.rowStride.toLong()) * HASH_PRIME
+        // 跳过顶部状态栏（时钟/电量/隐私指示器），否则静止画面每分钟会被时钟顶一次上传
+        val topSkip = minOf(plane.rowStride.toLong() * STATUS_BAR_SKIP_ROWS, (end - start).toLong() - 4L)
+            .coerceAtLeast(0L).toInt()
+        var i = start + topSkip
+        while (i + 4 <= end) {
+            val v = (buf.get(i).toInt() and 0xFF) or
+                ((buf.get(i + 1).toInt() and 0xFF) shl 8) or
+                ((buf.get(i + 2).toInt() and 0xFF) shl 16) or
+                ((buf.get(i + 3).toInt() and 0xFF) shl 24)
+            h = (h xor (v.toLong() and 0xFFFFFFFFL)) * HASH_PRIME
+            i += HASH_STRIDE
+        }
+        return h
     }
 
     private fun buildNotification(text: String): Notification {

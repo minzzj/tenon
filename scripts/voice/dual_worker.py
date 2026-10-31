@@ -186,6 +186,20 @@ class DualEngine:
         emit({"type": "session_end", "reason": "quick-done"})
         return 0
 
+    def handle_transcribe_file(self, obj):
+        """手机录音上传：复用已加载的 record 模型做文件转写（不再起第二个大模型进程，省内存）。"""
+        rid = obj.get("id")
+        wav = str(obj.get("file") or "")
+        try:
+            if not wav or not os.path.exists(wav):
+                raise RuntimeError("WAV 不存在：" + wav)
+            r = self.record_engine.transcribe(wav, hotword=self.hotword, use_punc=True)
+            emit({"type": "transcribe_result", "id": rid, "ok": True, "text": r.get("text", ""),
+                  "pinyin": r.get("pinyin", ""), "provider": r.get("provider", self.args.record_provider),
+                  "ms": r.get("ms")})
+        except Exception as e:
+            emit({"type": "transcribe_result", "id": rid, "ok": False, "error": str(e)[:300]})
+
     # ---------- 真实麦克风 ----------
     def mic_loop(self):
         ff = DEFAULT_FFMPEG if os.path.exists(DEFAULT_FFMPEG) else "ffmpeg"
@@ -205,6 +219,9 @@ class DualEngine:
                     try:
                         obj = json.loads(line)
                     except Exception:
+                        continue
+                    if isinstance(obj, dict) and obj.get("cmd") == "transcribe_file":
+                        threading.Thread(target=self.handle_transcribe_file, args=(obj,), daemon=True).start()
                         continue
                     self.ctrl.put(obj)
             except Exception:

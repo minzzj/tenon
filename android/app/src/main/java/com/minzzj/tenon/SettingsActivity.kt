@@ -149,6 +149,17 @@ class SettingsActivity : Activity() {
         val sScreen = Ui.section(this, "04 · 屏幕内容采集（手机截屏上报）")
         screenSwitch = Ui.switchRow(this, "开启屏幕内容采集", ScreenCaptureService.isActive()) { on -> onScreenToggle(on) }
         sScreen.addView(screenSwitch)
+        // 0.6.12：画面变化检测（默认开）——静止画面不重复上传，显著降手机/电脑负载
+        sScreen.addView(Ui.switchRow(this, "仅在屏幕变化时上传（省电省流，推荐）", App.screenChangeOnly()) { on ->
+            App.setScreenChangeOnly(on)
+            Toast.makeText(
+                this,
+                if (on) "已开启：静止画面不重复上传（仍每 " + App.screenInterval() + " 秒取帧）"
+                else "已关闭：每 " + App.screenInterval() + " 秒无条件上传",
+                Toast.LENGTH_SHORT
+            ).show()
+            refreshScreenStatus()
+        })
         screenStatus = Ui.body(this, "")
         screenStatus.textSize = 13f
         sScreen.addView(screenStatus)
@@ -157,7 +168,8 @@ class SettingsActivity : Activity() {
         screenSelfCheck.textSize = 12f
         sScreen.addView(screenSelfCheck)
         sScreen.addView(Ui.hint(this,
-            "每 5 秒截屏一次（默认）· 高清采集：最大宽度 1440px、JPEG 85（1080 宽手机原样不放大），" +
+            "每 5 秒取帧，画面变化才识别上传；静止画面不重复上传。" +
+            "高清采集：最大宽度 1440px、JPEG 80（1080 宽手机原样不放大），" +
             "上报中枢 /api/v2/voice/screen，由电脑端识别屏幕文字并纳入每日总结。" +
             "首次需在系统弹窗授权「共享屏幕」；可随时暂停。"))
         val rowInt = Ui.row(this)
@@ -529,6 +541,8 @@ class SettingsActivity : Activity() {
                 }
             )
             append(" · 间隔 ").append(App.screenInterval()).append(" 秒")
+            append(" · 变化检测").append(if (App.screenChangeOnly()) "开" else "关")
+            append(" · 静止跳过 ").append(ScreenCaptureService.skippedStatic).append(" 次")
             append(" · 本机今日已上报 ").append(App.screenUploadsToday()).append(" 次")
             if (last.isNotBlank()) append("\n最近：").append(last)
             if (err.isNotBlank()) append("\n最近错误：").append(err.take(120))
