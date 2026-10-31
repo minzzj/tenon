@@ -16,6 +16,7 @@ const MODULES = [
   { dir: 'reminders', name: 'reminders', factory: 'createRemindersService' },
   { dir: 'documents', name: 'documents', factory: 'createDocumentsService' },
   { dir: 'iot', name: 'iot', factory: 'createIotService' },
+  { dir: 'update', name: 'update', factory: 'createUpdateService' },
 ]
 
 function json(res, code, obj) {

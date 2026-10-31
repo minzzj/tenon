@@ -2,6 +2,21 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.5] - 2026-10-31（手机一键更新/自动更新）
+
+### Added
+- **手机端一键更新（自动更新）**：不用每次重新下载 APK 再发文件。
+  - 手机 App 启动自动检查（6 小时内不重复）；发现新版本弹窗「发现新版本 vX」→ 点「一键更新」→ 下载（带进度）→ SHA-256 校验 → 拉起系统安装器；
+  - 设置页新增「06 · 版本与一键更新」：显示当前版本、检查更新/一键升级按钮、打开更新信息；
+  - 首次更新需允许「安装未知应用」（自动跳系统设置，用户点一下即可）；
+  - 服务端新增 `/api/v2/update/info`、`/api/v2/update/android.apk`、`/api/v2/update/manifest`（GET 无需令牌，手机可直接从公网/局域网中枢下载）；
+  - 设置页中枢地址新增「局域网地址 / 公网地址」快捷填充（公网：`http://103.40.14.91:36996` → 电脑 7410）。
+- APK 0.6.5（versionCode 7，2,911,787B，sha256 0273FC2A…）：包含 V6 的「唤醒 + 24 小时录音分开」「点录音实时识别/最近说过」「悬浮快捷录音球」等。
+- 打包版桌面 App 0.6.5：内置 update 模块与最新 APK 清单，手机连上即可更新。
+
+### 使用（手机）
+1. 首次安装一次新 APK（0.6.5）；2. 以后打开 App → 设置 → 「检查更新 / 一键升级」或等自动弹窗；3. 允许安装未知应用一次即可。
+
 ## [0.6.4] - 2026-10-31 上午（唤醒功能 与 24 小时录音 分开）
 
 ### Added

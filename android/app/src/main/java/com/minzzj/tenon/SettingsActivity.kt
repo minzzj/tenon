@@ -81,6 +81,10 @@ class SettingsActivity : Activity() {
         val rowHub = Ui.row(this)
         rowHub.addView(Ui.button(this, "保存并测试", true) { saveConnection() })
         rowHub.addView(Ui.button(this, "重新读取") { refreshFromHub() })
+        val rowPreset = Ui.row(this)
+        rowPreset.addView(Ui.button(this, "局域网地址") { hubInput.setText("http://192.168.3.123:7410") })
+        rowPreset.addView(Ui.button(this, "公网地址") { hubInput.setText("http://103.40.14.91:36996") })
+        sHub.addView(rowPreset)
         sHub.addView(rowHub)
         statusText = Ui.body(this, "尚未测试")
         statusText.textSize = 13f
@@ -246,6 +250,22 @@ class SettingsActivity : Activity() {
         aboutText = Ui.hint(this, "")
         sAbout.addView(aboutText)
         root.addView(sAbout)
+
+        // ---------- 06 版本与一键更新 ----------
+        val sUpdate = Ui.section(this, "06 · 版本与一键更新")
+        sUpdate.addView(Ui.body(this, "当前版本 v" + BuildConfig.VERSION_NAME + "（versionCode " + BuildConfig.VERSION_CODE + "）"))
+        val updMsg = Ui.hint(this, "点「检查更新」自动从电脑中枢下载新版 APK；不需要重新发文件。首次更新需允许「安装未知应用」。")
+        val rowUpd = Ui.row(this)
+        rowUpd.addView(Ui.button(this, "检查更新 / 一键升级", true) { UpdateManager.check(this, false) { msg -> updMsg.text = msg } })
+        rowUpd.addView(Ui.button(this, "打开更新信息") {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(App.baseUrl().trimEnd('/') + "/api/v2/update/info?platform=android")))
+            } catch (e: Exception) { Toast.makeText(this, "打开失败：" + (e.message ?: ""), Toast.LENGTH_SHORT).show() }
+        })
+        sUpdate.addView(rowUpd)
+        sUpdate.addView(updMsg)
+        sUpdate.addView(Ui.hint(this, "中枢需开着（电脑端 App 运行中）；公网访问需路由器把 36996 转发到电脑 7410（你已提供 103.40.14.91:36996）。"))
+        root.addView(sUpdate)
 
         setContentView(Ui.scroll(this, root))
         loadLocal()

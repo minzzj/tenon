@@ -233,6 +233,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        UpdateManager.autoCheck(this)
         refreshHub()
         if (App.remindersEnabled()) pollHandler.postDelayed(reminderPoll, 5_000)
         renderStatusAfterChange()

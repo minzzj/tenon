@@ -11,8 +11,8 @@ android {
         applicationId "com.minzzj.tenon"
         minSdk 26
         targetSdk 34
-        versionCode 6
-        versionName "0.6.0"
+        versionCode 7
+        versionName "0.6.5"
 
         // 默认中枢地址 / 操作令牌：从 local.properties 读取（该文件已 .gitignore，不随仓库分发）
         // 手机首次打开即可直接连上本机 hub；用户可在「设置」里修改。
