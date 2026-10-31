@@ -504,6 +504,7 @@ export function createVoiceService(opts = {}) {
     let asrOk = false;
     try { asrOk = workers.startAsr(); } catch (err) { status.lastError = 'ASR 启动失败：' + String((err && err.message) || err); }
     try { workers.startLlm(); } catch (err) { console.warn('[voice] LLM 启动失败（降级规则）：' + String((err && err.message) || err)); }
+    try { if (typeof workers.startTranscribeWorker === 'function') workers.startTranscribeWorker(); } catch (err) { console.warn('[voice] 常驻转写进程启动失败：' + String((err && err.message) || err)); }
     if (!asrOk) {
       status.lastError = workers.state.asr.lastError || 'ASR 未就绪（可用文本命令）';
       if (!config.mock.enabled) setState('error');

@@ -30,23 +30,21 @@ class DocumentsActivity : Activity() {
         super.onCreate(savedInstanceState)
         val root = Ui.column(this)
         val top = Ui.row(this)
-        val title = Ui.title(this, "文档")
-        title.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        top.addView(title)
-        top.addView(Ui.button(this, "刷新") { load() })
-        top.addView(Ui.button(this, "返回") { finish() })
+        top.addView(Ui.pageHead(this, "文档", "AI 总结 / 日报 · 可下载分享"))
+        top.addView(Ui.action(this, "刷新") { load() })
+        top.addView(Ui.action(this, "首页") { TabNav.goHome(this) })
         root.addView(top)
 
         val row = Ui.row(this)
         row.addView(Ui.button(this, "生成今日总结", true) { generateToday() })
-        row.addView(Ui.button(this, "打开记录页") { startActivity(Intent(this, NotesActivity::class.java)) })
+        row.addView(Ui.button(this, "去记录页") { TabNav.go(this, TabNav.RECORDS) })
         root.addView(row)
         root.addView(Ui.hint(this, "文档来自电脑端生成（AI 总结/日报）；下载后保存在 App 私有目录，可一键分享到微信/QQ/邮件或用系统查看器打开。"))
         statusText = Ui.hint(this, "正在读取文档…")
         root.addView(statusText)
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(listBox)
-        setContentView(Ui.scroll(this, root))
+        setContentView(Ui.page(this, root, TabNav.DOCUMENTS))
         load()
     }
 

@@ -99,6 +99,12 @@
             android:exported="false"
             android:label="@string/app_name" />
 
+        <!-- 0.6.7 记录页：笔记 / 全天录音 / 屏幕记录（与电脑端互通） -->
+        <activity
+            android:name=".VoiceRecordsActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
         <activity
             android:name=".RemindersActivity"
             android:exported="false"

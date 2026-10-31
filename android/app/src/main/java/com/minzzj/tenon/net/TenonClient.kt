@@ -209,9 +209,13 @@ object TenonClient {
         return asJson(resp, "voice/command")
     }
 
-    /** 今日转写记录（用于主页今日摘要）。 */
-    fun voiceTranscripts(date: String): JSONObject? {
-        val resp = TenonHttp.json("GET", "$API/voice/transcripts?date=" + java.net.URLEncoder.encode(date, "UTF-8") + "&limit=100", timeoutMs = 12000)
+    /** 今日转写记录（主页/记录页；新版服务端 GET 也需要令牌，TenonHttp 默认带 App.token()）。 */
+    fun voiceTranscripts(date: String, limit: Int = 100): JSONObject? {
+        val resp = TenonHttp.json(
+            "GET",
+            "$API/voice/transcripts?date=" + java.net.URLEncoder.encode(date, "UTF-8") + "&limit=" + limit,
+            timeoutMs = 12000
+        )
         if (resp.code !in 200..299 || resp.body.isBlank()) return null
         return try { JSONObject(resp.body) } catch (_: Exception) { null }
     }
@@ -402,9 +406,13 @@ object TenonClient {
     fun voiceDiaryGenerate(): JSONObject =
         asJson(TenonHttp.json("POST", "$API/voice/diary/generate", "{}", timeoutMs = 120000), "voice/diary/generate")
 
-    /** 屏幕文本记录（服务端未实现时返回 null）。 */
-    fun voiceScreenList(date: String): JSONObject? {
-        val resp = TenonHttp.json("GET", "$API/voice/screen?date=" + enc(date), timeoutMs = 12000)
+    /** 屏幕文本记录（记录页「屏幕记录」分段；limit 默认 200，记录页传 50）。 */
+    fun voiceScreenList(date: String, limit: Int = 200): JSONObject? {
+        val resp = TenonHttp.json(
+            "GET",
+            "$API/voice/screen?date=" + enc(date) + "&limit=" + limit,
+            timeoutMs = 12000
+        )
         if (resp.code !in 200..299 || resp.body.isBlank()) return null
         return try { JSONObject(resp.body) } catch (_: Exception) { null }
     }
@@ -416,6 +424,13 @@ object TenonClient {
         if (q.isNotBlank()) sb.append("&q=").append(enc(q))
         if (date.isNotBlank()) sb.append("&date=").append(enc(date))
         return asJson(TenonHttp.json("GET", sb.toString(), timeoutMs = 15000), "notes")
+    }
+
+    /** 手机快捷「记笔记」：POST /api/v2/notes（需要写令牌）。 */
+    fun noteCreate(text: String, title: String = "", source: String = "android"): JSONObject {
+        val body = JSONObject().put("text", text.trim()).put("source", source)
+        if (title.isNotBlank()) body.put("title", title.trim())
+        return asJson(TenonHttp.json("POST", "$API/notes", body.toString(), timeoutMs = 20000), "notes/create")
     }
 
     fun noteDetail(id: String): JSONObject =

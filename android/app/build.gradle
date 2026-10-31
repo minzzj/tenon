@@ -11,8 +11,8 @@ android {
         applicationId "com.minzzj.tenon"
         minSdk 26
         targetSdk 34
-        versionCode 8
-        versionName "0.6.6"
+        versionCode 9
+        versionName "0.6.7"
 
         // 默认中枢地址：从 local.properties 读取（该文件已 .gitignore，不随仓库分发）。
         // P0 安全修复（0.6.6）：DEFAULT_TOKEN 永远为空字符串，构建脚本不再读取 local.properties

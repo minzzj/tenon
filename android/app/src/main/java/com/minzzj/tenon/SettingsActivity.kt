@@ -63,12 +63,9 @@ class SettingsActivity : Activity() {
 
         // 顶部
         val top = Ui.row(this)
-        val title = Ui.title(this, "设置")
-        title.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        top.addView(title)
-        val back = Ui.button(this, "返回") { finish() }
-        back.layoutParams = LinearLayout.LayoutParams(Ui.dp(this, 78), ViewGroup.LayoutParams.WRAP_CONTENT)
-        top.addView(back)
+        top.addView(Ui.pageHead(this, "设置", "中枢 · 语音 · 一键更新"))
+        top.addView(Ui.action(this, "刷新") { refreshFromHub() })
+        top.addView(Ui.action(this, "首页") { TabNav.goHome(this) })
         root.addView(top)
 
         // ---------- 1. 中枢连接 ----------
@@ -89,7 +86,7 @@ class SettingsActivity : Activity() {
         statusText = Ui.body(this, "尚未测试")
         statusText.textSize = 13f
         sHub.addView(statusText)
-        sHub.addView(Ui.hint(this, "默认已内置本机中枢地址与体验令牌（仅本机 APK）；更换网络后在此修改。"))
+        sHub.addView(Ui.hint(this, "APK 不内置操作令牌：首次连接请填写电脑端 data/secrets.json 里的 operatorToken。新版服务端 GET 也需要令牌。"))
         root.addView(sHub)
 
         // ---------- 2. 语音管家（写入中枢） ----------
@@ -195,8 +192,8 @@ class SettingsActivity : Activity() {
             "笔记在电脑端 data/notes 生成并可同步到手机（记录页可搜索/查看/删除）；文档（AI 总结/日报）从电脑端生成，" +
             "下载后保存在本机 App 私有目录（files/documents），可用 FileProvider 分享到微信/QQ/邮件或用系统查看器打开。"))
         val rowDocs = Ui.row(this)
-        rowDocs.addView(Ui.button(this, "打开记录页", true) { startActivity(Intent(this, NotesActivity::class.java)) })
-        rowDocs.addView(Ui.button(this, "打开文档页") { startActivity(Intent(this, DocumentsActivity::class.java)) })
+        rowDocs.addView(Ui.button(this, "打开记录页", true) { TabNav.go(this, TabNav.RECORDS) })
+        rowDocs.addView(Ui.button(this, "打开文档页") { TabNav.go(this, TabNav.DOCUMENTS) })
         sDocs.addView(rowDocs)
         val rowDocs2 = Ui.row(this)
         rowDocs2.addView(Ui.button(this, "清空本机已下载文档") {
@@ -232,17 +229,21 @@ class SettingsActivity : Activity() {
         sLocal.addView(rowClear)
         root.addView(sLocal)
 
-        // ---------- 4. 二级页入口 ----------
-        val sPages = Ui.section(this, "09 · 设备与二级页")
-        sPages.addView(Ui.hint(this, "主页只保留「超级终端」；以下能力在二级页打开。"))
+        // ---------- 4. 更多（旧页面 / 二级页，保留兼容、不打扰首页） ----------
+        val sPages = Ui.section(this, "09 · 更多（旧页面 / 二级页）")
+        sPages.addView(Ui.hint(this, "5 页签之外的旧页面都收在这里：功能保留，但不占用首页。"))
         val rowP1 = Ui.row(this)
-        rowP1.addView(Ui.button(this, "设备绑定 / 一键安装", true) { openWeb("我的设备", "/#/devices") })
-        rowP1.addView(Ui.button(this, "手机遥控电脑") { openWeb("手机遥控电脑", "/m/remote") })
+        rowP1.addView(Ui.button(this, "旧设备页", true) { openWeb("设备（旧）", "/#/devices") })
+        rowP1.addView(Ui.button(this, "旧今日页") { openWeb("今日（旧）", "/#/today") })
         sPages.addView(rowP1)
         val rowP2 = Ui.row(this)
-        rowP2.addView(Ui.button(this, "素材库 / 中转站") { openWeb("素材库", "/#/assets") })
-        rowP2.addView(Ui.button(this, "旧版互联 / 配对") { openWeb("互联", "/#/link") })
+        rowP2.addView(Ui.button(this, "旧笔记页") { startActivity(Intent(this, NotesActivity::class.java)) })
+        rowP2.addView(Ui.button(this, "手机遥控电脑") { openWeb("手机遥控电脑", "/m/remote") })
         sPages.addView(rowP2)
+        val rowP3 = Ui.row(this)
+        rowP3.addView(Ui.button(this, "素材库 / 中转站") { openWeb("素材库", "/#/assets") })
+        rowP3.addView(Ui.button(this, "旧版互联 / 配对") { openWeb("互联", "/#/link") })
+        sPages.addView(rowP3)
         root.addView(sPages)
 
         // ---------- 5. 关于 / 隐私 ----------
@@ -251,8 +252,8 @@ class SettingsActivity : Activity() {
         sAbout.addView(aboutText)
         root.addView(sAbout)
 
-        // ---------- 06 版本与一键更新 ----------
-        val sUpdate = Ui.section(this, "06 · 版本与一键更新")
+        // ---------- 6. 版本与一键更新 ----------
+        val sUpdate = Ui.section(this, "11 · 版本与一键更新")
         sUpdate.addView(Ui.body(this, "当前版本 v" + BuildConfig.VERSION_NAME + "（versionCode " + BuildConfig.VERSION_CODE + "）"))
         val updMsg = Ui.hint(this, "点「检查更新」自动从电脑中枢下载新版 APK；不需要重新发文件。首次更新需允许「安装未知应用」。")
         val rowUpd = Ui.row(this)
@@ -267,7 +268,7 @@ class SettingsActivity : Activity() {
         sUpdate.addView(Ui.hint(this, "中枢需开着（电脑端 App 运行中）；公网访问需路由器把 36996 转发到电脑 7410（你已提供 103.40.14.91:36996）。"))
         root.addView(sUpdate)
 
-        setContentView(Ui.scroll(this, root))
+        setContentView(Ui.page(this, root, TabNav.SETTINGS))
         loadLocal()
         refreshScreenStatus()
         refreshFromHub()
@@ -295,7 +296,7 @@ class SettingsActivity : Activity() {
             append("· 操作令牌只保存在本机 App 的 SharedPreferences，不写入日志；\n")
             append("· 云端理解走电脑端已配置的 DeepSeek Key，手机不保存该 Key；\n")
             append("· 屏幕采集需你手动在系统弹窗授权，可随时暂停；截图只上传到你自己的中枢。\n")
-            append("· 本 APK 内置的默认中枢/令牌仅用于本机体验，正式分发请重新构建。")
+            append("· 本 APK 不内置操作令牌，令牌只保存在本机；换手机/重置后需重新填写。")
         }
     }
 
@@ -421,7 +422,7 @@ class SettingsActivity : Activity() {
                         " · 本地识别 " + (providers?.optString("asr", "?") ?: "?") +
                         " · 云端理解 " + (providers?.optString("llm", "?") ?: "?") +
                         " · AI " + aiLabel +
-                        (if (App.hasCustomToken()) " · 已自定义令牌" else " · 使用内置体验令牌")
+                        (if (App.token().isNotBlank()) " · 已填写令牌" else " · 未填写令牌（新版 GET 也需要）")
                 try { cfgObj = TenonClient.voiceConfig().optJSONObject("config") } catch (_: Exception) {}
             } catch (e: Exception) {
                 statusMsg = "中枢离线或地址错误：" + (e.message ?: "") + "\n当前：" + App.baseUrl()

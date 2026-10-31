@@ -49,7 +49,10 @@ export async function createDocumentsService({ root, ledger, ai = null, dataDir,
     { method: 'POST', path: '/documents/generate', handler: async (req, res, ctx) => {
       requireWrite(req, ctx);
       const body = await readJson(req);
-      const kind = String(body.kind || 'note-summary');
+      let kind = String(body.kind || 'note-summary');
+      // 兼容手机端历史值 daily-summary（旧 App 传的 kind）
+      if (kind === 'daily-summary') kind = 'daily';
+      if (kind === 'notes') kind = 'note-summary';
       if (!DOCUMENT_KINDS[kind]) { sendJson(res, 400, { ok: false, error: 'kind 只能是 note-summary|daily|note-set', code: 'BAD_KIND' }); return; }
       const date = body.date == null ? '' : String(body.date).trim();
       if (date && !isRealDay(date)) { sendJson(res, 400, { ok: false, error: 'date 必须是 YYYY-MM-DD 且为真实日期', code: 'BAD_DATE' }); return; }

@@ -43,11 +43,9 @@ class RemindersActivity : Activity() {
         ReminderNotifier.ensureChannel(this)
         val root = Ui.column(this)
         val top = Ui.row(this)
-        val title = Ui.title(this, "提醒")
-        title.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        top.addView(title)
-        top.addView(Ui.button(this, "刷新") { load() })
-        top.addView(Ui.button(this, "返回") { finish() })
+        top.addView(Ui.pageHead(this, "提醒", "待触发 / 已完成 · 到点通知"))
+        top.addView(Ui.action(this, "刷新") { load() })
+        top.addView(Ui.action(this, "首页") { TabNav.goHome(this) })
         root.addView(top)
 
         val sNew = Ui.section(this, "新建提醒")
@@ -55,6 +53,10 @@ class RemindersActivity : Activity() {
         sNew.addView(textInput)
         atInput = Ui.input(this, "时间（yyyy-MM-dd HH:mm）")
         sNew.addView(atInput)
+        val quickAt = Ui.row(this)
+        quickAt.addView(Ui.button(this, "10 分钟后") { setAt(10) })
+        quickAt.addView(Ui.button(this, "1 小时后") { setAt(60) })
+        sNew.addView(quickAt)
         dailySwitch = Ui.switchRow(this, "每天重复", false) { }
         sNew.addView(dailySwitch)
         sNew.addView(Ui.button(this, "添加提醒", true) { create() })
@@ -65,12 +67,19 @@ class RemindersActivity : Activity() {
         root.addView(statusText)
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(listBox)
-        setContentView(Ui.scroll(this, root))
+        setContentView(Ui.page(this, root, TabNav.REMINDERS))
 
         val cal = Calendar.getInstance()
         cal.add(Calendar.MINUTE, 10)
         atInput.setText(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(cal.time))
         load()
+    }
+
+    /** 快捷设置提醒时间（10 分钟 / 1 小时后）。 */
+    private fun setAt(minutes: Int) {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.MINUTE, minutes)
+        atInput.setText(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(cal.time))
     }
 
     override fun onResume() {

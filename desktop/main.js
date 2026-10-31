@@ -29,7 +29,7 @@ const PORT = Number(process.env.TENON_DESKTOP_PORT || 7410);
 const PAUSE_FILE = path.join(DATA_DIR, 'voice', 'screen.pause');
 const LOG_DIR = path.join(ROOT, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'desktop.log');
-let win = null, tray = null, hubChild = null, captureChild = null, quitting = false;
+let win = null, tray = null, hubChild = null, captureChild = null, agentChild = null, quitting = false;
 let overlay = null;
 let quick = { phase: 'idle', said: '', reply: '', busy: false, active: false, lastReplyAt: 0, lastSaidAt: 0 };
 let token = '';
@@ -91,6 +91,28 @@ function startHub() {
   hubChild.stderr.on('data', (d) => log('[hub:err]', String(d).trim().slice(0, 400)));
   hubChild.on('exit', (code) => log('hub exited', code));
 }
+function startNodeAgent() {
+  if (agentChild) return;
+  // 关键：App 启动时同时拉起 node-agent（执行器），否则手机/语音命令只会“已派发”永远不执行
+  try {
+    const isPackaged = app.isPackaged;
+    const exe = isPackaged ? process.execPath : (process.platform === 'win32' ? 'node.exe' : 'node');
+    const env = Object.assign({}, process.env, {
+      TENON_V2: '1',
+      TENON_HUB_URL: HUB,
+      TENON_DATA_DIR: DATA_DIR,
+      TENON_NODE_NAME: '工作台',
+    });
+    if (isPackaged) env.ELECTRON_RUN_AS_NODE = '1';
+    agentChild = spawn(exe, ['node-agent/agent.js'], { cwd: ROOT, windowsHide: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    agentChild.stdout.on('data', (d) => log('[agent]', String(d).trim().slice(0, 300)));
+    agentChild.stderr.on('data', (d) => log('[agent:err]', String(d).trim().slice(0, 300)));
+    agentChild.on('exit', (code) => { log('agent exited', code); agentChild = null; });
+    agentChild.on('error', (e) => log('agent spawn err', e.message));
+    log('node-agent started');
+  } catch (e) { log('startNodeAgent err', e.message); }
+}
+
 function findPython() {
   const candidates = [process.env.TENON_PYTHON, 'python.exe', 'python'];
   return candidates.find((c) => c) || 'python';
@@ -284,6 +306,8 @@ async function bootstrap() {
   log('hub ready', ok);
   readToken();
   if (!captureChild && state.screenCapture) startCapture();
+  // 启动执行器（node-agent）：手机/语音命令需要它真正执行
+  startNodeAgent();
   await new Promise((r) => setTimeout(r, 500));
   const st = await api('GET', '/api/v2/voice/status');
   if (st && st.json && st.json.enabled) state.voiceListening = st.json.state !== 'idle' || !!st.json.startedAt;
@@ -358,7 +382,7 @@ app.on('window-all-closed', () => { /* 托盘常驻，不退出 */ });
 app.on('before-quit', () => {
   quitting = true;
   try { globalShortcut.unregisterAll(); } catch (_) {}
-  for (const c of [captureChild, hubChild]) { try { if (c && !c.killed) c.kill(); } catch (_) {} }
+  for (const c of [captureChild, agentChild, hubChild]) { try { if (c && !c.killed) c.kill(); } catch (_) {} }
 });
 ipcMain.handle('desktop:getState', () => publicState());
 ipcMain.handle('desktop:toggleVoice', () => toggleVoice());

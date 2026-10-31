@@ -98,6 +98,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
 
   const asr = { child: null, rl: null, stopRequested: false, restartTimer: null };
   const llm = { child: null, rl: null, stopRequested: false, restartTimer: null, waiters: [] };
+  const transcribe = { child: null, rl: null, waiters: new Map(), seq: 0, ready: false, startedAt: null, lastMs: null };
 
   // ---------------- ASR ----------------
   function setAsr(patch) { Object.assign(state.asr, patch); }
@@ -249,9 +250,90 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
   function startQuickRecord() { return sendAsrCommand({ cmd: 'start_session' }); }
   function stopQuickRecord() { return sendAsrCommand({ cmd: 'stop_session' }); }
 
+  // ---- 常驻转写进程（手机录音上传使用；避免每次加载模型 30-45s） ----
+  function startTranscribeWorker() {
+    if (transcribe.child) return true;
+    if (config.mock.enabled || config.asrProvider === 'mock') return false;
+    const script = abs(root, 'scripts/voice/transcribe_worker.py');
+    if (!fileExists(script)) { log('[voice] 常驻转写脚本不存在：' + script); return false; }
+    try {
+      const child = spawn(config.workers.python || 'python', [script], {
+        cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
+      });
+      transcribe.child = child;
+      transcribe.startedAt = nowIso();
+      transcribe.rl = readline.createInterface({ input: child.stdout });
+      transcribe.rl.on('line', (line) => {
+        const text = String(line || '').trim();
+        if (!text) return;
+        let obj = null;
+        try { obj = JSON.parse(text); } catch { return; }
+        if (obj.type === 'ready') { transcribe.ready = true; log('[voice] 常驻转写进程就绪'); return; }
+        const id = obj.id;
+        const w = transcribe.waiters.get(id);
+        if (!w) return;
+        transcribe.waiters.delete(id);
+        clearTimeout(w.timer);
+        transcribe.lastMs = obj.ms || null;
+        if (obj.ok === false) w.reject(new Error(String(obj.error || '转写失败')));
+        else w.resolve({ ok: true, text: String(obj.text || ''), pinyin: String(obj.pinyin || ''), provider: obj.provider || 'paraformer', ms: obj.ms || null });
+      });
+      child.stderr.on('data', (buf) => { const s = String(buf || '').trim(); if (s) log('[voice-transcribe] ' + s.slice(0, 300)); });
+      child.stdout.on('error', () => {});
+      child.stderr.on('error', () => {});
+      child.on('error', () => {});
+      if (child.stdin) child.stdin.on('error', () => {});
+      child.on('exit', (code) => {
+        transcribe.child = null; transcribe.ready = false;
+        for (const [, w] of transcribe.waiters) { clearTimeout(w.timer); w.reject(new Error('转写进程已退出（code=' + code + '）')); }
+        transcribe.waiters.clear();
+        log('[voice] 常驻转写进程退出 code=' + code);
+      });
+      log('[voice] 常驻转写进程启动 pid=' + child.pid);
+      return true;
+    } catch (err) {
+      log('[voice] 常驻转写进程启动失败：' + String((err && err.message) || err));
+      return false;
+    }
+  }
+  function stopTranscribeWorker() {
+    if (transcribe.rl) { try { transcribe.rl.close(); } catch { /* ignore */ } transcribe.rl = null; }
+    if (transcribe.child) { try { transcribe.child.kill(); } catch { /* ignore */ } transcribe.child = null; }
+    transcribe.ready = false;
+  }
+  function transcribeWithWorker(file, { timeoutMs = 60000 } = {}) {
+    if (!transcribe.child) return Promise.reject(new Error('转写进程未启动'));
+    const id = ++transcribe.seq;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        transcribe.waiters.delete(id);
+        reject(new Error('转写超时（' + timeoutMs + 'ms）'));
+      }, timeoutMs);
+      transcribe.waiters.set(id, { resolve, reject, timer });
+      try {
+        transcribe.child.stdin.write(JSON.stringify({ id, file }) + '\n');
+      } catch (err) {
+        clearTimeout(timer); transcribe.waiters.delete(id);
+        reject(err);
+      }
+    });
+  }
+
   async function transcribeFile(file, { timeoutMs = 45000 } = {}) {
     const wav = abs(root, file);
     if (!fileExists(wav)) throw new Error('WAV 文件不存在：' + wav);
+    // 优先用常驻进程（模型已加载，通常 <1s），避免每次重启 FunASR 30-45s 导致手机超时
+    if (!config.mock.enabled && config.asrProvider !== 'mock') {
+      try {
+        if (!transcribe.child && !transcribe.ready) startTranscribeWorker();
+        const startedAt = Date.now();
+        const r = await transcribeWithWorker(wav, { timeoutMs });
+        return { ok: true, text: r.text, pinyin: r.pinyin || '', confidence: null, provider: r.provider || 'paraformer', ms: r.ms || (Date.now() - startedAt), totalMs: Date.now() - startedAt, file: wav, cached: true };
+      } catch (err) {
+        log('[voice] 常驻转写失败，回退单次脚本：' + String((err && err.message) || err));
+      }
+    }
     if (config.mock.enabled || config.asrProvider === 'mock') {
       const name = path.basename(wav).toLowerCase();
       const text = /volume|yinliang/.test(name) ? '把音量调到 40' : /chrome/.test(name) ? '打开 Chrome' : /home/.test(name) ? '回家模式' : /wake/.test(name) ? '榫卯' : '打开记事本';
@@ -494,6 +576,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
   function stopAll() {
     state.stopping = true;
     stopAsr();
+    stopTranscribeWorker();
     stopLlm();
     state.stopping = false;
   }
@@ -502,6 +585,7 @@ export function createWorkers({ root, dataDir, config, log = console, onAsrEvent
     state,
     startAsr,
     stopAsr,
+    startTranscribeWorker,
     startQuickRecord,
     stopQuickRecord,
     transcribeFile,

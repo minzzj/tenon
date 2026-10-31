@@ -2,6 +2,20 @@
 
 All notable changes to Tenon (榫卯) are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.7] - 2026-10-31 上午（手机 UI 5 页签 + 执行器随 App 启动 + 转写常驻提速 + 互通修复）
+
+### Added / Fixed
+- **桌面 App 随启动拉起 node-agent 执行器**：修复“手机/语音命令只显示已派发、从不执行”的 P0——App 现在同时启动 hub、屏幕采集与 node-agent；托盘/日志可见执行器。
+- **常驻转写进程** `scripts/voice/transcribe_worker.py`：模型只加载一次，手机录音上传 `/voice/transcribe` 从 30–45s 降到亚秒级（修复手机 30s socket 超时导致“按住说话”失败）。
+- **手机 App 0.6.7（versionCode 9）全新 5 页签 UI**：首页（连接状态/大录音按钮/最近回复/快捷操作）、记录（笔记/全天录音/屏幕记录——电脑端 24h 与屏幕内容手机可见）、提醒、文档、设置（地址快捷/令牌/语音/一键更新/IoT）；与电脑端清爽风格对齐；APK 不内置令牌。
+- **文档 kind 兼容**：服务端接受 `daily-summary`（手机旧值）→ `daily`，修复手机“生成今日总结”按钮 400 BAD_KIND。
+- 更新清单/二维码切换到 0.6.7（vc9，2,934,339B，sha256 4B53CBC2…）。
+
+### 已知边界（审计/互通专项）
+- 电脑→手机的“控制下发”通道尚未做（手机未注册为 node，无法接收 PC 任务），下一轮；
+- 手机录音一次会落两条（file+android 双写）、sessionId 语义等 P1 待整理；
+- 明文 HTTP/debug 签名/更新信任根等既有安全边界未变（见 audit 报告）。
+
 ## [0.6.6] - 2026-10-31（安全修复 + 两功能分页 + 屏幕记录 + 手机 0.6.6 一键更新）
 
 ### Security（专项智能体审计后修复）
